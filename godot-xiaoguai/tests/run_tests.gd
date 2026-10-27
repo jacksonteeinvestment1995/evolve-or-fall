@@ -1708,5 +1708,52 @@ func _init() -> void:
 	await frames(2)
 	check("levelling up plays the pillar-of-light effect", p.get_children().filter(func(n): return n is SkillFx and n.kind == "levelup").size() >= 1, str(mt_fx_n))
 
+	# =========================== special skills show effects ===========================
+	await fresh()
+	p = main.player
+	p.choose_line(0)
+	p.learn_special("overdrive")
+	await frames(1)
+	check("picking a special plays its star burst", p.get_children().any(func(n): return n is SkillFx and n.kind == "pick"))
+	p.learn_special("ironwill")
+	await frames(1)
+	check("Iron Will plays its shield plates", p.get_children().any(func(n): return n is SkillFx and n.kind == "guard"))
+	p.learn_special("bonehoard")
+	await frames(1)
+	check("Bone Hoard plays a coin burst", p.get_children().any(func(n): return n is SkillFx and n.kind == "coins"))
+	p.learn_special("secondwind")
+	p.wind_cd = 0.0
+	p.hp = 1
+	await frames(3)
+	check("Second Wind heals with wings of light", p.get_children().any(func(n): return n is SkillFx and n.kind == "heal"))
+	p.learn_special("phoenix")
+	p.invuln = 0.0
+	p.hp = 1
+	p.take_hit(50, Vector2.RIGHT)
+	check("Phoenix rises as a firebird", p.hp > 1 and p.get_children().any(func(n): return n is SkillFx and n.kind == "phoenix"))
+	p.learn_special("cleave")
+	p.learn_special("titan")
+	p.learn_special("frenzy")
+	await clear_enemies()
+	var sp_a = mk(p.global_position + Vector2(24, 0), 0, 0)
+	var sp_b = mk(p.global_position + Vector2(-20, 6), 0, 0)
+	p.bite_cd = 0.0
+	p._auto_bite()
+	await frames(2)
+	var fx_kinds: Array = main.get_children().filter(func(n): return n is SkillFx).map(func(n): return n.kind)
+	check("a bite with Frenzy and Titan leaves speed lines and a long slash", fx_kinds.has("slash") and fx_kinds.has("frenzy"), str(fx_kinds))
+	check("every special has an icon name ready", SkillsD.SPECIALS.size() == 12)
+
+	# towers do not push villagers back
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	var kb_v = mk(p.global_position + Vector2(200, 0), 0, 0)
+	kb_v.knock = Vector2.ZERO
+	kb_v.take_hit(1, Vector2.RIGHT, true)
+	check("a tower hit does no knockback", kb_v.knock == Vector2.ZERO, str(kb_v.knock))
+	kb_v.take_hit(1, Vector2.RIGHT, false)
+	check("a player hit still pushes back", kb_v.knock != Vector2.ZERO)
+
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

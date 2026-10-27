@@ -67,16 +67,21 @@ func take_hit(dmg: int, _dir: Vector2) -> void:
 
 
 func _draw() -> void:
-	draw_circle(Vector2(0, 8), 13.0, Color(0, 0, 0, 0.3))
-	draw_rect(Rect2(-9, -2, 18, 12), Color("8a8a92"))
-	draw_rect(Rect2(-7, -14, 14, 14), Color("b0b0b8"))
-	for k in 3:
-		draw_rect(Rect2(-7 + k * 5, -18, 4, 4), Color("b0b0b8"))
-	draw_circle(Vector2(0, -8), 3.0, Color("f2e6c9"))  # a skull in the window
-	for k in level:
-		draw_circle(Vector2(-4 + k * 4, 13), 1.6, Color("ffd84a"))
+	# the pixel-art bone tower: lv1 32x32, lv2 32x40, lv3 32x48, two frames (the window glow flickers)
+	var tex := Sprites.tex("bone_tower_%d" % level)
+	var top := -14.0
+	draw_circle(Vector2(0, 12), 13.0, Color(0, 0, 0, 0.25))
+	if tex != null:
+		var fh := tex.get_height()
+		var frame := int(Time.get_ticks_msec() / 330.0) % maxi(1, tex.get_width() / 32)
+		draw_texture_rect_region(tex, Rect2(-16.0, 16.0 - fh, 32.0, fh), Rect2(frame * 32, 0, 32, fh))
+		top = 16.0 - fh - 2.0
+	else:
+		draw_rect(Rect2(-9, -2, 18, 12), Color("8a8a92"))
+		draw_rect(Rect2(-7, -14, 14, 14), Color("b0b0b8"))
+		draw_circle(Vector2(0, -8), 3.0, Color("f2e6c9"))
 	if hp < max_hp:
-		draw_rect(Rect2(-10, -24, 20, 3), Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(-10, -24, 20.0 * hp / max_hp, 3), Color("e04040"))
+		draw_rect(Rect2(-10, top - 6, 20, 3), Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(-10, top - 6, 20.0 * hp / max_hp, 3), Color("e04040"))
 	if shot_flash > 0.0:
-		draw_line(Vector2(0, -8), shot_to, Color("f2e6c9"), 2.0)
+		draw_line(Vector2(0, top + 8), shot_to, Color("f2e6c9"), 2.0)

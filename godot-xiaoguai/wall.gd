@@ -34,12 +34,13 @@ func take_hit(dmg: int, _dir: Vector2) -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(-15, -15, 30, 30), Color("d8d2c0"))
-	draw_rect(Rect2(-15, -15, 30, 30), Color("8a8472"), false, 2.0)
-	draw_line(Vector2(-15, 0), Vector2(15, 0), Color("8a8472"), 1.5)
-	draw_line(Vector2(0, -15), Vector2(0, 0), Color("8a8472"), 1.5)
-	draw_line(Vector2(-7, 0), Vector2(-7, 15), Color("8a8472"), 1.5)
-	draw_line(Vector2(8, 0), Vector2(8, 15), Color("8a8472"), 1.5)
+	# the pixel-art bone wall; it shows its cracked version when it is hurt
+	var tex := Sprites.tex("bone_wall_damaged" if hp * 2 <= MAX_HP else "bone_wall")
+	if tex != null:
+		draw_texture_rect_region(tex, Rect2(-16, -16, 32, 32), Rect2(0, 0, 32, 32))
+	else:
+		draw_rect(Rect2(-15, -15, 30, 30), Color("d8d2c0"))
+		draw_rect(Rect2(-15, -15, 30, 30), Color("8a8472"), false, 2.0)
 	if hp < MAX_HP:
 		draw_rect(Rect2(-14, -20, 28, 3), Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(-14, -20, 28.0 * hp / MAX_HP, 3), Color("e04040"))

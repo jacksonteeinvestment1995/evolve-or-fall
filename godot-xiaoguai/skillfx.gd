@@ -9,6 +9,7 @@ var dir := Vector2.RIGHT
 var sc := 1.0
 var age := 0.0
 var life := 0.5
+var tint := Color.WHITE
 
 
 static func spawn_tooth(parent: Node, pos: Vector2, bite_dir: Vector2, scale: float = 1.0) -> void:
@@ -35,6 +36,8 @@ func _draw() -> void:
 		draw_tooth(self, dir, sc, age / life)
 	elif kind == "levelup":
 		draw_levelup(self, age / life)
+	else:
+		draw_special(self, kind, age / life, dir, sc, tint)
 
 
 static func _ease_out(t: float) -> float:
@@ -334,3 +337,164 @@ static func draw_levelup(ci: CanvasItem, t: float) -> void:
 			var ang := float(j) / 14.0 * TAU + 0.2
 			var d := Vector2.from_angle(ang) * Vector2(1.0, 0.5)
 			ci.draw_line(d * 8.0 * (1.0 + b * 2.0), d * 22.0 * (1.0 + b * 2.4), Color(1, 0.95, 0.6, 1.0 - b), 1.6)
+
+
+# --- special skills: effects when they trigger, and auras while they are active ---
+
+## A timed effect node. kind: heal, phoenix, slash, guard, coins, pick, impact, frenzy, spark.
+## follow = true puts it on the parent (the player) so it moves with him; otherwise it stays put.
+static func spawn_fx(parent: Node, pos: Vector2, kind: String, tint: Color = Color.WHITE, dir: Vector2 = Vector2.RIGHT, scale: float = 1.0) -> void:
+	if parent == null:
+		return
+	var fx := SkillFx.new()
+	fx.kind = kind
+	fx.position = pos
+	fx.dir = dir if dir != Vector2.ZERO else Vector2.RIGHT
+	fx.sc = scale
+	fx.tint = tint
+	fx.z_index = 25
+	match kind:
+		"heal":
+			fx.life = 1.0
+		"phoenix":
+			fx.life = 1.5
+		"slash":
+			fx.life = 0.28
+		"guard":
+			fx.life = 0.8
+		"coins":
+			fx.life = 1.0
+		"pick":
+			fx.life = 0.9
+		"impact":
+			fx.life = 0.3
+		"frenzy":
+			fx.life = 0.22
+		"spark":
+			fx.life = 0.3
+	parent.add_child(fx)
+
+
+static func draw_special(ci: CanvasItem, kind: String, t: float, dir: Vector2, sc: float, tint: Color) -> void:
+	var e := _ease_out(clampf(t, 0.0, 1.0))
+	var a := 1.0 - smoothstep(0.55, 1.0, t)
+	match kind:
+		"heal":
+			# an angel's wings of light and rising crosses
+			for side in [-1.0, 1.0]:
+				for k in 4:
+					var ang := -0.5 - float(k) * 0.28
+					var d := Vector2(side * cos(ang), sin(ang))
+					ci.draw_line(Vector2(side * 3.0, -4.0), Vector2(side * 3.0, -4.0) + d * (14.0 + float(k) * 5.0) * e, Color(0.85, 1.0, 0.9, a * 0.85), 2.2 - float(k) * 0.3)
+			for i in 6:
+				var x := sin(float(i) * 2.1) * 12.0
+				var y := -fposmod(t * 70.0 + float(i) * 11.0, 52.0)
+				var cs := 2.2 + fposmod(float(i) * 0.7, 1.0)
+				ci.draw_rect(Rect2(x - 0.8, y - cs, 1.6, cs * 2.0), Color(0.5, 1.0, 0.6, a))
+				ci.draw_rect(Rect2(x - cs, y - 0.8, cs * 2.0, 1.6), Color(0.5, 1.0, 0.6, a))
+		"phoenix":
+			# a firebird with spread wings climbs and bursts into feathers
+			var up := -26.0 * e
+			for side in ([-1.0, 1.0] if e > 0.12 else []):
+				var root := Vector2(side * 4.0, up)
+				var tip := Vector2(side * 38.0 * e, up - 14.0 * e)
+				var low := Vector2(side * 26.0 * e, up + 8.0 * e)
+				var top := Vector2(side * 28.0 * e, up - 22.0 * e)
+				# two convex triangles make the wing (a concave polygon fails to triangulate)
+				ci.draw_colored_polygon(PackedVector2Array([root, top, tip]), Color(1.0, 0.45, 0.1, 0.85 * a))
+				ci.draw_colored_polygon(PackedVector2Array([root, tip, low]), Color(1.0, 0.55, 0.1, 0.85 * a))
+				ci.draw_colored_polygon(PackedVector2Array([root, Vector2(side * 20.0 * e, up - 10.0 * e), Vector2(side * 14.0 * e, up + 2.0)]), Color(1.0, 0.9, 0.35, a))
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(0, up - 10.0), Vector2(5, up), Vector2(0, up + 14.0), Vector2(-5, up)]), Color(1.0, 0.7, 0.15, a))
+			ci.draw_circle(Vector2(0, up - 8.0), 3.0, Color(1.0, 0.95, 0.6, a))
+			for i in 12:
+				var ang2 := float(i) * 0.9 + t * 2.0
+				var p := Vector2(cos(ang2) * (10.0 + t * 40.0), up + sin(ang2) * 8.0 + t * 24.0)
+				ci.draw_colored_polygon(PackedVector2Array([p, p + Vector2(2.5, 5.0), p + Vector2(-2.5, 5.0)]), Color(1.0, 0.6 + 0.3 * fposmod(float(i) * 0.37, 1.0), 0.15, a))
+		"slash":
+			# a crescent sweep: bright edge, soft trail
+			var base := dir.angle()
+			var r := 16.0 * sc
+			for k in 4:
+				var f := float(k) / 4.0
+				var pts := PackedVector2Array()
+				for j in 9:
+					var u := float(j) / 8.0
+					var ang3 := base - 1.1 + u * 2.2 - f * 0.25
+					pts.append(Vector2.from_angle(ang3) * (r - f * 3.0 * sc) * (0.6 + 0.4 * sin(u * PI)) * (0.4 + 0.6 * e))
+				ci.draw_polyline(pts, Color(1, 1, 1, a * (1.0 - f * 0.7)), 3.0 - f * 0.6)
+		"guard":
+			# shield plates snap into place around the body
+			for i in 6:
+				var ang4 := float(i) * TAU / 6.0
+				var c := Vector2.from_angle(ang4) * (24.0 - 12.0 * e)
+				var n := Vector2.from_angle(ang4)
+				var s2 := n.rotated(PI * 0.5)
+				ci.draw_colored_polygon(PackedVector2Array([c + s2 * 5.0, c + n * 4.0, c - s2 * 5.0, c - n * 3.0]), Color(0.75, 0.8, 0.9, a))
+				ci.draw_polyline(PackedVector2Array([c + s2 * 5.0, c + n * 4.0, c - s2 * 5.0]), Color(1, 1, 1, a), 1.4)
+			ci.draw_circle(Vector2.ZERO, 6.0 * (1.0 - t), Color(1, 1, 1, 0.5 * a))
+		"coins":
+			for i in 10:
+				var ang5 := -PI * 0.5 + (float(i) - 4.5) * 0.28
+				var v := 60.0 + fposmod(float(i) * 0.43, 1.0) * 40.0
+				var p2 := Vector2.from_angle(ang5) * v * t + Vector2(0, 90.0 * t * t)
+				var squash := absf(cos(t * 14.0 + float(i)))
+				ci.draw_set_transform(p2, 0.0, Vector2(squash, 1.0))
+				ci.draw_circle(Vector2.ZERO, 3.0, Color(1.0, 0.82, 0.2, a))
+				ci.draw_circle(Vector2(-0.8, -0.8), 1.2, Color(1.0, 1.0, 0.7, a))
+				ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		"pick":
+			# a rare skill is chosen: a big star bursts with long rays in its colour
+			for i in 8:
+				var ang6 := float(i) * TAU / 8.0 + t * 1.2
+				var d2 := Vector2.from_angle(ang6)
+				ci.draw_line(d2 * 8.0, d2 * (14.0 + 30.0 * e), Color(tint, a), 2.4)
+			_star(ci, Vector2(0, -8.0 * e), 6.0 + 8.0 * (1.0 - t), Color(tint.lightened(0.5), a))
+			_star(ci, Vector2(0, -8.0 * e), 3.0, Color(1, 1, 1, a))
+		"impact":
+			# a hard hit: a red star burst on the target
+			for i in 6:
+				var ang7 := float(i) * TAU / 6.0 + 0.3
+				var d3 := Vector2.from_angle(ang7)
+				ci.draw_colored_polygon(PackedVector2Array([d3 * 3.0 + d3.rotated(PI * 0.5) * 2.0, d3 * (8.0 + 10.0 * e) * sc, d3 * 3.0 - d3.rotated(PI * 0.5) * 2.0]), Color(1.0, 0.3, 0.2, a))
+			_star(ci, Vector2.ZERO, 5.0 * (1.0 - t), Color(1, 0.95, 0.7, a))
+		"frenzy":
+			# speed lines trailing the bite
+			var side2 := dir.rotated(PI * 0.5)
+			for i in 5:
+				var off := side2 * (float(i) - 2.0) * 4.0
+				ci.draw_line(off - dir * 6.0, off - dir * (16.0 + 10.0 * e), Color(1, 0.85, 0.5, a), 1.6)
+		"spark":
+			# little electric arcs around the caster
+			for i in 6:
+				var ang8 := float(i) * TAU / 6.0 + t * 8.0
+				var p3 := Vector2.from_angle(ang8) * (10.0 + 8.0 * e)
+				var mid := p3.rotated(0.35) * 0.7
+				ci.draw_polyline(PackedVector2Array([Vector2.from_angle(ang8) * 5.0, mid, p3]), Color(0.85, 0.9, 1.0, a), 1.5)
+
+
+## Gravity Maw (while active): dots spiral inward toward the body, with streaming arcs.
+static func draw_gravity(ci: CanvasItem, tm: float, radius: float) -> void:
+	for i in 16:
+		var f := fposmod(tm * 0.35 + float(i) / 16.0, 1.0)
+		var ang := float(i) * 2.399 + (1.0 - f) * 3.0
+		var r := radius * (1.0 - f) + 8.0
+		ci.draw_circle(Vector2.from_angle(ang) * r, 1.0 + f * 1.6, Color(0.7, 0.55, 1.0, 0.15 + 0.5 * f))
+	for k in 3:
+		var base := tm * 0.6 + float(k) * TAU / 3.0
+		var pts := PackedVector2Array()
+		for j in 14:
+			var u := float(j) / 13.0
+			pts.append(Vector2.from_angle(base + (1.0 - u) * 2.6) * (radius * 0.9 * (1.0 - u) + 10.0))
+		ci.draw_polyline(pts, Color(0.55, 0.4, 0.95, 0.28), 1.4)
+
+
+## Blood Moon (while active): a red crescent above the head and drifting crimson wisps.
+static func draw_bloodmoon(ci: CanvasItem, tm: float) -> void:
+	var c := Vector2(0, -26.0 + sin(tm * 1.5) * 1.5)
+	ci.draw_circle(c, 7.0, Color(0.85, 0.1, 0.15, 0.9))
+	ci.draw_circle(c + Vector2(3.0, -1.5), 6.2, Color(0.1, 0.02, 0.08, 1.0))
+	ci.draw_circle(c, 12.0, Color(0.9, 0.1, 0.2, 0.12))
+	for i in 5:
+		var f := fposmod(tm * 0.4 + float(i) * 0.2, 1.0)
+		var x := sin(float(i) * 2.7 + tm) * 10.0
+		ci.draw_circle(Vector2(x, 6.0 - f * 30.0), 2.2 * (1.0 - f), Color(0.9, 0.1, 0.2, 0.5 * (1.0 - f)))

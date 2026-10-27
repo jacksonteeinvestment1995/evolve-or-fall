@@ -323,12 +323,15 @@ func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: Strin
 	b.pierce = pierce
 	b.life = life
 	b.team = "enemy"
+	if line == 2 and secret < 0:
+		b.sprite = "fx_enemy_arrow"  # the hunters shoot pixel-art arrows
 	Sfx.play_at(get_tree(), "shoot", global_position, -9.0)
 	_add_to_level(b)
 
 
-func _spawn_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color) -> void:
+func _spawn_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color, fx: String = "") -> void:
 	var z = ZoneScript.new()
+	z.fx = fx
 	z.position = pos
 	z.radius = rad
 	z.delay = delay
@@ -415,12 +418,12 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 				fired = true
 		"fireball":
 			if dist < 280.0:
-				_spawn_zone(target.global_position, 50.0, 0.9, maxi(1, roundi(dmg * 2.0)), Color(1.0, 0.45, 0.2))
+				_spawn_zone(target.global_position, 50.0, 0.9, maxi(1, roundi(dmg * 2.0)), Color(1.0, 0.45, 0.2), "fx_fireball_explosion")
 				cast_color = Color(1.0, 0.45, 0.2)
 				fired = true
 		"bomb":
 			if dist < 260.0:
-				_spawn_zone(target.global_position, 62.0, 1.2, maxi(1, roundi(dmg * 2.2)), Color("e08a3a"))
+				_spawn_zone(target.global_position, 62.0, 1.2, maxi(1, roundi(dmg * 2.2)), Color("e08a3a"), "fx_fireball_explosion")
 				cast_color = Color("e08a3a")
 				fired = true
 		"slam":
@@ -464,6 +467,7 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 				if a.hp < a.max_hp * 0.7:
 					a.hp = mini(a.max_hp, a.hp + maxi(1, roundi(a.max_hp * 0.35)))
 					a.evolve_flash = 0.4
+					FxMark.spawn(get_parent(), a.global_position + Vector2(0, -6), "fx_heal_sparkle", 0.6)
 					fired = true
 			cast_color = Color("5ae07a")
 		"rally":
@@ -663,7 +667,8 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 		amount = ceili(amount * 1.5)
 	hp -= amount
 	flash = 0.15
-	knock = dir * 260.0
+	if not by_tower:
+		knock = dir * 260.0  # towers hurt but never push villagers back
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
 	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
 	if hp > 0 and has_status("shock") and randf() < 0.25:
@@ -738,28 +743,22 @@ func _draw() -> void:
 		draw_arc(Vector2(0, -2), 16.0, 0.0, TAU, 24, Color(cast_color, cast_flash * 2.0), 3.0)
 	if stun_left > 0.0:
 		draw_arc(Vector2(0, -20), 6.0, 0.0, TAU, 12, Color("ffe680"), 2.0)
-	# status marks
-	if has_status("burn"):
-		draw_colored_polygon(PackedVector2Array([Vector2(-4, -2), Vector2(0, -12), Vector2(4, -2)]), Color(1.0, 0.5, 0.1, 0.8))
-	if has_status("chill") or has_status("freeze"):
-		draw_arc(Vector2(0, 2), 11.0, 0.0, TAU, 16, Color("8fd8ff"), 2.0)
+	# status marks: the pixel-art marks in a row above the head (shock and charm have no art yet)
+	var marks: Array[String] = []
+	for st in ["burn", "chill", "freeze", "root", "poison", "bleed", "curse"]:
+		if has_status(st):
+			marks.append("status_" + st)
+	if stun_left > 0.0:
+		marks.append("status_stun")
+	for i in marks.size():
+		var mt := Sprites.tex(marks[i])
+		if mt != null:
+			draw_texture_rect(mt, Rect2(-marks.size() * 5.0 + i * 10.0 + 1.0, -34.0 - 8.0 * sc, 9.0, 9.0), false)
 	if has_status("freeze"):
 		draw_rect(Rect2(-8, -12, 16, 22), Color(0.6, 0.85, 1.0, 0.45))
-	if has_status("root"):
-		draw_line(Vector2(-8, 10), Vector2(-4, 4), Color("5ac040"), 2.0)
-		draw_line(Vector2(8, 10), Vector2(4, 4), Color("5ac040"), 2.0)
-	if has_status("poison"):
-		for k in poison_stacks:
-			draw_circle(Vector2(-5 + 5 * k, -16), 1.8, Color("7ae040"))
-	if has_status("bleed"):
-		draw_circle(Vector2(6, 8), 1.8, Color("d03030"))
-		draw_circle(Vector2(-6, 10), 1.5, Color("d03030"))
 	if has_status("shock"):
 		draw_line(Vector2(-3, -14), Vector2(1, -10), Color("fff060"), 2.0)
 		draw_line(Vector2(1, -10), Vector2(-1, -6), Color("fff060"), 2.0)
-	if has_status("curse"):
-		draw_line(Vector2(-4, -18), Vector2(4, -10), Color("a050e0"), 2.0)
-		draw_line(Vector2(4, -18), Vector2(-4, -10), Color("a050e0"), 2.0)
 	if has_status("charm"):
 		draw_circle(Vector2(-3, -18), 2.2, Color("ff70a0"))
 		draw_circle(Vector2(3, -18), 2.2, Color("ff70a0"))

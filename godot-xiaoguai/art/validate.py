@@ -56,6 +56,8 @@ for n in ['z_spit', 'z_cloud', 'z_surge', 's_toss', 's_rattle', 's_ossuary', 'w_
           'd_fireball', 'd_wingstorm', 'd_scales', 'b_claw', 'b_howl', 'b_pack', 'n_seeds', 'n_spores', 'n_grove', 'm_rocks', 'm_slide',
           'm_fortress', 'e_hellbolt', 'e_ruin', 'e_dominion']:
     M['icon_fs_' + n] = S('icon', [(16, 16)], 1, 1)   # art/src/icons_form_skills2.spr
+for n in ['overdrive', 'frenzy', 'ironwill', 'secondwind', 'phoenix', 'cleave', 'stormcaller', 'bloodmoon', 'gravity', 'titan', 'mastery', 'bonehoard']:
+    M['icon_sp_' + n] = S('icon', [(16, 16)], 1, 1)   # art/src/icons_special.spr
 
 # ---- batch 2 manifest ----
 VIL2 = {'farmer': [('farmer', 'Farmer'), ('harvester', 'Harvester'), ('scythe_master', 'Scythe Master')],

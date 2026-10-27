@@ -931,12 +931,24 @@ func _build_hud() -> void:
 	bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	bar.add_theme_constant_override("separation", 36)
 	layer.add_child(bar)
+	var hotbar_icons := ["icon_build_tower", "icon_build_wall", "icon_build_remove"]
 	for i in 3:
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 6)
+		bar.add_child(cell)
+		var ic := Sprites.icon(hotbar_icons[i], 2)
+		if ic != null:
+			var tr := TextureRect.new()
+			tr.texture = ic
+			tr.custom_minimum_size = Vector2(44, 44)
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			cell.add_child(tr)
 		var l := Label.new()
 		l.add_theme_font_size_override("font_size", 24)
 		l.add_theme_color_override("font_outline_color", Color.BLACK)
 		l.add_theme_constant_override("outline_size", 8)
-		bar.add_child(l)
+		cell.add_child(l)
 		hotbar.append(l)
 
 	# music credit, bottom right (the final track is CC-BY and needs it)
@@ -1134,7 +1146,7 @@ func _next_menu() -> void:
 		for id in specials:
 			var info: Dictionary = SkillsData.SPECIALS[id]
 			special_entries.append("%d. %s\n    %s" % [special_entries.size() + 1, info["name"], info["desc"]])
-		_open_menu("LEVEL %d: choose a SPECIAL skill" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620)
+		_open_menu("LEVEL %d: choose a SPECIAL skill" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620, specials.map(func(sid): return Sprites.icon("icon_sp_" + sid)))
 	else:
 		var options := SkillsData.roll(player.skills, rng, 3, player.line, player.stage)
 		if options.is_empty():

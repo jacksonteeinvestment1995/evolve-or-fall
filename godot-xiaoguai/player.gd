@@ -7,6 +7,9 @@ extends CharacterBody2D
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
 const TreasureData := preload("res://treasure.gd")
+const SPECIAL_COLORS := {"overdrive": Color("ff5030"), "frenzy": Color("ffa030"), "ironwill": Color("a0b0d0"), "secondwind": Color("60e090"),
+	"phoenix": Color("ff8a30"), "cleave": Color("e0e0ff"), "stormcaller": Color("a0c0ff"), "bloodmoon": Color("e02040"),
+	"gravity": Color("a070ff"), "titan": Color("d0a060"), "mastery": Color("ffd040"), "bonehoard": Color("ffd860")}
 const BoltScript := preload("res://bolt.gd")
 const ZoneScript := preload("res://zone.gd")
 const Sfx := preload("res://sfx.gd")
@@ -240,6 +243,16 @@ func learn_special(id: String) -> void:
 	if not SkillsData.SPECIALS.has(id) or specials.has(id):
 		return
 	specials[id] = true
+	var sp_col: Color = SPECIAL_COLORS.get(id, Color.WHITE)
+	match id:
+		"ironwill":
+			SkillFx.spawn_fx(self, Vector2.ZERO, "guard")
+		"bonehoard":
+			SkillFx.spawn_fx(self, Vector2(0, -6), "coins")
+		"mastery":
+			SkillFx.spawn_levelup(self)
+		_:
+			SkillFx.spawn_fx(self, Vector2.ZERO, "pick", sp_col)
 	if id == "ironwill":
 		_apply_stage(true)
 	elif id == "mastery":
@@ -410,6 +423,12 @@ func _auto_bite() -> void:
 	target.take_hit(bite, bite_dir)
 	on_bite_landed(target, bite)
 	SkillFx.spawn_tooth(get_parent(), target.global_position, bite_dir, maxf(0.8, float(s["scale"]) * 0.8))
+	if specials.has("overdrive"):
+		SkillFx.spawn_fx(get_parent(), target.global_position, "impact", Color.WHITE, bite_dir, 1.2)
+	if specials.has("titan"):
+		SkillFx.spawn_fx(get_parent(), global_position + bite_dir * 14.0, "slash", Color.WHITE, bite_dir, 1.6)
+	if specials.has("frenzy"):
+		SkillFx.spawn_fx(get_parent(), global_position, "frenzy", Color.WHITE, bite_dir, 1.0)
 	add_xp(1)
 
 
@@ -508,6 +527,7 @@ func on_bite_landed(target, dmg: int) -> void:
 			if e != target and is_instance_valid(e) and not e.is_queued_for_deletion() and extra < 2:
 				extra += 1
 				e.take_hit(dmg, (e.global_position - global_position).normalized())
+				SkillFx.spawn_fx(get_parent(), e.global_position, "slash", Color.WHITE, (e.global_position - global_position).normalized(), 1.0)
 	var ab := ability()
 	if not ab.is_empty() and ab["id"] == "blood_drain":
 		var frac: float = [0.10, 0.15, 0.20][int(ab["rank"]) - 1]
@@ -599,6 +619,7 @@ func _update_ability(delta: float) -> void:
 		hp = mini(max_hp, hp + roundi(max_hp * 0.5))
 		hp_changed.emit(hp)
 		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "Second Wind!", Popups.HEAL, 16)
+		SkillFx.spawn_fx(self, Vector2.ZERO, "heal")
 	if specials.has("gravity"):
 		for e in _enemies_within(160.0):
 			e.global_position = e.global_position.move_toward(global_position, 35.0 * delta)
@@ -791,6 +812,8 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 		_:
 			return false
 	skill_cd[id] = float(SkillsData.SKILLS[id]["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	if specials.has("stormcaller"):
+		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
 	Sfx.play(get_tree(), "dodge" if id == "step" else id)  # sounds are named nova, bolt, roar, doom
 	return true
 
@@ -837,6 +860,7 @@ func take_hit(dmg: int, dir: Vector2) -> void:
 		hp_changed.emit(hp)
 		_player_zone(global_position, 160.0, 0.0, ceili(effective_bite() * 5.0), Color("ff8a30"), 1.5)
 		Popups.text(get_tree(), global_position + Vector2(0, -26.0), "Phoenix!", Popups.BIG, 20)
+		SkillFx.spawn_fx(self, Vector2.ZERO, "phoenix")
 		Sfx.play(get_tree(), "evolve")
 		return
 	Sfx.play(get_tree(), "death" if hp <= 0 else "hurt")
@@ -893,6 +917,10 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([Vector2(-3, 4), Vector2(-1, 4), Vector2(-2, 7)]), Color.WHITE)
 			draw_colored_polygon(PackedVector2Array([Vector2(1, 4), Vector2(3, 4), Vector2(2, 7)]), Color.WHITE)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if specials.has("gravity"):
+		SkillFx.draw_gravity(self, Time.get_ticks_msec() * 0.001, 160.0)
+	if specials.has("bloodmoon"):
+		SkillFx.draw_bloodmoon(self, Time.get_ticks_msec() * 0.001)
 	if slow_left > 0.0:
 		draw_arc(Vector2.ZERO, 12.0 * sc, 0.0, TAU, 16, Color("7d5e38"), 2.0)
 	if has_target:
@@ -980,6 +1008,8 @@ func _cast_form(id: String) -> bool:
 		z.dur = 0.65
 	_add_to_level(z)
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	if specials.has("stormcaller"):
+		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
 	Sfx.play(get_tree(), "nova")
 	return true
 
@@ -1011,6 +1041,8 @@ func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
 		b.source = self
 		_add_to_level(b)
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	if specials.has("stormcaller"):
+		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
 	Sfx.play(get_tree(), "bolt")
 	return true
 

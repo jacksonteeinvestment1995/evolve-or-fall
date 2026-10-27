@@ -63,11 +63,21 @@ func _physics_process(delta: float) -> void:
 
 
 var style := ""            ## "spirit" draws a ghost wisp; the volley skills use acid, spear, orb, glob, fire, claw, seed, rock, hell
+var sprite := ""           ## a pixel-art strip drawn along the flight (the hunters' arrow)
 var status := ""           ## player bolts: a status put on every villager hit
 var status_time := 0.0
 
 
 func _draw() -> void:
+	if sprite != "":
+		var st := Sprites.tex(sprite)
+		if st != null:
+			var fh := st.get_height()
+			var frame := int(Time.get_ticks_msec() / 90.0) % maxi(1, st.get_width() / fh)
+			draw_set_transform(Vector2.ZERO, dir.angle(), Vector2.ONE)
+			draw_texture_rect_region(st, Rect2(-fh * 0.5, -fh * 0.5, fh, fh), Rect2(frame * fh, 0, fh, fh))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			return
 	if style == "spirit":
 		SkillFx.draw_wisp(self, dir, radius, color)
 		return

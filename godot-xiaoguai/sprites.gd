@@ -210,20 +210,31 @@ static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bo
 	if walk < 0.0:
 		ci.draw_texture_rect_region(t, dst, src, modulate)
 		return true
-	# walking: bob the body, then let the two halves of the legs lift and swing in turn
+	# Walking, drawn in thin horizontal slices so nothing is torn apart:
+	#  - a small hop (the head rises most, the hips stay put, so the body stretches a little);
+	#  - a waddle: the upper body leans to the side of the foot that is planted;
+	#  - the feet (bottom fifth) split down the middle, one lifting a single pixel at a time.
 	var s := sin(walk)
-	var cut := 0.72
-	var bob := absf(s) * size * 0.045
-	var top_src := Rect2(src.position.x, src.position.y, fh, fh * cut)
-	ci.draw_texture_rect_region(t, Rect2(dst.position.x, dst.position.y - bob, size, size * cut), top_src, modulate)
-	var ly := dst.position.y + size * cut
-	var lh := size * (1.0 - cut)
-	var half := size * 0.5
-	var lift_l := maxf(s, 0.0) * size * 0.10
-	var lift_r := maxf(-s, 0.0) * size * 0.10
-	var sway := s * size * 0.05
-	var leg_y := src.position.y + fh * cut
-	var leg_h := fh * (1.0 - cut)
-	ci.draw_texture_rect_region(t, Rect2(dst.position.x + sway, ly - lift_l - bob * 0.5, half, lh), Rect2(src.position.x, leg_y, fh * 0.5, leg_h), modulate)
-	ci.draw_texture_rect_region(t, Rect2(dst.position.x + half - sway, ly - lift_r - bob * 0.5, half, lh), Rect2(src.position.x + fh * 0.5, leg_y, fh * 0.5, leg_h), modulate)
+	var px := size / float(fh)
+	var rows := maxi(1, fh / 16)
+	var leg_row := int(fh * 0.8)
+	var hop := absf(s) * px * 0.9
+	var lean := s * px * 0.8
+	var half_w := fh * 0.5
+	var r := 0
+	while r < fh:
+		var n := mini(rows, fh - r)
+		var y := dst.position.y + r * px
+		if r < leg_row:
+			var k := 1.0 - float(r) / float(leg_row)           # 1 at the head, 0 at the hips
+			var sl := Rect2(src.position.x, src.position.y + r, fh, n)
+			ci.draw_texture_rect_region(t, Rect2(dst.position.x + lean * k, y - hop * k, size, n * px), sl, modulate)
+		else:
+			var lift_l := maxf(s, 0.0) * px
+			var lift_r := maxf(-s, 0.0) * px
+			var sl_l := Rect2(src.position.x, src.position.y + r, half_w, n)
+			var sl_r := Rect2(src.position.x + half_w, src.position.y + r, half_w, n)
+			ci.draw_texture_rect_region(t, Rect2(dst.position.x, y - lift_l, size * 0.5, n * px), sl_l, modulate)
+			ci.draw_texture_rect_region(t, Rect2(dst.position.x + size * 0.5, y - lift_r, size * 0.5, n * px), sl_r, modulate)
+		r += n
 	return true
