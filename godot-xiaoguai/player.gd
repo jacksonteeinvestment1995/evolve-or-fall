@@ -145,7 +145,7 @@ func _stage_dict(i: int, stage_name: String, body: Color, hp_m: float, dmg_m: fl
 
 
 func _build_stages() -> void:
-	stages = [_stage_dict(0, "Xiao Guai", Color("7a4fd0"), 1.0, 1.0, 1.0)]
+	stages = [_stage_dict(0, "Xiao Guai", Color("b02e4e"), 1.0, 1.0, 1.0)]
 	if line < 0:
 		return
 	var l: Dictionary = LinesData.LINES[line]
@@ -868,7 +868,7 @@ func _draw() -> void:
 		art = Sprites.hero(LinesData.LINES[line]["forms"], stage)
 	elif stage == 0:
 		art = "xiaoguai_base"
-	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 26.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0))), (Time.get_ticks_msec() * 0.016) if velocity.length() > 12.0 else -1.0):
+	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 31.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0))), (Time.get_ticks_msec() * 0.016) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
 		# from the 9th form on he wears a cape

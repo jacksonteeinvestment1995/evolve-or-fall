@@ -111,6 +111,7 @@ static func _shift_pupils(img: Image, area: Rect2i, d: Vector2i) -> void:
 						pupils.append(Vector2i(x, y))
 						break
 	if pupils.is_empty():
+		_shift_dark_eyes(img, area, d)
 		return
 	var cols := {}
 	for q in pupils:
@@ -123,6 +124,38 @@ static func _shift_pupils(img: Image, area: Rect2i, d: Vector2i) -> void:
 			img.set_pixel(to.x, to.y, cols[q])
 		else:
 			img.set_pixel(q.x, q.y, cols[q])  # no room to move: stay put
+
+
+## Eyes with no white (dark slits on a coloured face): dark pixels with an opaque pixel on all four
+## sides slide one step toward the look direction, as long as they stay on the face.
+static func _shift_dark_eyes(img: Image, area: Rect2i, d: Vector2i) -> void:
+	var eyes: Array[Vector2i] = []
+	for y in range(area.position.y + 1, area.end.y - 1):
+		for x in range(area.position.x + 1, area.end.x - 1):
+			var c := img.get_pixel(x, y)
+			if c.a > 0.5 and c.r < 0.14 and c.g < 0.14 and c.b < 0.2:
+				var ok := true
+				for n in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					if img.get_pixel(x + n.x, y + n.y).a < 0.5:
+						ok = false
+				if ok:
+					eyes.append(Vector2i(x, y))
+	if eyes.is_empty():
+		return
+	var dark := img.get_pixel(eyes[0].x, eyes[0].y)
+	var face := img.get_pixel(eyes[0].x + 1, eyes[0].y)
+	var is_eye := {}
+	for q in eyes:
+		is_eye[q] = true
+	for q in eyes:
+		img.set_pixel(q.x, q.y, face)
+	for q in eyes:
+		var to: Vector2i = q + Vector2i(signi(d.x), signi(d.y))
+		var tc := img.get_pixel(to.x, to.y)
+		if tc.a > 0.5 and tc.r > 0.3:
+			img.set_pixel(to.x, to.y, dark)
+		else:
+			img.set_pixel(q.x, q.y, dark)
 
 
 ## First plain (non attack / walk / night) file that starts with the prefix, e.g. "farmer_2_".
