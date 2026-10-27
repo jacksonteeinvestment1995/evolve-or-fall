@@ -892,7 +892,7 @@ func _draw() -> void:
 		art = Sprites.hero(LinesData.LINES[line]["forms"], stage)
 	elif stage == 0:
 		art = "xiaoguai_base"
-	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 31.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0))), (Time.get_ticks_msec() * 0.016) if velocity.length() > 12.0 else -1.0):
+	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0))), (Time.get_ticks_msec() * 0.016) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
 		# from the 9th form on he wears a cape

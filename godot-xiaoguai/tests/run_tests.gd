@@ -812,19 +812,23 @@ func _init() -> void:
 	main.elapsed = 10.0
 	var hunter0 = main._spawn_villager(Vector2(3000, 600), 1, 2)
 	var mage0 = main._spawn_villager(Vector2(3000, 700), 1, 6)
+	var farmer0 = main._spawn_villager(Vector2(3000, 900), 1, 0)
+	var militia0 = main._spawn_villager(Vector2(3000, 950), 1, 3)
 	await frames(2)
-	check("at the start villagers cannot shoot", hunter0.ranged_config().is_empty())
-	check("at the start villagers have no skills", mage0.skill_name() == "" and hunter0.skill_name() == "")
+	check("at the start hunters and mages can already shoot", not hunter0.ranged_config().is_empty() and not mage0.ranged_config().is_empty())
+	check("at the start other villagers cannot shoot", farmer0.ranged_config().is_empty())
+	check("at the start shooters already have their skills", mage0.skill_name() == "fireball" and hunter0.skill_name() == "net")
+	check("at the start other villagers have no skills", militia0.skill_name() == "")
 	check("at the start days give villagers no bonus", main.enemy_power() == 1.0)
 	check("villagers walk slower at the start", main.enemy_speed_mult() < 1.0 and hunter0.effective_speed() < hunter0.speed)
 	var hidden0 = main._spawn_villager(Vector2(3000, 800), 4, 3, 0)
 	check("hidden forms shoot too, but not before the grace period ends", hidden0.ranged_config().is_empty())
 	main.elapsed = 200.0
 	check("after 3 minutes villagers can shoot", not hunter0.ranged_config().is_empty() and not hidden0.ranged_config().is_empty())
-	check("...but still have no skills", mage0.skill_name() == "")
+	check("...but the others still have no skills", militia0.skill_name() == "")
 	check("...and daylight makes them stronger", main.is_night() or main.enemy_power() == 1.5)
 	main.elapsed = 400.0
-	check("after 6 minutes they have skills", mage0.skill_name() == "fireball")
+	check("after 6 minutes they have skills", mage0.skill_name() == "fireball" and militia0.skill_name() == "shield")
 	main.elapsed = 0.0
 	check("at the start only nearby villagers notice 小怪", main.chase_radius() < 600.0)
 	main.elapsed = 300.0
@@ -1754,6 +1758,53 @@ func _init() -> void:
 	check("a tower hit does no knockback", kb_v.knock == Vector2.ZERO, str(kb_v.knock))
 	kb_v.take_hit(1, Vector2.RIGHT, false)
 	check("a player hit still pushes back", kb_v.knock != Vector2.ZERO)
+
+	# =========================== EXP stones from tower and pet kills ===========================
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	var es_xp0: int = p.xp
+	var es_v = mk(p.global_position + Vector2(300, 0), 0, 0)
+	es_v.xp_value = 7
+	es_v.take_hit(999, Vector2.RIGHT, true)
+	await frames(3)
+	check("a tower or pet kill gives no direct EXP", p.xp == es_xp0, "%d -> %d" % [es_xp0, p.xp])
+	check("it drops an EXP stone instead", get_nodes_in_group("exp_stones").size() == 1)
+	var es_stone = get_nodes_in_group("exp_stones")[0]
+	check("the stone is worth the villager's EXP", es_stone.value == 7)
+	es_stone.global_position = p.global_position + Vector2(3, 0)
+	await frames(3)
+	check("walking over the stone gives the EXP", p.xp > es_xp0, "%d -> %d" % [es_xp0, p.xp])
+	check("the stone is gone after pickup", get_nodes_in_group("exp_stones").is_empty())
+	var es_v2 = mk(p.global_position + Vector2(300, 0), 0, 0)
+	es_xp0 = p.xp
+	es_v2.take_hit(999, Vector2.RIGHT, false)
+	await frames(2)
+	check("your own kills still give EXP straight away", p.xp > es_xp0 and get_nodes_in_group("exp_stones").is_empty())
+
+	# =========================== enemies arrive in order of strength ===========================
+	await fresh()
+	p = main.player
+	main.elapsed = 0.0
+	var ro_lines := {}
+	for i in 60:
+		ro_lines[main.roster_line()] = true
+	check("at the start only farmers appear", ro_lines.keys() == [0], str(ro_lines.keys()))
+	main.elapsed = 100.0
+	ro_lines.clear()
+	for i in 200:
+		ro_lines[main.roster_line()] = true
+	check("after 90 s woodsmen join", ro_lines.has(0) and ro_lines.has(1) and not ro_lines.has(2))
+	main.elapsed = 200.0
+	check("then hunters", main.roster_size() == 3)
+	main.elapsed = 5000.0
+	check("in the end every profession is in the roster", main.roster_size() == 10)
+	main.elapsed = 0.0
+	p.level = 40
+	check("a high-level 小怪 faces more professions even early", main.roster_size() >= 5, str(main.roster_size()))
+	p.level = 1
+	check("the roster order is weakest to strongest", main.ROSTER[0] == 0 and main.ROSTER[1] == 1 and main.ROSTER[2] == 2)
+	check("stone paths exist and can be walked faster", main.paths.size() > 100 and main.speed_mult_at(main._tile_center(main.paths.keys()[0])) > 1.0)
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

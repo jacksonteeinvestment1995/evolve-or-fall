@@ -12,6 +12,7 @@ signal defeated(xp: int, bones: int, by_tower: bool)
 const BoltScript := preload("res://bolt.gd")
 const ZoneScript := preload("res://zone.gd")
 const Sfx := preload("res://sfx.gd")
+const ExpStone := preload("res://exp_stone.gd")
 const Popups := preload("res://popups.gd")
 
 const MAX_STAGE := 4          ## each line has 5 forms: stage 0 to 4
@@ -158,8 +159,15 @@ func _unlocked(what: String) -> bool:
 	return not level_node.has_method(what) or level_node.call(what)
 
 
+const SHOOTERS := [2, 5, 6]   ## Hunter, Priest and Mage: their bows and spells work from the first second
+
+
+func _is_shooter() -> bool:
+	return secret < 0 and SHOOTERS.has(line)
+
+
 func ranged_config() -> Dictionary:
-	if not _unlocked("ranged_unlocked"):
+	if not _is_shooter() and not _unlocked("ranged_unlocked"):
 		return {}
 	if secret >= 0:
 		return HIDDEN_RANGED
@@ -169,7 +177,7 @@ func ranged_config() -> Dictionary:
 ## Every skill this villager knows right now (none early in the game, see skills_unlocked).
 func available_skills() -> Array:
 	var out: Array = []
-	if not _unlocked("skills_unlocked"):
+	if not _is_shooter() and not _unlocked("skills_unlocked"):
 		return out
 	if secret >= 0:
 		return HIDDEN_SKILLS[secret].duplicate()
@@ -677,6 +685,8 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 		if other != null:
 			other.hurt(maxi(1, int(amount / 2.0)))
 	if hp <= 0:
+		if by_tower:
+			ExpStone.spawn(get_parent(), global_position, xp_value)  # towers and pets leave an EXP stone to pick up
 		defeated.emit(xp_value, bones_value, by_tower)
 		queue_free()
 

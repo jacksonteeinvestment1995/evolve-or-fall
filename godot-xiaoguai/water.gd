@@ -3,8 +3,10 @@ extends Node2D
 ## (bits N=1, E=2, S=4, W=8 mark grass neighbours; art/export/shore_*), so ponds blend into the meadow.
 
 const TILE := 32
-const EDGE := {1: "shore_edge_n", 2: "shore_edge_e", 4: "shore_edge_s", 8: "shore_edge_w",
-	3: "shore_corner_ne", 6: "shore_corner_se", 12: "shore_corner_sw", 9: "shore_corner_nw"}
+const EDGE := {1: "edge_n", 2: "edge_e", 4: "edge_s", 8: "edge_w", 3: "corner_ne", 6: "corner_se", 12: "corner_sw", 9: "corner_nw"}
+
+var base := "tile_water"       ## the plain tile
+var edge_prefix := "shore_"    ## shore_edge_n ... or pathedge_edge_n ...
 
 var cells := {}
 var _t := 0.0
@@ -22,7 +24,7 @@ func _frame_of(t: Texture2D) -> Rect2:
 
 
 func _draw() -> void:
-	var water_tex := Sprites.tex("tile_water")
+	var water_tex := Sprites.tex(base)
 	if water_tex == null:
 		return
 	for c in cells:
@@ -35,10 +37,10 @@ func _draw() -> void:
 		if mask == 0:
 			for pair in [[Vector2i(1, -1), "ne"], [Vector2i(1, 1), "se"], [Vector2i(-1, 1), "sw"], [Vector2i(-1, -1), "nw"]]:
 				if not cells.has(c + pair[0]):
-					name = "shore_inner_" + pair[1]
+					name = edge_prefix + "inner_" + pair[1]
 					break
 		else:
-			name = EDGE.get(mask, "")
+			name = edge_prefix + EDGE[mask] if EDGE.has(mask) else ""
 		var tex: Texture2D = Sprites.tex(name) if name != "" else null
 		if tex == null:
 			tex = water_tex

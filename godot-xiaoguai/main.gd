@@ -9,6 +9,7 @@ const SEED := 7
 const TREE_CLUSTERS := 110      # few and small, so paths stay open
 const MUD_PATCHES := 70
 const MUD_SLOW := 0.5
+const PATH_FAST := 1.15          # stone paths: a bit quicker to walk
 const WATER_SLOW := 0.65         # wading is slow...
 const DROWN_SECONDS := 10.0      # ...and anything that stays in water this long drowns
 const START_TILE := Vector2i(4, 4)
@@ -92,6 +93,7 @@ var bokeh: CPUParticles2D
 var radial_tex: GradientTexture2D
 var shadow_tex: GradientTexture2D
 var water := {}   # Vector2i -> true: pond tiles (also solid, like trees)
+var paths := {}   # Vector2i -> true: stone path tiles (walkable, a little faster)
 var props := {}   # Vector2i -> prop sprite name: scenery with no collision
 var spawn_cd := SPAWN_SLOW
 var rng := RandomNumberGenerator.new()
@@ -239,6 +241,12 @@ func _build_hd2d() -> void:
 	shadow_tex.width = 64
 	shadow_tex.height = 64
 
+	var path_layer := preload("res://water.gd").new()
+	path_layer.cells = paths
+	path_layer.base = "stone_path"
+	path_layer.edge_prefix = "pathedge_"
+	add_child(path_layer)
+	move_child(path_layer, 0)
 	var pond_layer := preload("res://water.gd").new()
 	pond_layer.cells = water
 	add_child(pond_layer)
@@ -382,6 +390,39 @@ func _make_ponds(gen: RandomNumberGenerator) -> void:
 		made += 1
 
 
+## Three winding stone paths leaving the base meadow toward the far corners. Three tiles wide so the
+## edge tiles fit; they skip trees, water and mud.
+func _make_paths(gen: RandomNumberGenerator) -> void:
+	var goals := [Vector2i(COLS - 8, 8), Vector2i(COLS - 8, ROWS - 8), Vector2i(8, ROWS - 8)]
+	for goal in goals:
+		var pos := Vector2(START_TILE)
+		var target := Vector2(goal)
+		var heading := (target - pos).normalized()
+		for step in 400:
+			if pos.distance_to(target) < 4.0:
+				break
+			heading = (heading + (target - pos).normalized() * 0.18 + Vector2.from_angle(gen.randf_range(-0.5, 0.5)) * 0.25).normalized()
+			pos += heading
+			var c := Vector2i(roundi(pos.x), roundi(pos.y))
+			for dx in range(-1, 2):
+				for dy in range(-1, 2):
+					var t := c + Vector2i(dx, dy)
+					if t.x > 1 and t.y > 1 and t.x < COLS - 2 and t.y < ROWS - 2 and not trees.has(t) and not water.has(t) and not mud.has(t):
+						paths[t] = true
+	# trim thin tips like the ponds, so every path tile has a drawn edge
+	var changed := true
+	while changed:
+		changed = false
+		for t in paths.keys():
+			var open_sides := 0
+			for d in [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]:
+				if not paths.has(t + d):
+					open_sides += 1
+			if open_sides >= 3:
+				paths.erase(t)
+				changed = true
+
+
 ## Bushes, rocks, flowers, fences and gravestones: scenery with no collision.
 func _scatter_props() -> void:
 	var pr := RandomNumberGenerator.new()
@@ -389,7 +430,7 @@ func _scatter_props() -> void:
 	var names := ["prop_bush", "prop_rocks_1", "prop_rocks_2", "prop_flowers_1", "prop_flowers_2", "prop_flowers_1", "prop_flowers_2", "prop_bush"]
 	for i in 650:
 		var t := Vector2i(pr.randi_range(2, COLS - 3), pr.randi_range(2, ROWS - 3))
-		if trees.has(t) or mud.has(t) or water.has(t) or props.has(t) or Vector2(t - START_TILE).length() < 4.0:
+		if trees.has(t) or mud.has(t) or water.has(t) or paths.has(t) or props.has(t) or Vector2(t - START_TILE).length() < 4.0:
 			continue
 		props[t] = names[pr.randi_range(0, names.size() - 1)]
 	for k in 7:
@@ -511,6 +552,7 @@ func _generate() -> void:
 				mud.erase(t)
 
 	_make_ponds(gen)
+	_make_paths(gen)
 	_find_open_tiles()
 	_build_nav()
 	_scatter_props()
@@ -623,6 +665,8 @@ func speed_mult_at(pos: Vector2) -> float:
 	var t := tile_of(pos)
 	if water.has(t):
 		return WATER_SLOW
+	if paths.has(t):
+		return PATH_FAST
 	return MUD_SLOW if mud.has(t) else 1.0
 
 
@@ -865,11 +909,37 @@ func _add_tree_body(p: Vector2) -> void:
 
 ## stage 0 to 4 is the form within the line; line -1 picks one of the 10 lines at random;
 ## secret 0 to 2 spawns a hidden form (Parasite Hero, Dark Hero, GOD).
+## The order villagers join the fight, weakest first: Farmer, Woodsman, Hunter, Militia, Mage, Priest,
+## Knight, Thief, Smith, Noble. Then the hidden forms (Parasite Hero, Dark Hero and GOD) at the very end.
+const ROSTER := [0, 1, 2, 3, 6, 5, 4, 8, 7, 9]
+const ROSTER_STEP := 90.0         # a new profession every 90 seconds, or every 8 levels of 小怪
+
+
+func roster_size() -> int:
+	var by_time := int(elapsed / ROSTER_STEP)
+	var by_level := int(player.level / 8) if player != null else 0
+	return clampi(1 + maxi(by_time, by_level), 1, ROSTER.size())
+
+
+## Which profession a new villager is: only the unlocked ones, newer (stronger) ones a little more often.
+func roster_line() -> int:
+	var n := roster_size()
+	var total := 0.0
+	for i in n:
+		total += 1.0 + 0.6 * i
+	var roll := rng.randf() * total
+	for i in n:
+		roll -= 1.0 + 0.6 * i
+		if roll <= 0.0:
+			return ROSTER[i]
+	return ROSTER[n - 1]
+
+
 func _spawn_villager(p: Vector2, stage: int, line: int = -1, secret: int = -1):
 	var v = VillagerScript.new()
 	v.stage = stage
 	v.secret = secret
-	v.line = line if line >= 0 else rng.randi_range(0, VillagerScript.LINES.size() - 1)
+	v.line = line if line >= 0 else (roster_line() if secret < 0 else rng.randi_range(0, VillagerScript.LINES.size() - 1))
 	v.position = p
 	v.defeated.connect(_on_villager_defeated)
 	add_child(v)
