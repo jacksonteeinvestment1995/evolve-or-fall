@@ -86,6 +86,10 @@ var last_phase := 0
 var tint: CanvasModulate
 var glow_light: PointLight2D
 var hd2d_mat: ShaderMaterial
+var events: Node               # random events (events.gd)
+var shake_amp := 0.0           # camera shake in pixels, decays by itself
+var calm_time := 0.0           # seconds with no villager nearby (for the quiet music)
+var _music_tick := 0.0
 var treasure_spots: Array = []   # chests made during generation, added to the scene in _ready
 var minimap: Control
 var motes: CPUParticles2D
@@ -118,6 +122,10 @@ var menu_kind := ""  # what the open menu is: "line", "skill" or "special"
 var pause_on_menu := true  # the game stops while a level-up menu is open (tests turn this off)
 
 
+func _exit_tree() -> void:
+	SynthMusic.finish()
+
+
 func _ready() -> void:
 	rng.randomize()
 	_setup_input()
@@ -135,6 +143,10 @@ func _ready() -> void:
 	add_child(ghost)
 	_build_hd2d()
 	_build_hud()
+	events = preload("res://events.gd").new()
+	events.main = self
+	add_child(events)
+	SynthMusic.prepare_all()  # the situational music is built in the background
 	music = MusicScript.new()
 	add_child(music)
 	_update_music()
@@ -147,7 +159,17 @@ func _ready() -> void:
 ## Music follows how far 小怪 has evolved; nights have their own calmer track, and the
 ## final forms get the final boss theme.
 func wanted_track() -> String:
+	# what is happening decides first: an event, then danger, then a hidden enemy nearby
+	var ev: String = events.music_track() if events != null else ""
+	if ev != "":
+		return ev
+	if player.hp > 0 and player.hp <= player.max_hp * 0.3:
+		return "danger"
+	if _hidden_near():
+		return "hidden"
 	var s: int = player.stage
+	if calm_time > 14.0 and not is_night() and s < 9:
+		return "peace"
 	if s >= 9:
 		return "final"
 	if is_night():
@@ -157,6 +179,19 @@ func wanted_track() -> String:
 	if s >= 3:
 		return "battle2"
 	return "battle1"
+
+
+## A hidden enemy (Parasite Hero, Dark Hero or GOD) within about 900 px.
+func _hidden_near() -> bool:
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e) and e.get("secret") != null and int(e.get("secret")) >= 0 and e.global_position.distance_to(player.global_position) < 900.0:
+			return true
+	return false
+
+
+## Shake the camera (events and big blasts call this); the shake fades by itself.
+func shake(amount: float) -> void:
+	shake_amp = maxf(shake_amp, amount)
 
 
 func _update_music() -> void:
@@ -1202,11 +1237,18 @@ func _next_menu() -> void:
 	var item: Dictionary = menu_queue.pop_front()
 	menu_kind = item["type"]
 	if item["type"] == "line":
+		# only the finished lines are offered, each with a picture of its first form
 		var entries: Array[String] = []
+		var line_ids: Array[int] = []
+		var line_icons: Array = []
 		for i in LinesData.LINES.size():
-			var soon := "" if LinesData.released(i) else "   (coming soon)"
-			entries.append("%d. %s  [%s]%s" % [i + 1, LinesData.title(i), LinesData.LINES[i]["family"], soon])
-		_open_menu("FIRST EVOLUTION: choose your evolution line", entries, func(i): if LinesData.released(i): pick_line(i), 2, 440)
+			if not LinesData.released(i):
+				continue
+			line_ids.append(i)
+			entries.append("%d. %s  [%s]" % [entries.size() + 1, LinesData.title(i), LinesData.LINES[i]["family"]])
+			var art := Sprites.hero(LinesData.LINES[i]["forms"], 1)
+			line_icons.append(Sprites.first_frame_icon(art, 3) if art != "" else null)
+		_open_menu("FIRST EVOLUTION: choose your evolution line", entries, func(i): pick_line(line_ids[i]), 2, 440, line_icons)
 	elif item["type"] == "special":
 		var specials := SkillsData.roll_specials(player.specials, rng, 3)
 		if specials.is_empty():
@@ -1256,7 +1298,9 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 	head.add_theme_font_size_override("font_size", 28)
 	box.add_child(head)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(width * columns + 20, mini(560, 60 * ceili(entries.size() / float(columns)) + 20))
+	# tall enough for every row, so a normal pick never needs scrolling (only the 26-line list does)
+	var row_h := (56 if (columns > 1 and not icons.is_empty()) else (44 if columns > 1 else 70)) + 4
+	scroll.custom_minimum_size = Vector2(width * columns + 28, mini(600, row_h * ceili(entries.size() / float(columns)) + 16))
 	box.add_child(scroll)
 	var grid := GridContainer.new()
 	grid.columns = columns
@@ -1264,10 +1308,11 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 	for i in entries.size():
 		var b := Button.new()
 		b.text = entries[i]
-		b.custom_minimum_size = Vector2(width, 44 if columns > 1 else 70)
+		b.custom_minimum_size = Vector2(width, (56 if not icons.is_empty() else 44) if columns > 1 else 70)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		if i < icons.size() and icons[i] != null:
 			b.icon = icons[i]
+			b.expand_icon = false
 		b.pressed.connect(func(): on_pick.call(i))
 		if i < 9:
 			var ev := InputEventKey.new()
@@ -1399,6 +1444,20 @@ func _on_phase_change() -> void:
 
 
 func _process(delta: float) -> void:
+	if cam != null:
+		cam.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * shake_amp if shake_amp > 0.05 else Vector2.ZERO
+		shake_amp = move_toward(shake_amp, 0.0, delta * 14.0)
+	if not game_over and player != null:
+		var near := false
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if is_instance_valid(e) and e.global_position.distance_to(player.global_position) < 380.0:
+				near = true
+				break
+		calm_time = 0.0 if near else calm_time + delta
+		_music_tick += delta
+		if _music_tick >= 1.0:
+			_music_tick = 0.0
+			_update_music()
 	if not game_over:
 		elapsed += delta
 		clock += delta

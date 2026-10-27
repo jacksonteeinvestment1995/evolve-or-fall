@@ -9,6 +9,14 @@ const TRACKS := {
 			"title": "Boss Battle #2", "by": "nene (CC0)"},
 	"final": {"loop": "res://audio/music/final.ogg", "title": "Blackmoor Colossus", "by": "Matthew Pablo (CC-BY 3.0)"},
 	"night": {"loop": "res://audio/music/boss3.ogg", "title": "The Promise", "by": "Indieteur (CC0)"},
+	# situational tracks, generated in code (synth_music.gd), so they need no files or licence
+	"peace": {"synth": "peace", "title": "Quiet Meadow", "by": "generated in-game"},
+	"danger": {"synth": "danger", "title": "Heartbeat", "by": "generated in-game"},
+	"hidden": {"synth": "hidden", "title": "Something Stirs", "by": "generated in-game"},
+	"meteor": {"synth": "meteor", "title": "Falling Sky", "by": "generated in-game"},
+	"quake": {"synth": "quake", "title": "Ground Breaker", "by": "generated in-game"},
+	"raid": {"synth": "raid", "title": "War Horn", "by": "generated in-game"},
+	"treasure": {"synth": "treasure", "title": "Golden Rain", "by": "generated in-game"},
 }
 const FADE_SECONDS := 1.5
 
@@ -38,8 +46,10 @@ func play_track(id: String) -> bool:
 	if id == current or not TRACKS.has(id):
 		return false
 	var info: Dictionary = TRACKS[id]
-	var loop_stream := _load(info["loop"], true)
+	var loop_stream: AudioStream = SynthMusic.stream(info["synth"]) if info.has("synth") else _load(info["loop"], true)
 	if loop_stream == null:
+		if info.has("synth"):
+			SynthMusic.prepare(info["synth"])  # not built yet: it will play on a later try
 		return false
 	current = id
 	# the old front player fades out, and becomes the next back player

@@ -194,7 +194,12 @@ func skill_name() -> String:
 
 
 ## How far this villager can notice 小怪 (grows during the first minutes).
+var force_chase := false      ## raiders know where 小怪 is from the start
+
+
 func _chase_radius() -> float:
+	if force_chase:
+		return INF
 	var level_node = get_parent()
 	return level_node.chase_radius() if level_node.has_method("chase_radius") else INF
 

@@ -29,6 +29,22 @@ static func tex(name: String) -> Texture2D:
 
 
 ## A small icon scaled up with hard edges (for menu buttons), or null.
+## Frame 0 of a strip scaled up with hard edges (a form's picture for a menu), or null.
+static func first_frame_icon(name: String, factor: int = 3) -> Texture2D:
+	var key := "%s#first%d" % [name, factor]
+	if _cache.has(key):
+		return _cache[key]
+	var t := tex(name)
+	var out: Texture2D = null
+	if t != null:
+		var fh := t.get_height()
+		var img := t.get_image().get_region(Rect2i(0, 0, fh, fh))
+		img.resize(fh * factor, fh * factor, Image.INTERPOLATE_NEAREST)
+		out = ImageTexture.create_from_image(img)
+	_cache[key] = out
+	return out
+
+
 static func icon(name: String, factor: int = 2) -> Texture2D:
 	var key := "%s#icon%d" % [name, factor]
 	if _cache.has(key):
