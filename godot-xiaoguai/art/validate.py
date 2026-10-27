@@ -52,6 +52,10 @@ for n in ['z_grip', 'z_plague', 'z_chill', 'z_feast', 'z_undying', 'z_crimson', 
           'e_claws', 'e_brand', 'e_pact', 'e_spark', 'e_curse', 'e_might']:
     M['icon_fs_' + n] = S('icon', [(16, 16)], 1, 1)
     M['skill_' + n] = S('icon', [(16, 16)], 1, 1)   # art/src/skill_icons.spr
+for n in ['z_spit', 'z_cloud', 'z_surge', 's_toss', 's_rattle', 's_ossuary', 'w_orbs', 'w_mist', 'w_phase', 'l_glob', 'l_burst', 'l_ooze',
+          'd_fireball', 'd_wingstorm', 'd_scales', 'b_claw', 'b_howl', 'b_pack', 'n_seeds', 'n_spores', 'n_grove', 'm_rocks', 'm_slide',
+          'm_fortress', 'e_hellbolt', 'e_ruin', 'e_dominion']:
+    M['icon_fs_' + n] = S('icon', [(16, 16)], 1, 1)   # art/src/icons_form_skills2.spr
 
 # ---- batch 2 manifest ----
 VIL2 = {'farmer': [('farmer', 'Farmer'), ('harvester', 'Harvester'), ('scythe_master', 'Scythe Master')],
