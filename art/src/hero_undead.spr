@@ -117,7 +117,7 @@ frame
 .....cC.........Cb......
 .....cCb........CCb.....
 ...22cCb22221111CCb11...
-..13333222222222222221..
+...3333222222222222221..
 .1333222222222222222221.
 .1322222222222222222221.
 .1221111122222211111221.
@@ -143,7 +143,7 @@ frame
 .....cC.........Cb......
 .....cCb........CCb.....
 ...22cCb22221111CCb11...
-..13333222222222222221..
+...3333222222222222221..
 .1333222222222222222221.
 .1322222222222222222221.
 .1221111122222211111221.
@@ -237,8 +237,8 @@ frame
 .JtJtttRrrtttttttttsJtJ.
 SsSJttttRrrttttttttsJSsS
 SJtJerrrRrrrrrrrrrrRJtJS
-.JJJrrrrrRrrrrrrrRRRJJJS
-....RJtttJ....JtttJR....
+SJJJrrrrrRrrrrrrrRRRJJJS
+....RJtttJ....JtttJR...S
 .....JtttJ....JtttJ.....
 .....JttsJ....JttsJ.....
 .....JJJJJ....JJJJJ.....
@@ -262,8 +262,8 @@ frame
 .JtJttrrrttttttttttsJtJ.
 SsSJttttRrrttttttttsJSsS
 SJtJerrrRrrrrrrrrrrRJtJS
-.JJJrrrrrRrrrrrrrRRRJJJS
-....RJtttJ....JtttJR....
+SJJJrrrrrRrrrrrrrRRRJJJS
+....RJtttJ....JtttJR...S
 .....JtttJ....JtttJ.....
 .....JttsJ....JttsJ.....
 .....JJJJJ....JJJJJ.....
@@ -425,8 +425,8 @@ frame
 .UPRrryJsttJJJJJJJJtttsSJyrrRPU.
 .UPRrryJstttCttttCttttsSJyrrRPU.
 .UPRrrrsJttttttttttttssJSrrrRPU.
-UpPPPPPPPPPRttyyttRPPPPPPPPPPPU.
-.UpPPUpPPPPPRyttttyRPPPPUUUPPPU.
+UpPPPPPsSPPRttyyttRPPPPsSPPPPPU.
+.UpPPUpSPPPPRyttttyRPPPPSUUPPPU.
 .UpPPUpPPPPPPRyKKyRPPPPPUUUPPPU.
 .UpPPUpPPPPPPPRyyRPPPPPPUUUPPPU.
 .UpPPUpPPPPPPPPyyPPPPPPPUUUPPPU.
@@ -459,8 +459,8 @@ frame
 .UPRrryJsttJJJJJJJJtttsSJyrrRPU.
 .UPRrryJstttCttttCttttsSJyrrRPU.
 .UPRrrrsJttttttttttttssJSrrrRPU.
-UpPPPPPPPPPRttyyttRPPPPPPPPPPPU.
-.UpPPUpPPPPPRyttttyRPPPPUUUPPPU.
+UpPPPPPsSPPRttyyttRPPPPsSPPPPPU.
+.UpPPUpSPPPPRyttttyRPPPPSUUPPPU.
 .UpPPUpPPPPPPRyKKyRPPPPPUUUPPPU.
 .UpPPUpPPPPPPPPyyPPPPPPPUUUPPPU.
 .UpPPUpPPPKPPPPPPPPPPKPPUUUPPPU.
