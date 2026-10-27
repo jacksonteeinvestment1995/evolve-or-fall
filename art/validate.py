@@ -73,8 +73,6 @@ PROP_SIZES = [(16, 16), (32, 32), (32, 48), (48, 32)]
 M['tile_water'] = S('tile', [(32, 32)], 2, 3)
 for n in ['prop_fence', 'prop_fence_corner', 'prop_rocks_1', 'prop_rocks_2', 'prop_bush', 'prop_flowers_1', 'prop_flowers_2', 'prop_gravestone']:
     M[n] = S('tile', PROP_SIZES, 1, 2)
-# derived by tools/export_png.py from palette_night.json (not stored in sprites.js)
-NIGHT_SPRITES = ['grass_1', 'grass_2', 'grass_3', 'mud', 'stone_path', 'tile_water']
 
 def check_palette(pal, errs, notes):
     if not pal: errs.append('palette is empty'); return
@@ -88,6 +86,11 @@ def check_palette(pal, errs, notes):
     dup = {v for v in vals if vals.count(v) > 1}
     if dup: errs.append(f'duplicate colours in palette: {sorted(dup)}')
     notes.append(f'palette: {len(pal)} colours')
+    try:
+        nj = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'palette_night.json'), encoding='utf-8'))
+        bad = [k for k in pal if k not in nj['map']] + [f'{k}->{v}' for k, v in nj['map'].items() if k not in pal or v not in pal]
+        if bad: errs.append(f'palette_night.json does not cover/target palette keys: {bad}')
+    except Exception as e: errs.append(f'palette_night.json: {e}')
 
 def check_sprites(sprites, pal, errs, warns, require_all):
     used = set()

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Xiao Guai HD-2D Art Batch 1</title>
+<title>Xiao Guai HD-2D Art Batches 1 and 2</title>
 <style>
   :root {
     --bg: #14111f; --panel: #1d1930; --panel2: #262040; --line: #373057; --fg: #e8e3f3; --muted: #9a93b8;
@@ -55,33 +55,43 @@
   .sw { display: flex; align-items: center; gap: 6px; font: 11px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); }
   .sw i { width: 18px; height: 18px; border: 1px solid var(--line); flex: none; border-radius: 3px; }
   .sw b { color: var(--fg); font-weight: 700; }
+  .lineh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .lineh h3 { font-size: 15px; margin: 0; }
+  .pair { display: flex; align-items: flex-end; gap: 18px; padding: 14px; width: max-content; min-width: 100%; }
+  .arrow { align-self: center; color: var(--muted); font-size: 22px; padding: 0 6px; }
+  .ladder-grid { display: flex; flex-direction: column; gap: 10px; }
+  .ladder { display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: stretch; }
+  .ladder .pn { font-weight: 650; font-size: 13px; align-self: center; padding-left: 4px; }
+  .ladder .strip { border-radius: 8px; }
+  .ladder .strip-in { padding: 10px 12px 8px; gap: 8px; }
+  .ladder .strip-item .t { font-size: 11px; max-width: 11ch; }
+  .nightnote code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font: 12px ui-monospace, Menlo, Consolas, monospace; }
+  @media (max-width: 520px) { .ladder { grid-template-columns: 1fr; } .ladder .pn { padding-bottom: 0; } }
   @media (max-width: 520px) { h1 { font-size: 22px; } .seg button { padding: 9px 12px; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>小怪 · HD-2D art, batch 1</h1>
-    <p class="sub">Every sprite below is a grid of palette characters, drawn as code. The sprites are pure pixel art (nearest-neighbour); the lighting, bloom, tilt-shift and grading in the scene are canvas post effects on top.</p>
+    <h1>小怪 · HD-2D art, batches 1 and 2</h1>
+    <p class="sub">Every sprite below is a grid of palette characters, drawn as code. Batch 2 adds villager ladders, six more monster families, two more Undead lines, walk and attack cycles, props, water and a night palette. The sprites are pure pixel art (nearest-neighbour); the lighting, bloom, tilt-shift and grading in the scene are canvas post effects on top.</p>
   </header>
 
   <section id="sec-scene">
-    <div><h2>HD-2D scene mock-up</h2><p class="sub">Forest clearing built from the batch's own tiles and sprites. Toggle the treatment to compare the raw pixels with the lit version.</p></div>
+    <div><h2>HD-2D scene mock-up</h2><p class="sub">Forest clearing (pond, rocks, bushes, fence, graves, walking villagers of several forms) or a line-up of heroes from every family, built from the art itself. Toggle the treatment to compare the raw pixels with the lit version. At night the ground uses the palette swap table.</p></div>
     <div class="controls">
       <div class="seg" role="group" aria-label="Time of day"><button id="b-day" aria-pressed="true">Day</button><button id="b-night" aria-pressed="false">Night</button></div>
       <div class="seg" role="group" aria-label="Post effects"><button id="b-post-on" aria-pressed="true">Post effects on</button><button id="b-post-off" aria-pressed="false">Post effects off</button></div>
+      <div class="seg" role="group" aria-label="Scene"><button id="b-clearing" aria-pressed="true">Clearing</button><button id="b-lineup" aria-pressed="false">Hero line-up</button></div>
       <label class="ctl-label">Hero form <select id="hero-sel"></select></label>
     </div>
-    <div class="scenebox"><canvas id="scene" width="960" height="540" aria-label="HD-2D forest clearing scene"></canvas></div>
+    <div class="scenebox"><canvas id="scene" width="960" height="540" aria-label="HD-2D scene: forest clearing with a pond, graveyard and villagers, or a line-up of heroes"></canvas></div>
     <p class="hint" id="scene-hint"></p>
   </section>
 
-  <section id="sec-strip">
-    <div><h2>Undead line 1: one creature evolving</h2><p class="sub">Xiao Guai and the 10 Undead forms at the same scale, feet on one line. The horns and eyes stay; red eyes at form 5, fangs at 6, cape at 9, crown and aura at 10. Scroll sideways on a phone.</p></div>
-    <div class="strip"><div class="strip-in" id="strip"></div></div>
-  </section>
+  <div id="lines" class="wrap" style="gap:36px;width:100%"></div>
 
-  <div id="gallery" class="wrap" style="gap:36px"></div>
+  <div id="gallery" class="wrap" style="gap:36px;width:100%"></div>
 
   <section>
     <div><h2>Palette</h2><p class="sub" id="pal-sub"></p></div>
@@ -3775,9 +3785,372 @@ const SPRITES = {
    "................",
    "................"
   ]
+ ]},
+ "tile_water": {"w": 32, "h": 32, "section": "tile", "label": "Water", "frames": [
+  [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaAaTIa",
+   "aaaaaaaaaallaaaaaaaaaaaaAalAAaAa",
+   "llaaaaalllaaaaaaaaaaaaalllAAAAaA",
+   "AalIIIIaaaaaaaaaaalllllaAAAAAAAa",
+   "aaaAaAaAaAaaaaaaaaaaTIaAaAAffAaA",
+   "aaAaAaAaAaAaaaaaaaaaaaaaAaAAAaAa",
+   "aAAAAAAAAAAAaAaaaaaaaaaaaaaAlllA",
+   "llAAAAAAAAAAAaaaaaaaaaaaaaaaaaal",
+   "aAllAAAAAAAAaAaaaaaaaaaaaaaaaaaA",
+   "AAAAAAAAAAllllIaaaaaaaaaaaaaaaaa",
+   "aAAFFFAAAAAAaAaIIIaaaaalaaaaaaaA",
+   "aaAaAaAaAaAaaaaaaaIllllaIaaaaaaa",
+   "aaaAaAaAaAaaaaaaaaaaaaaaaalllIIa",
+   "IlaaaaaaaaaaaaaaaaaaaaaaaaaaaaaI",
+   "aallaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "llaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aallllIaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaaaaalllaAaaaaaaaaaaaaaaaaa",
+   "aaaaaaaIIlAAAAAAaaaaaaaaaaaaaaaa",
+   "aalllIIaAAAffAAAAaaaaaaaaaaaaaaa",
+   "aaaaaaaaaAAAAAAAaaaaaAaAaAaAaaaa",
+   "aaaaaaaaaaAaAaAaaaAaAaAaAalllaAa",
+   "aaaaaaaaaaaaaaaaalaAAAAIIlAAAAaA",
+   "AaaaaaaaaaaaaaaaAalllIIAAAAAAAAa",
+   "aAaaaaaaaaaaaaaAaAAAAAAAAAAAAAAA",
+   "llaaaaaaaaaaaaaaAaAAAAAFFAAAAAAa",
+   "aalllaaaaaIIlllaaAaAAAFAAAAAAAaA",
+   "aaaaaaallIaaaaalaaAaAaAaAaAaAaAa",
+   "aaaaaalaaaaaaaaaaaaaaAaAaAllllaa",
+   "aaaaaaaaaaaaaaaaaaaaaaalllaaaaaa",
+   "aaaaaaaaaaaaaaaaaaaaaalaaaaaaaaa"
+  ],
+  [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaAaIaa",
+   "aaaaaIIIllaaaaaaaaaaalllllAAAaAa",
+   "aallIaaaaalllaaaaaallaaAaAllAAaA",
+   "AlaaaaaaaaaaaaaaaaaaaaAaAAAAAAAa",
+   "aaaAaAaAaAaaaaaaaaaaIaaAaAAAAAaA",
+   "aaAaAaAaAaAaaaaaaaaaaaaaAaAAfaAa",
+   "aAAAAAAAAAAAaAaaaaaaaaaaaaaAafaA",
+   "AAlllAAAAAAAAaaaaaaaaaaaaaaaaaaa",
+   "llAAAFFAAAAAaAaaaaaaaaaaaaaaalll",
+   "AAAAFAAAAAAAAaaaaaaaallllaaaaaaa",
+   "aAAAAAAAAAAllAaaaaIIlaaaaaaaaaaA",
+   "aaAaAaAaAaAaallIIIaaaaaaaaaaaaaa",
+   "aaaAaAaAaAaaaaaaaaaaaaaaaaaaaaaa",
+   "aalllaaaaaaaaaaaaaaaaaaaaaallaaa",
+   "IIaaallaaaaaaaaaaaaaaaaaaaaaalII",
+   "aalllaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "alaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaalIIIIAaAaAaaaaaaaaaaaaaaaaa",
+   "aaallaaaaAlllAAAaaaaaaaaaaaaaaaa",
+   "aaaaaaaaAAAAAlAAAaaaaaaaaaaaaaaa",
+   "aaaaaaaaaAAAfAAAaaaaaAaAaAaAaaaa",
+   "aaaaaaaaaaAaAfAaaaAaAlIIIIAaAaAa",
+   "aaaaaaaaaaaaaaaaaAlllAAAAAlllAaA",
+   "AaaaaaaaaaaaaaaaAaAAAAAAAAAAAlAa",
+   "aAaaalaaaaaaaaTIaAAAAAAFFFAAAAAA",
+   "AalllaaaaaaaaaaaAaAAAAAAAAAAAAAa",
+   "alaaaaalllaaaaaaaAaAAAAAAAAAAAaA",
+   "aaaaaaaaaaIIIaaaaaAaAaAaAaAaAaAa",
+   "aaaaaaaaaaaaallllaaaaAalllaAaaaa",
+   "aTIaaaaaaaaaaaaaaaaaaaaaaalllaaa",
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaalla"
+  ],
+  [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaAaaaa",
+   "aalllaaaaaaaaaaaaaaaaaaaAaAAAaAa",
+   "aaaaaIIaaaaallaaaaaalllAaAAAlAaA",
+   "AaaaaaaIIlllaaaaaaaaaaAlllllAAAa",
+   "aaaAaAaAaAaaaaaaaaaaaaaAaAAAAAaA",
+   "aaAaAaAaAaAaaaaaaaaaaaaaAaAAAffa",
+   "lllllAAAAAAAaAaaaaaaaaaaaaaAaaal",
+   "AAAAAlAAAAAAAaaaaaaaaaaaaaaaaala",
+   "aAAAAAAAAAAAaAaaaaaaaaaaaaaaaaaA",
+   "AAAAAFFAAAAAAaalIIIIaaaaaaaaaaaa",
+   "aAAAAAAFAAAAlllaaaaaIllaaaaaaaaA",
+   "aaAaAaAaAaAaaaaaaaaaaaalTIaaaaaa",
+   "IIIllAaAaAaaaaaaaaaaaaaaaaaaaaaI",
+   "aaaaalaaaaaaaaaaaaaaaaaaaaaallla",
+   "aalllaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaallaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaTIaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaalaaaaaAaAaAaaaaaaaaaaaaaaaaa",
+   "aaaaallaaAAAlllAaaaaaaaaaaaaaaaa",
+   "aaaaaaaIIIIlAAAAAaaaaaaaaaaaaaaa",
+   "aaaaaaaaaAAAAffAaaaaaAaAaAaAaaaa",
+   "aaaaaaaaaaAaAaAaaaAlAaAaAaAaAaAa",
+   "aaaaaaaaaaaaaaaaaAaAlllAAAAAlllA",
+   "AaaaaaaaaaaaaaaaAaAAAAAIIIIlAAAa",
+   "aAlllaaaaaaaaaIAaAAAAAAAAAAAAAAA",
+   "AaaaallaaaaaaaaaAaAAAAAAAAAAAAAa",
+   "aaaaaaaaaaaaaaalllaAAAAAFFFAAAaA",
+   "aaaaaaaaaaaaIIlaaaAaAaAaAaAaAaAa",
+   "aaaaaaaalllIaaaaaaaaaAaAaAaAaaal",
+   "aIaaaaaaaaaaaaaaaaaaaaaaaaaallla",
+   "aaaaaaaaaaaaaaaaaaaaaaaallllaaaa"
+  ]
+ ]},
+ "prop_fence": {"w": 32, "h": 32, "section": "tile", "label": "Fence", "frames": [
+  [
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   ".....xw..............xw.........",
+   "....xxwD............xxwD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "xxxxxwdDxxxxxxxxxxxxxwdDxxxxxxxx",
+   "wwwwxJdDwwwwwwdwwwwwxJdDwwwwwwww",
+   "ddddxwdDddddddddddddxwdDdddddddd",
+   "DDDDxwdDDDDDDDDDDDDDxwdDDDDDDDDD",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xddD............xddD........",
+   "xxxxxwdDxxxxxxxxxxxxxwdDxxxxxxxx",
+   "wwwwxJdDwwwwwwdwwwwwxJdDwwwwwwww",
+   "ddddxwdDddddddddddddxwdDdddddddd",
+   "DDDDxwdDDDDDDDDDDDDDxwdDDDDDDDDD",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "...GDDDDG..........GDDDDG.......",
+   ".....GGGG............GGGG.......",
+   "................................",
+   "................................",
+   "................................"
+  ]
+ ]},
+ "prop_fence_corner": {"w": 32, "h": 32, "section": "tile", "label": "Fence Corner", "frames": [
+  [
+   "....................xwD.xwD.....",
+   "....................xwD.xwD.....",
+   "....................xwD.xwD.....",
+   "....................xwD.xwD.....",
+   "....................xdD.xwD.....",
+   ".....xw.............xxw.xwD.....",
+   "....xxwD............xxwDxwD.....",
+   "....xwdD............xwdDxdD.....",
+   "....xwdD............xwdDxwD.....",
+   "....xwdD............xwdDxwD.....",
+   "....xwdD............xwdDxwD.....",
+   "xxxxxwdDxxxxxxxxxxxxxwdDxwD.....",
+   "wwwwxJdDwwwwwwdwwwwwxJdDxwD.....",
+   "ddddxwdDddddddddddddxwdDxwD.....",
+   "DDDDxwdDDDDDDDDDDDDDxwdDxwD.....",
+   "....xwdD............xwdDxwD.....",
+   "....xwdD............xwdDxwD.....",
+   "....xwdD............xwdDxdD.....",
+   "....xwdD............xwdDxwD.....",
+   "....xddD............xddDxwD.....",
+   "xxxxxwdDxxxxxxxxxxxxxwdD........",
+   "wwwwxJdDwwwwwwdwwwwwxJdD........",
+   "ddddxwdDddddddddddddxwdD........",
+   "DDDDxwdDDDDDDDDDDDDDxwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "....xwdD............xwdD........",
+   "...GDDDDG..........GDDDDG.......",
+   ".....GGGG............GGGG.......",
+   "................................",
+   "................................",
+   "................................"
+  ]
+ ]},
+ "prop_rocks_1": {"w": 32, "h": 32, "section": "tile", "label": "Rocks 1", "frames": [
+  [
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "...............hgT..............",
+   "..............gTTTJJJ...........",
+   ".............GTTtttssJ..........",
+   "........g.T..TtttssssJ..........",
+   "......ghTTTTTJttsssSSJ.ghTJ.....",
+   ".....GgTTTTttJssssSSSJ.TttsJ....",
+   ".....TTTTtttttJgGSJJJTTttssSJ...",
+   "....TTTTtSttssssJJghgttJssSJ....",
+   "....TTttttSsssssJTTTttttJJJ.....",
+   "....TttttsSssssSJTtttttssssJ....",
+   "....TttGsssSssSSJttttSsssssJ....",
+   "....JttsgsssJSSSJttsssSssSSSJ...",
+   "....JshssssSSSSSJsssssSsSSSJ....",
+   "...H.hsgssSSSSSJssssssSJSSSg.h..",
+   "....hggsSSSSSSGJssssSSSSSSH.h.g.",
+   "...GGggJJJSJJJ..JJSSSSSSJJ.hgg..",
+   ".....GGGGGJGGGGGGGJJJJJJGGGGgG..",
+   "........GGGGGGGGGGGGGGGGG.......",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................"
+  ]
+ ]},
+ "prop_rocks_2": {"w": 16, "h": 16, "section": "tile", "label": "Rocks 2", "frames": [
+  [
+   "................",
+   "................",
+   "................",
+   "................",
+   "................",
+   "........hgT.....",
+   "...h.T.gTTTJJJ..",
+   "..gTTtJJTtttsgJ.",
+   "..TTttssJtssssJ.",
+   "..TttsssJsSsSSh.",
+   ".hJssSSSJssHShJg",
+   ".gGJJSGJJJSJhgg.",
+   "...GGJGGGGJGGgg.",
+   "................",
+   "................",
+   "................"
+  ]
+ ]},
+ "prop_bush": {"w": 32, "h": 32, "section": "tile", "label": "Berry Bush", "frames": [
+  [
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "....................H...........",
+   ".................HHHHHLL........",
+   ".......HHHHHHHHHHHHhhhHgL.......",
+   ".....HHHHhHhLLHHHHhhhhgggL......",
+   ".....HHHhhhggLHHhhhhgggggL......",
+   "....HHhhhhggggerhhgggggGGL......",
+   "....HhhhggggHGrRgggggGGGGLL.....",
+   "....LhgHgggGGGLhGgggGGGGLerL....",
+   ".....LgggGGGGLhhhLLWrLLLgrRL....",
+   "....HLLgGGGGLGhhhggrRgGgHggGL...",
+   "....HHHLLLLLhhGggggggHHGHHLLL...",
+   "....HhhhhGhhWrggggggHHHhhhhgL...",
+   "....HhHHHHGhrRggggGgHHhhhgggL...",
+   "....HHHhhhLLgggggggGhhherggGGL..",
+   "....HHhhhggLgggggggGLhgrRgGGL...",
+   "...HhhhggggGGggggerGLgggGGGGL...",
+   "....LggggGergGgGGrRGGLLLGGLL....",
+   "....LLgGGGrRgGGGGGGGGGGGLLG.....",
+   "......LLLLggGGGGGGGGGGGLL.L.....",
+   "..........LLGGGGGGGGLLL.........",
+   "...........LLLDddDLLL...........",
+   "......GGGGGGGGGGGGGGGGGGGGG.....",
+   ".........GGGGGGGGGGGGGGG........",
+   "................................",
+   "................................",
+   "................................"
+  ]
+ ]},
+ "prop_flowers_1": {"w": 16, "h": 16, "section": "tile", "label": "Flowers (pink)", "frames": [
+  [
+   "................",
+   "................",
+   "......mm........",
+   "......MYM.......",
+   "..Mm...M...gmm..",
+   ".......G....MYM.",
+   ".g.....G.....M..",
+   "...mm.Gg.....G..",
+   "...MYM...mm.hG..",
+   "....M....MYM.g..",
+   "....G.....M.....",
+   "..h.G.....Gmm...",
+   "...gG...h.GMYM..",
+   ".........gG.M.g.",
+   ".....Gg......G..",
+   "................"
+  ]
+ ]},
+ "prop_flowers_2": {"w": 16, "h": 16, "section": "tile", "label": "Flowers (yellow)", "frames": [
+  [
+   "................",
+   "................",
+   ".....WW.........",
+   ".....yoy........",
+   "......yg...gWW..",
+   ".yW....G....yoy.",
+   ".g.....G.....y..",
+   "......Gg.....G..",
+   "..WW........hG..",
+   "..yoy...WW...g..",
+   "...yG...yoy.....",
+   "..h.G....yG.....",
+   "...gG...h.GWW...",
+   ".........gGyoyg.",
+   ".....Gg.....yG..",
+   "................"
+  ]
+ ]},
+ "prop_gravestone": {"w": 32, "h": 48, "section": "tile", "label": "Gravestone", "frames": [
+  [
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "................................",
+   "..............TT................",
+   "............TTTTTSSJ............",
+   "...........TttttssssJ...........",
+   "..........TttttssssJsJ..........",
+   ".........TtttttssssJssJ.........",
+   ".........SttttJJTsJsssJ.........",
+   ".........SttttJJTsJsssJ.........",
+   ".........StttsJJTJssssJ.........",
+   "........TttJJJJJJJJsssSJ........",
+   "........TtTJJJJJJJJTssSJ........",
+   "........TttTTTTTTTTsssSJ........",
+   "........TttsssJJTsJssSSJ........",
+   "........TtssssJJTssJsSSJ........",
+   "........TtssssJJTssJSSSJ........",
+   "........TsssssJJTsssJSSJ........",
+   "........TsssssJJTssSSSSJ........",
+   "........TsssssJJTssSSSSJ........",
+   "........TsssssJJTsSSSSSJ........",
+   "........TsssssssssSSSSSJ........",
+   "........TssssssssSSSSSSJ........",
+   "........TsJssssssSSSSSSJ........",
+   "........TssJssssSSSSSSSJ........",
+   "........TgsJsssSSSSSSSSJ........",
+   "........TsGsJssSSSSSSSSJ........",
+   "........TssssJSSSSSSSSSJ........",
+   "........TGssGsSSSSSSSSSJ........",
+   "........TsgssSSSSSSSSGSJ........",
+   "........TSgGSSSSSSSSGSGJ........",
+   ".......hmTShgGSGgSGgSgSJ...h....",
+   "....H.h.mmggggggggggggggH.h.g...",
+   ".....hgggGgmTgggggggggggghgg....",
+   ".....GggGGGmmGGGGGCcCCCcCGgg....",
+   ".......GGGGGGGGGGGBbbbbbBG......",
+   "................................",
+   "................................"
+  ]
  ]}
 };
 
+</script>
+<script>
+const NIGHT = {"map": {"K": "K", "J": "K", "S": "J", "s": "S", "t": "s", "T": "t", "U": "K", "P": "U", "p": "P", "q": "p", "B": "S", "b": "B", "C": "b", "c": "C", "R": "K", "r": "R", "e": "r", "o": "e", "y": "o", "Y": "y", "W": "Y", "L": "K", "G": "L", "g": "G", "h": "g", "H": "h", "D": "K", "d": "D", "w": "d", "x": "w", "z": "d", "Z": "z", "k": "Z", "A": "J", "a": "A", "l": "a", "I": "l", "F": "A", "f": "F", "M": "R", "m": "M", "1": "L", "2": "1", "3": "2"}, "sprites": ["grass_1", "grass_2", "grass_3", "mud", "stone_path", "tile_water"]};
 </script>
 <script>
 (function () {
@@ -3786,16 +4159,16 @@ const $ = id => document.getElementById(id);
 const rgb = {};
 Object.keys(PALETTE).forEach(k => { const v = PALETTE[k]; rgb[k] = [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16)]; });
 
-/* ---------- sprite frames -> cached canvases ---------- */
+/* ---------- sprite frames -> cached canvases (optional night palette swap) ---------- */
 const cache = {};
-function frameCanvas(name, i) {
-  const s = SPRITES[name]; const key = name + '#' + i;
+function frameCanvas(name, i, night) {
+  const s = SPRITES[name]; const key = name + '#' + (i % s.frames.length) + (night ? 'n' : '');
   if (cache[key]) return cache[key];
   const c = document.createElement('canvas'); c.width = s.w; c.height = s.h;
   const x = c.getContext('2d'); const id = x.createImageData(s.w, s.h);
   const f = s.frames[i % s.frames.length];
   for (let y = 0; y < s.h; y++) for (let xx = 0; xx < s.w; xx++) {
-    const ch = f[y][xx]; if (ch === '.' || !rgb[ch]) continue;
+    let ch = f[y][xx]; if (ch === '.') continue; if (night) ch = NIGHT.map[ch]; if (!rgb[ch]) continue;
     const o = (y * s.w + xx) * 4; id.data[o] = rgb[ch][0]; id.data[o + 1] = rgb[ch][1]; id.data[o + 2] = rgb[ch][2]; id.data[o + 3] = 255;
   }
   x.putImageData(id, 0, 0); cache[key] = c; return c;
@@ -3805,74 +4178,129 @@ const FPS = { hero: 2, villager: 2, hidden: 2, structure: 3, tile: 1.5, effect: 
 
 /* ---------- gallery ---------- */
 const anim = [];
-function addCanvas(parent, name, scale, fps) {
+const isW = n => /_(walk|attack)$/.test(n);
+const sc = (w, sec) => (sec === 'hero' || sec === 'hidden' || sec === 'villager') ? (w <= 20 ? 6 : w <= 32 ? 4 : 3) : 6;
+function addCanvas(parent, name, scale, fps, night) {
   const s = SPRITES[name]; const c = document.createElement('canvas'); c.width = s.w; c.height = s.h;
   c.style.width = (s.w * scale) + 'px'; parent.appendChild(c);
-  const item = { ctx: c.getContext('2d'), name, n: s.frames.length, fps, last: -1 };
+  const item = { ctx: c.getContext('2d'), name, n: s.frames.length, fps, last: -1, night: !!night };
   if (item.n > 1) anim.push(item);
-  item.ctx.drawImage(frameCanvas(name, 0), 0, 0); item.last = 0;
+  item.ctx.drawImage(frameCanvas(name, 0, night), 0, 0); item.last = 0;
   return c;
 }
-function card(parent, name, scale, fps) {
+function card(parent, name, scale, fps, night) {
   const s = SPRITES[name]; const el = document.createElement('div'); el.className = 'card';
   const st = document.createElement('div'); st.className = 'stage'; el.appendChild(st);
-  addCanvas(st, name, scale, fps);
+  addCanvas(st, name, scale, fps, night);
   const info = document.createElement('div');
   info.innerHTML = '<div class="label"></div><div class="key"></div><div class="meta"></div>';
-  info.children[0].textContent = s.label || name; info.children[1].textContent = name;
+  info.children[0].textContent = (s.label || name) + (night ? ' (night)' : ''); info.children[1].textContent = name + (night ? '_night' : '');
   info.children[2].textContent = s.w + '×' + s.h + ' · ' + s.frames.length + (s.frames.length > 1 ? ' frames' : ' frame');
   el.appendChild(info); parent.appendChild(el); return el;
 }
-const SECTIONS = [
-  ['hero', 'Hero: Xiao Guai and Undead line 1', 'Stage 0 plus the 10 Undead forms. Front view, idle pair (bob / blink).'],
-  ['villager', 'Villagers: form 1 and form 5 of 10 professions', 'Form 1 is 16×16, form 5 is 20×20. Same colour and prop family, visibly upgraded.'],
-  ['hidden', 'Hidden forms', 'Parasite Hero, Dark Hero, GOD.'],
-  ['structure', 'Structures', 'Bone wall (intact and damaged) and bone towers, levels 1 to 3. Window glow flickers; the scene turns it into a light source.'],
-  ['tile', 'Tiles', '32×32 ground tiles (shown once at 6×, then repeated 3×3 to check the seams) and 32×48 trees.'],
-  ['effect', 'Effects', 'Looping here; in the game they play once.'],
-  ['icon', 'Icons', 'Skills, build menu and currencies.']
+const S = SPRITES;
+const heroNames = Object.keys(S).filter(n => S[n].section === 'hero' && !isW(n));
+const GROUPS = [
+  { id: 'hero', title: 'Hero: Xiao Guai and Undead line 1', note: 'Stage 0 plus the 10 Undead forms. Front view, idle pair (bob / blink).', pick: n => n === 'xiaoguai_base' || n.indexOf('undead_') === 0 && !isW(n), fps: 2 },
+  { id: 'skel', title: 'Undead line 2: Skeleton to Lich', note: 'Bone Soldier, Grave Guard, Skeleton Knight, Bone Captain, Skull Mage, Bone Sorcerer, Necromancer, Dread Mage, Lich.', pick: n => n.indexOf('skeleton_') === 0, fps: 2 },
+  { id: 'wisp', title: 'Undead line 3: Wisp to Wraith King', note: 'Ghosts keep the cream horns and the eyes; the tails dissolve with dithering.', pick: n => n.indexOf('wisp_') === 0, fps: 2 },
+  { id: 'fam', title: 'Six more families: form 1 and form 10', note: 'Slime, Dragon, Beast, Nature, Material and Demon, to prove the palette across the game. Boss forms are 40 px and up.', pick: n => /^(slime|dragon|beast|nature|material|demon)_/.test(n), fps: 2 },
+  { id: 'hidden', title: 'Hidden forms', note: 'Parasite Hero, Dark Hero, GOD.', pick: n => S[n].section === 'hidden', fps: 2 },
+  { id: 'anim', title: 'Walk and attack cycles', note: 'Walk: 4 frames (8 fps), attack: 3 frames (shown looping at 6 fps; play once in the game). Xiao Guai, Zombie, Vampire Lord and form 1 of every villager.', pick: n => isW(n), fps: n => /_walk$/.test(n) ? 8 : 6 },
+  { id: 'structure', title: 'Structures', note: 'Bone wall (intact and damaged) and bone towers, levels 1 to 3. Window glow flickers; the scene turns it into a light source.', pick: n => S[n].section === 'structure', fps: 3 },
+  { id: 'tile', title: 'Tiles', note: '32×32 ground tiles (shown once at 6×, then repeated 3×3 to check the seams) and 32×48 trees. The water tile is 3 animated frames.', pick: n => S[n].section === 'tile' && n.indexOf('prop_') !== 0, fps: n => n === 'tile_water' ? 3 : 1.5, tiled: true },
+  { id: 'night', title: 'Night variants (palette swap)', note: 'The same tiles through palette_night.json: every palette key maps to another key one step down its ramp. No new colours; Godot can apply the same table in a shader or use the exported *_night.png files.', pick: n => NIGHT.sprites.indexOf(n) >= 0, fps: n => n === 'tile_water' ? 3 : 1.5, tiled: true, night: true },
+  { id: 'props', title: 'Props', note: 'Fence, rocks, bush, flowers and a gravestone. Transparent backgrounds so they sit on any ground.', pick: n => n.indexOf('prop_') === 0, fps: 1.5 },
+  { id: 'effect', title: 'Effects', note: 'Looping here; in the game they play once.', pick: n => S[n].section === 'effect', fps: 9 },
+  { id: 'icon', title: 'Icons', note: 'Skills, build menu and currencies.', pick: n => S[n].section === 'icon', fps: 2 }
 ];
 const gal = $('gallery');
-SECTIONS.forEach(([sec, title, note]) => {
-  const names = Object.keys(SPRITES).filter(n => SPRITES[n].section === sec); if (!names.length) return;
-  const s = document.createElement('section'); s.id = 'sec-' + sec;
+GROUPS.forEach(g => {
+  const names = Object.keys(S).filter(g.pick); if (!names.length) return;
+  const s = document.createElement('section'); s.id = 'sec-' + g.id;
   s.innerHTML = '<div><h2></h2><p class="sub"></p></div><div class="row"></div>';
-  s.querySelector('h2').textContent = title + ' (' + names.length + ')'; s.querySelector('p').textContent = note;
+  s.querySelector('h2').textContent = g.title + ' (' + names.length + ')'; s.querySelector('p').textContent = g.note;
   const row = s.querySelector('.row');
   names.forEach(n => {
-    const el = card(row, n, 6, FPS[sec]);
-    if (sec === 'tile' && SPRITES[n].w === 32 && SPRITES[n].h === 32) {
+    const fps = typeof g.fps === 'function' ? g.fps(n) : g.fps;
+    const el = card(row, n, sc(S[n].w, S[n].section), fps, g.night);
+    if (g.tiled && S[n].w === 32 && S[n].h === 32) {
       const c = document.createElement('canvas'); c.width = 96; c.height = 96; c.style.width = '192px';
-      const x = c.getContext('2d'); for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) x.drawImage(frameCanvas(n, 0), i * 32, j * 32);
+      const x = c.getContext('2d'), it = { ctx: x, tile: true, name: n, n: S[n].frames.length, fps, last: -1, night: !!g.night };
+      const draw = f => { for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) x.drawImage(frameCanvas(n, f, g.night), i * 32, j * 32); };
+      it.draw = draw; draw(0); if (it.n > 1) anim.push(it);
       const st = document.createElement('div'); st.className = 'stage'; st.appendChild(c); el.insertBefore(st, el.children[1]);
     }
   });
   gal.appendChild(s);
 });
 
-/* ---------- Undead strip ---------- */
-const stripNames = ['xiaoguai_base', 'undead_01_zombie', 'undead_02_rotting_walker', 'undead_03_ghoul', 'undead_04_plague_zombie', 'undead_05_blood_thrall',
-  'undead_06_nosferatu', 'undead_07_vampire', 'undead_08_elder_vampire', 'undead_09_count', 'undead_10_vampire_lord'].filter(has);
-const stripEl = $('strip');
-stripNames.forEach((n, i) => {
-  const it = document.createElement('div'); it.className = 'strip-item';
-  const holder = document.createElement('div'); it.appendChild(holder);
-  addCanvas(holder, n, 3, 2);
-  const g = document.createElement('div'); g.className = 'ground'; g.style.width = '100%'; it.appendChild(g);
-  const nn = document.createElement('div'); nn.className = 'n'; nn.textContent = i === 0 ? 'stage 0' : 'form ' + i; it.appendChild(nn);
-  const t = document.createElement('div'); t.className = 't'; t.textContent = SPRITES[n].label; it.appendChild(t);
-  stripEl.appendChild(it);
-});
+/* ---------- evolution lines and villager ladders ---------- */
+const lines = $('lines');
+function stripItems(parent, items, scale) {
+  items.forEach(([n, tag]) => {
+    const it = document.createElement('div'); it.className = 'strip-item';
+    const holder = document.createElement('div'); it.appendChild(holder);
+    addCanvas(holder, n, scale, 2);
+    const g = document.createElement('div'); g.className = 'ground'; g.style.width = '100%'; it.appendChild(g);
+    const nn = document.createElement('div'); nn.className = 'n'; nn.textContent = tag; it.appendChild(nn);
+    const t = document.createElement('div'); t.className = 't'; t.textContent = S[n].label; it.appendChild(t);
+    parent.appendChild(it);
+  });
+}
+function lineSection(id, title, note, items, scale) {
+  items = items.filter(it => has(it[0])); if (!items.length) return;
+  const s = document.createElement('section'); s.id = id;
+  s.innerHTML = '<div><h2></h2><p class="sub"></p></div><div class="strip"><div class="strip-in"></div></div>';
+  s.querySelector('h2').textContent = title; s.querySelector('p').textContent = note;
+  stripItems(s.querySelector('.strip-in'), items, scale); lines.appendChild(s);
+}
+const LINE_NAMES = {
+  undead: ['undead_01_zombie', 'undead_02_rotting_walker', 'undead_03_ghoul', 'undead_04_plague_zombie', 'undead_05_blood_thrall', 'undead_06_nosferatu', 'undead_07_vampire', 'undead_08_elder_vampire', 'undead_09_count', 'undead_10_vampire_lord'],
+  skeleton: ['skeleton_01_skeleton', 'skeleton_02_bone_soldier', 'skeleton_03_grave_guard', 'skeleton_04_skeleton_knight', 'skeleton_05_bone_captain', 'skeleton_06_skull_mage', 'skeleton_07_bone_sorcerer', 'skeleton_08_necromancer', 'skeleton_09_dread_mage', 'skeleton_10_lich'],
+  wisp: ['wisp_01_wisp', 'wisp_02_ghost', 'wisp_03_poltergeist', 'wisp_04_phantom', 'wisp_05_specter', 'wisp_06_banshee', 'wisp_07_wailing_queen', 'wisp_08_spirit_lord', 'wisp_09_reaper_shade', 'wisp_10_wraith_king']
+};
+lineSection('sec-strip', 'Undead line 1: Zombie to Vampire Lord', 'Xiao Guai and the 10 forms at the same scale, feet on one line. The horns and eyes stay; red eyes at form 5, fangs at 6, cape at 9, crown and aura at 10. Scroll sideways on a phone.',
+  [['xiaoguai_base', 'stage 0']].concat(LINE_NAMES.undead.map((n, i) => [n, 'form ' + (i + 1)])), 3);
+lineSection('sec-strip2', 'Undead line 2: Skeleton to Lich', 'Bone, then armour, then robes and soul-fire.', LINE_NAMES.skeleton.map((n, i) => [n, 'form ' + (i + 1)]), 3);
+lineSection('sec-strip3', 'Undead line 3: Wisp to Wraith King', 'A cyan flame that learns to scream and to rule.', LINE_NAMES.wisp.map((n, i) => [n, 'form ' + (i + 1)]), 3);
+(function () {
+  const fam = [['Slime', 'slime_01_slime', 'slime_10_gel_paladin'], ['Dragon', 'dragon_01_hatchling', 'dragon_10_elder_dragon'], ['Beast', 'beast_01_wolf_pup', 'beast_10_fenrir'],
+    ['Nature', 'nature_01_seed', 'nature_10_world_tree'], ['Material', 'material_01_clay_lump', 'material_10_titan'], ['Demon', 'demon_01_imp', 'demon_10_demon_lord']].filter(f => has(f[1]) && has(f[2]));
+  if (!fam.length) return;
+  const s = document.createElement('section'); s.id = 'sec-fam-pairs';
+  s.innerHTML = '<div><h2>Six other families: form 1 next to form 10</h2><p class="sub">Same horns, same eyes, a different material. Form 1 is 16×16; the boss form is 40 px or bigger. Scroll sideways on a phone.</p></div><div class="strip"><div class="pair"></div></div>';
+  const row = s.querySelector('.pair');
+  fam.forEach(f => {
+    const grp = document.createElement('div'); grp.style.cssText = 'display:flex;align-items:flex-end;gap:8px;padding-right:14px;border-right:1px solid var(--line)';
+    stripItems(grp, [[f[1], f[0] + ' · form 1'], [f[2], 'form 10']], 3); row.appendChild(grp);
+  });
+  lines.appendChild(s);
+})();
+(function () {
+  const PROF = [['Farmer', 'farmer'], ['Woodsman', 'woodsman'], ['Hunter', 'hunter'], ['Militia', 'militia'], ['Knight', 'knight'], ['Priest', 'priest'], ['Mage', 'mage'], ['Smith', 'smith'], ['Thief', 'thief'], ['Noble', 'noble']];
+  const s = document.createElement('section'); s.id = 'sec-ladders';
+  s.innerHTML = '<div><h2>Villager ladders: five forms per profession</h2><p class="sub">Each profession keeps its colour and signature prop and gets more armour, a bigger weapon, a cape, a plume and a glow at every step. Form 1 and 2 are 16×16, forms 3 to 5 are 20×20.</p></div><div class="ladder-grid"></div>';
+  const grid = s.querySelector('.ladder-grid');
+  PROF.forEach(([pn, p]) => {
+    const items = [1, 2, 3, 4, 5].map(k => [Object.keys(S).find(n => n.indexOf(p + '_' + k + '_') === 0 && !isW(n)), 'form ' + k]).filter(it => it[0]);
+    if (!items.length) return;
+    const r = document.createElement('div'); r.className = 'ladder';
+    r.innerHTML = '<div class="pn"></div><div class="strip"><div class="strip-in"></div></div>'; r.querySelector('.pn').textContent = pn;
+    stripItems(r.querySelector('.strip-in'), items, 3); grid.appendChild(r);
+  });
+  lines.appendChild(s);
+})();
 
 /* ---------- palette ---------- */
 Object.keys(PALETTE).forEach(k => $('pal').insertAdjacentHTML('beforeend', '<div class="sw"><i style="background:' + PALETTE[k] + '"></i><b>' + k + '</b>' + PALETTE[k] + '</div>'));
-$('pal-sub').textContent = Object.keys(PALETTE).length + ' colours of 48 allowed, built as hue-shifted ramps. Key character, then hex.';
+$('pal-sub').textContent = Object.keys(PALETTE).length + ' colours of 48 allowed, built as hue-shifted ramps (unchanged from batch 1). Key character, then hex.';
 
 /* ---------- animation tick for gallery ---------- */
 function galleryTick(t) {
   for (const a of anim) {
     const f = Math.floor(t / 1000 * a.fps) % a.n;
-    if (f !== a.last) { a.ctx.clearRect(0, 0, a.ctx.canvas.width, a.ctx.canvas.height); a.ctx.drawImage(frameCanvas(a.name, f), 0, 0); a.last = f; }
+    if (f !== a.last) { if (a.tile) a.draw(f); else { a.ctx.clearRect(0, 0, a.ctx.canvas.width, a.ctx.canvas.height); a.ctx.drawImage(frameCanvas(a.name, f, a.night), 0, 0); } a.last = f; }
   }
 }
 
@@ -3882,7 +4310,8 @@ function galleryTick(t) {
 const scene = $('scene'), sctx = scene.getContext('2d');
 const SW = 960, SH = 540, PW = 480, PH = 270;
 function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-const ground = mk(PW, PH), gx = ground.getContext('2d');       // pixel-space ground
+const ground = mk(PW, PH), gx = ground.getContext('2d');       // pixel-space ground (day)
+const groundN = mk(PW, PH), gnx = groundN.getContext('2d');    // same ground through the night palette swap
 const layerB = mk(PW, PH), bx = layerB.getContext('2d');        // pixel-space sprites (depth sorted)
 const layerF = mk(PW, PH), fx = layerF.getContext('2d');        // pixel-space effects
 const work = mk(SW, SH), wx = work.getContext('2d');            // screen-space working canvas
@@ -3890,12 +4319,14 @@ const tmpS = mk(SW, SH), tx = tmpS.getContext('2d');
 const half = mk(PW, PH), hx = half.getContext('2d');           // half-res for cheap blur
 const half2 = mk(PW, PH), h2x = half2.getContext('2d');
 const hasFilter = ('filter' in wx);
-[gx, bx, fx, hx, h2x].forEach(x => x.imageSmoothingEnabled = false);
+[gx, gnx, bx, fx, hx, h2x].forEach(x => x.imageSmoothingEnabled = false);
 
-const state = { night: false, post: true, hero: 'xiaoguai_base' };
+const state = { night: false, post: true, hero: 'xiaoguai_base', scene: 'clearing' };
 function setPressed(a, b, first) { $(a).setAttribute('aria-pressed', first); $(b).setAttribute('aria-pressed', !first); }
 $('b-day').onclick = () => { state.night = false; setPressed('b-day', 'b-night', true); hint(); };
 $('b-night').onclick = () => { state.night = true; setPressed('b-day', 'b-night', false); hint(); };
+$('b-clearing').onclick = () => { state.scene = 'clearing'; setPressed('b-clearing', 'b-lineup', true); sel.disabled = false; };
+$('b-lineup').onclick = () => { state.scene = 'lineup'; setPressed('b-clearing', 'b-lineup', false); sel.disabled = true; };
 $('b-post-on').onclick = () => { state.post = true; setPressed('b-post-on', 'b-post-off', true); hint(); };
 $('b-post-off').onclick = () => { state.post = false; setPressed('b-post-on', 'b-post-off', false); hint(); };
 function hint() {
@@ -3905,25 +4336,26 @@ function hint() {
 }
 hint();
 const sel = $('hero-sel');
-['xiaoguai_base'].concat(Object.keys(SPRITES).filter(n => n.indexOf('undead_') === 0)).filter(has).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = SPRITES[n].label + (n === 'xiaoguai_base' ? ' (stage 0)' : ''); sel.appendChild(o); });
+heroNames.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = SPRITES[n].label + (n === 'xiaoguai_base' ? ' (stage 0)' : /_01_|_10_/.test(n) ? ' · ' + n.split('_')[0] + ' ' + n.split('_')[1] : ''); sel.appendChild(o); });
 sel.onchange = () => { state.hero = sel.value; };
 
 /* deterministic hash / rng */
 function hash(i, j) { let h = (i * 374761393 + j * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-/* ---- ground (static) ---- */
-function drawGround() {
+/* ---- ground (static): built twice, once with the day palette and once through the night swap ---- */
+const FLOWERS = [['prop_flowers_1', 150, 218], ['prop_flowers_2', 372, 180], ['prop_flowers_1', 34, 112], ['prop_flowers_2', 98, 250], ['prop_flowers_1', 296, 150], ['prop_flowers_2', 190, 120], ['prop_flowers_1', 420, 262]];
+function drawGround(gx, night) {
   const cols = Math.ceil(PW / 32), rows = Math.ceil(PH / 32);
   const mudC = mk(PW, PH), mx = mudC.getContext('2d'), mask = mk(PW, PH), kx = mask.getContext('2d');
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
     const n = 'grass_' + (1 + Math.floor(hash(i, j) * 3));
-    if (has(n)) gx.drawImage(frameCanvas(n, 0), i * 32, j * 32);
-    if (has('mud')) mx.drawImage(frameCanvas('mud', 0), i * 32, j * 32);
+    if (has(n)) gx.drawImage(frameCanvas(n, 0, night), i * 32, j * 32);
+    if (has('mud')) mx.drawImage(frameCanvas('mud', 0, night), i * 32, j * 32);
     let p = null;
     if (j === 7 && i < 11) p = 'stone_path';
     if (i === 10 && j >= 4 && j <= 7) p = 'stone_path';
-    if (p && has(p)) gx.drawImage(frameCanvas(p, 0), i * 32, j * 32);
+    if (p && has(p)) gx.drawImage(frameCanvas(p, 0, night), i * 32, j * 32);
   }
   // irregular mud puddle with a stepped, noisy edge (pixel-space mask)
   const id = kx.createImageData(PW, PH);
@@ -3934,6 +4366,31 @@ function drawGround() {
   kx.putImageData(id, 0, 0);
   mx.globalCompositeOperation = 'destination-in'; mx.drawImage(mask, 0, 0);
   gx.drawImage(mudC, 0, 0);
+  FLOWERS.forEach(([n, x, y]) => { if (has(n)) gx.drawImage(frameCanvas(n, 0, night), Math.round(x - SPRITES[n].w / 2), y - SPRITES[n].h); });
+}
+/* ---- pond: animated water tile inside a noisy ellipse with a 1 px shore ring (pre-rendered per frame, day and night) ---- */
+const POND = { x: 300, y: 88, rx: 52, ry: 22 };
+const pondC = [[], []];
+function buildPond() {
+  if (!has('tile_water')) return;
+  const w = POND.rx * 2 + 8, h = POND.ry * 2 + 8, x0 = POND.x - w / 2, y0 = POND.y - h / 2, nf = SPRITES.tile_water.frames.length;
+  const ins = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (x - w / 2) / POND.rx, dy = (y - h / 2) / POND.ry, nz = (hash((x + x0) >> 2, (y + y0) >> 2) - .5) * .3;
+    ins[y * w + x] = dx * dx + dy * dy + nz < 1 ? 1 : 0;
+  }
+  for (let nt = 0; nt < 2; nt++) for (let f = 0; f < nf; f++) {
+    const c = mk(w, h), x = c.getContext('2d');
+    for (let ty = Math.floor(y0 / 32) * 32; ty < y0 + h; ty += 32) for (let tx = Math.floor(x0 / 32) * 32; tx < x0 + w; tx += 32) x.drawImage(frameCanvas('tile_water', f, nt === 1), tx - x0, ty - y0);
+    const id = x.getImageData(0, 0, w, h), shore = rgb[nt ? NIGHT.map['x'] : 'x'], dark = rgb[nt ? NIGHT.map['D'] : 'D'];
+    for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) {
+      const o = (y * w + xx) * 4;
+      if (!ins[y * w + xx]) { id.data[o + 3] = 0; continue; }
+      const edge = xx === 0 || y === 0 || xx === w - 1 || y === h - 1 || !ins[y * w + xx - 1] || !ins[y * w + xx + 1] || !ins[(y - 1) * w + xx] || !ins[(y + 1) * w + xx];
+      if (edge) { const c2 = (xx + y) % 5 === 0 ? dark : shore; id.data[o] = c2[0]; id.data[o + 1] = c2[1]; id.data[o + 2] = c2[2]; id.data[o + 3] = 255; }
+    }
+    x.putImageData(id, 0, 0); pondC[nt][f] = { c, x: x0, y: y0, w, h };
+  }
 }
 
 /* ---- scene objects ---- */
@@ -3945,8 +4402,19 @@ const structs = [
   { name: 'bone_tower_3', x: 408, y: 150 }, { name: 'bone_wall', x: 376, y: 150 }, { name: 'bone_wall_damaged', x: 344, y: 150 },
   { name: 'bone_tower_2', x: 436, y: 236 }, { name: 'bone_tower_1', x: 56, y: 130 }, { name: 'bone_wall', x: 24, y: 130 }
 ].filter(o => has(o.name)).map(o => ({ kind: 'struct', name: o.name, x: o.x, y: o.y }));
-const mobs = ['farmer_1_villager', 'woodsman_1_woodcutter', 'militia_5_captain', 'hunter_1_hunter', 'mage_1_apprentice', 'knight_1_squire', 'priest_1_acolyte'].filter(has)
-  .map((n, i) => ({ kind: 'mob', name: n, a: i * 0.9 + 0.3, ph: i * 1.7, r0: 62 + (i % 3) * 14, sp: 0.5 + (i % 4) * 0.08 }));
+const mobs = ['farmer_1_villager', 'woodsman_4_berserker', 'hunter_2_archer', 'militia_5_captain', 'mage_3_battlemage', 'knight_4_crusader', 'priest_1_acolyte', 'thief_3_assassin', 'noble_2_lord'].filter(has)
+  .map((n, i) => ({ kind: 'mob', name: n, a: i * 0.7 + 0.3, ph: i * 1.7, r0: 62 + (i % 3) * 14, sp: 0.5 + (i % 4) * 0.08 }));
+const PROPS = [
+  ['prop_fence_corner', 100, 98], ['prop_fence', 132, 98], ['prop_fence', 164, 98], ['prop_fence', 196, 98],
+  ['prop_rocks_1', 62, 222], ['prop_rocks_2', 410, 108], ['prop_rocks_1', 196, 70], ['prop_rocks_2', 360, 244],
+  ['prop_bush', 120, 140], ['prop_bush', 290, 200], ['prop_bush', 452, 168], ['prop_bush', 150, 256],
+  ['prop_gravestone', 86, 172], ['prop_gravestone', 114, 184], ['prop_gravestone', 94, 200]
+].filter(o => has(o[0])).map(o => ({ kind: 'prop', name: o[0], x: o[1], y: o[2] }));
+const LINEUP = (() => {
+  const boss = ['undead_10_vampire_lord', 'skeleton_10_lich', 'wisp_10_wraith_king', 'slime_10_gel_paladin', 'dragon_10_elder_dragon', 'beast_10_fenrir', 'nature_10_world_tree', 'material_10_titan', 'demon_10_demon_lord'].filter(has);
+  const small = ['xiaoguai_base', 'undead_01_zombie', 'skeleton_01_skeleton', 'wisp_01_wisp', 'slime_01_slime', 'dragon_01_hatchling', 'beast_01_wolf_pup', 'nature_01_seed', 'material_01_clay_lump', 'demon_01_imp'].filter(has);
+  return boss.map((n, i) => ({ name: n, x: 30 + i * 52, y: 178 })).concat(small.map((n, i) => ({ name: n, x: 26 + i * 47, y: 240 })));
+})();
 const HERO = { x: 232, y: 156 };
 
 /* light source from a sprite's glowing pixels */
@@ -4030,21 +4498,26 @@ function frame(tms) {
   const t = tms / 1000, idle = Math.floor(t * 2);
   const night = state.night, post = state.post;
   drawables = []; lights = [];
+  const lineup = state.scene === 'lineup', activeStructs = lineup ? [] : structs;
   bx.clearRect(0, 0, PW, PH); fx.clearRect(0, 0, PW, PH);
   trees.forEach(tr => drawables.push({ y: tr.y, draw: () => drawTree(bx, t, tr) }));
-  structs.forEach(o => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, Math.floor(t * 3 + o.x) % SPRITES[o.name].frames.length) }));
-  const hb = Math.round(Math.sin(t * 2.2) * 0.0);
-  drawables.push({ y: HERO.y, draw: () => spriteBottom(bx, state.hero, HERO.x, HERO.y, idle) });
+  activeStructs.forEach(o => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, Math.floor(t * 3 + o.x) % SPRITES[o.name].frames.length) }));
+  PROPS.forEach(o => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, Math.floor(t * 1.5 + o.x) % SPRITES[o.name].frames.length) }));
+  if (lineup) LINEUP.forEach((o, i) => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, idle + i) }));
+  else drawables.push({ y: HERO.y, draw: () => spriteBottom(bx, state.hero, HERO.x, HERO.y, idle) });
   const mp = [];
-  mobs.forEach((m, i) => {
+  (lineup ? [] : mobs).forEach((m, i) => {
     const r = m.r0 + 34 * Math.sin(t * m.sp + m.ph), a = m.a + t * 0.12 * (i % 2 ? 1 : -1);
     const x = HERO.x + Math.cos(a) * r * 1.35, y = HERO.y + 8 + Math.sin(a) * r * .62;
-    mp.push({ m, x, y }); drawables.push({ y, draw: () => spriteBottom(bx, m.name, x, y, idle + i) });
+    mp.push({ m, x, y });
+    const wn = has(m.name + '_walk') ? m.name + '_walk' : m.name;
+    drawables.push({ y, draw: () => spriteBottom(bx, wn, x, y, wn !== m.name ? Math.floor(t * 8 + i) : idle + i) });
   });
   drawables.sort((a, b) => a.y - b.y).forEach(d => d.draw());
   // effects
   const act = [];
   FX.forEach(e => {
+    if (lineup) return;
     const st = fxState(e, t); if (!st) return; act.push([e, st]);
     const s = SPRITES[e.n];
     fx.save();
@@ -4056,27 +4529,30 @@ function frame(tms) {
   /* ---- compose ---- */
   sctx.imageSmoothingEnabled = false; wx.imageSmoothingEnabled = false;
   wx.globalCompositeOperation = 'source-over'; wx.globalAlpha = 1; wx.filter = 'none';
-  wx.drawImage(ground, 0, 0, SW, SH);
+  wx.drawImage(post && night ? groundN : ground, 0, 0, SW, SH);
+  if (pondC[0].length) { const pc = pondC[post && night ? 1 : 0][Math.floor(t * 3) % pondC[0].length]; wx.drawImage(pc.c, pc.x * 2, pc.y * 2, pc.w * 2, pc.h * 2); }
   if (!post) {
     wx.drawImage(layerB, 0, 0, SW, SH); wx.drawImage(layerF, 0, 0, SW, SH);
     sctx.drawImage(work, 0, 0); return;
   }
   // soft cast shadows (light from top-left, so they fall bottom-right)
   trees.forEach(tr => { softShadow(tr.x + 11, tr.y - 1, 26, 8, .5); softShadow(tr.x + 18, tr.y - 8, 20, 9, .22); });
-  structs.forEach(o => { const w = SPRITES[o.name].w; softShadow(o.x + 8, o.y - 1, w * .72, 7, .5); });
-  softShadow(HERO.x + 2, HERO.y - 1, Math.max(9, SPRITES[state.hero].w * .42), 4, .55);
+  activeStructs.forEach(o => { const w = SPRITES[o.name].w; softShadow(o.x + 8, o.y - 1, w * .72, 7, .5); });
+  PROPS.forEach(o => softShadow(o.x + 3, o.y - 1, Math.max(7, SPRITES[o.name].w * (o.name === 'prop_fence' || o.name === 'prop_fence_corner' ? .5 : .38)), 3.5, .4));
+  if (lineup) LINEUP.forEach(o => softShadow(o.x + 2, o.y - 1, Math.max(8, SPRITES[o.name].w * .4), SPRITES[o.name].w > 30 ? 5 : 3.6, .55));
+  else softShadow(HERO.x + 2, HERO.y - 1, Math.max(9, SPRITES[state.hero].w * .42), 4, .55);
   mp.forEach(p => softShadow(p.x + 2, p.y - 1, 9, 3.6, .5));
   wx.drawImage(layerB, 0, 0, SW, SH);
 
   // lights
   const k = night ? 1 : 0.3;
-  structs.forEach(o => {
+  activeStructs.forEach(o => {
     if (o.name.indexOf('tower') < 0) return;
     const w = windowLight(o.name), flick = 0.85 + 0.15 * Math.sin(t * 9 + o.x) * Math.sin(t * 3.1 + o.x);
     lights.push({ x: (o.x - SPRITES[o.name].w / 2 + w.x + .5) * 2, y: (o.y - SPRITES[o.name].h + w.y + .5) * 2, r: night ? 150 : 52, col: [255, 170, 80], a: .85 * k * flick, core: night ? 28 : 14 });
   });
   act.forEach(([e, st]) => { if (e.light) lights.push({ x: st.x * 2, y: st.y * 2, r: (e.n === 'fx_fireball_explosion' ? 190 : 90) * (night ? 1 : .7), col: e.light, a: (e.n === 'fx_fireball_explosion' ? Math.sin(Math.PI * Math.min(1, st.k + .1)) : .45) * (night ? 1 : .6), core: e.n === 'fx_fireball_explosion' ? 20 : 6 }); });
-  const ep = eyePoints(state.hero);
+  const eyeList = lineup ? LINEUP : [{ name: state.hero, x: HERO.x, y: HERO.y }];
 
   // grade
   wx.globalCompositeOperation = 'multiply';
@@ -4095,9 +4571,12 @@ function frame(tms) {
   wx.globalCompositeOperation = 'source-over'; wx.drawImage(layerF, 0, 0, SW, SH);
   wx.globalCompositeOperation = 'lighter';
   lights.forEach(l => { glow(wx, l.x, l.y, l.r, l.col, l.a * (night ? .7 : .5)); glow(wx, l.x, l.y, l.core, [255, 235, 190], l.a * .55); });
-  if (night) ep.pts.forEach(p => {
-    const s = SPRITES[state.hero], ex = (HERO.x - s.w / 2 + p.x) * 2, ey = (HERO.y - s.h + p.y) * 2, c = ep.red ? [255, 70, 70] : [170, 150, 255];
-    glow(wx, ex, ey, 15, c, .7); glow(wx, ex, ey, 4, [255, 245, 220], .8);
+  if (night) eyeList.forEach(o => {
+    const ep = eyePoints(o.name), s = SPRITES[o.name];
+    ep.pts.forEach(p => {
+      const ex = (o.x - s.w / 2 + p.x) * 2, ey = (o.y - s.h + p.y) * 2, c = ep.red ? [255, 70, 70] : [170, 150, 255], k = lineup ? .6 : 1;
+      glow(wx, ex, ey, 15 * k, c, .7); glow(wx, ex, ey, 4, [255, 245, 220], .8);
+    });
   });
   // bloom: blurred copy of the frame, screen-blended
   if (hasFilter) {
@@ -4136,7 +4615,7 @@ function frame(tms) {
   sctx.drawImage(work, 0, 0);
 }
 
-drawGround();
+drawGround(gx, false); drawGround(gnx, true); buildPond();
 let visible = true, last = 0;
 if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(scene);
 function loop(t) {
