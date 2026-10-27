@@ -244,7 +244,7 @@ function drawGround() {
   // irregular mud puddle with a stepped, noisy edge (pixel-space mask)
   const id = kx.createImageData(PW, PH);
   for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
-    const dx = (x - 232) / 82, dy = (y - 140) / 46, nz = (hash(x >> 2, y >> 2) - .5) * .5;
+    const dx = (x - 232) / 58, dy = (y - 142) / 32, nz = (hash(x >> 3, y >> 3) - .5) * .35;
     if (dx * dx + dy * dy + nz < 1) id.data[(y * PW + x) * 4 + 3] = 255;
   }
   kx.putImageData(id, 0, 0);
