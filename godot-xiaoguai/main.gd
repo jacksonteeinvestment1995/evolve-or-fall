@@ -40,7 +40,8 @@ const HIDDEN_SPAWN_CHANCE := 0.6     # at each dawn and dusk
 const DAY_SECONDS := 60.0
 const NIGHT_SECONDS := 60.0
 const START_CLOCK := 15.0         # the game starts in the morning
-const NIGHT_TINT := Color(0.32, 0.38, 0.62)
+const NIGHT_TINT := Color(0.40, 0.47, 0.76)  # the reference night grade (124, 140, 206)
+const DAY_TINT := Color(1.0, 0.94, 0.84)    # the reference day grade (255, 240, 214)
 const DAY_ENEMY_POWER := 1.5      # villager damage x1.5 (and speed +25%) by day
 const NIGHT_PLAYER_POWER := 1.5   # bite damage x1.5 (and speed +20%) by night
 
@@ -79,6 +80,13 @@ var clock := START_CLOCK
 var last_phase := 0
 var tint: CanvasModulate
 var glow_light: PointLight2D
+var hd2d_mat: ShaderMaterial
+var motes: CPUParticles2D
+var bokeh: CPUParticles2D
+var radial_tex: GradientTexture2D
+var shadow_tex: GradientTexture2D
+var water := {}   # Vector2i -> true: pond tiles (also solid, like trees)
+var props := {}   # Vector2i -> prop sprite name: scenery with no collision
 var spawn_cd := SPAWN_SLOW
 var rng := RandomNumberGenerator.new()
 var player
@@ -188,52 +196,227 @@ func player_power() -> float:
 	return NIGHT_PLAYER_POWER if is_night() else 1.0
 
 
-func _update_daynight() -> void:
-	var day := smoothstep(0.1, 0.9, daylight())
-	tint.color = NIGHT_TINT.lerp(Color.WHITE, day)
-	if glow_light != null:
-		glow_light.energy = lerpf(1.25, 0.0, day)  # a lantern glow around 小怪 after dark
-
-
-## The HD-2D finish: a screen shader (tilt-shift blur, vignette, colour grade), bloom on bright
-## things, and a soft light that follows 小怪 at night.
+## The HD-2D finish, ported from art/preview.src.html: a screen shader (bloom, tilt-shift, light
+## shafts or moon wash, vignette), pollen by day and fireflies by night, soft bokeh, warm lights in the
+## tower windows, and a lantern around 小怪 at night.
 func _build_hd2d() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_CANVAS
 	env.glow_enabled = true
-	env.glow_intensity = 0.7
-	env.glow_bloom = 0.05
+	env.glow_intensity = 0.5
 	env.glow_hdr_threshold = 1.0
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1, 1, 1, 1))
+	grad.set_color(1, Color(1, 1, 1, 0))
+	radial_tex = GradientTexture2D.new()
+	radial_tex.gradient = grad
+	radial_tex.fill = GradientTexture2D.FILL_RADIAL
+	radial_tex.fill_from = Vector2(0.5, 0.5)
+	radial_tex.fill_to = Vector2(1.0, 0.5)
+	radial_tex.width = 256
+	radial_tex.height = 256
+	var shade := Gradient.new()
+	shade.set_color(0, Color(0.08, 0.04, 0.16, 0.55))
+	shade.add_point(0.6, Color(0.08, 0.04, 0.16, 0.3))
+	shade.set_color(shade.get_point_count() - 1, Color(0.08, 0.04, 0.16, 0.0))
+	shadow_tex = GradientTexture2D.new()
+	shadow_tex.gradient = shade
+	shadow_tex.fill = GradientTexture2D.FILL_RADIAL
+	shadow_tex.fill_from = Vector2(0.5, 0.5)
+	shadow_tex.fill_to = Vector2(1.0, 0.5)
+	shadow_tex.width = 64
+	shadow_tex.height = 64
+
+	var pond_layer := preload("res://water.gd").new()
+	pond_layer.cells = water
+	add_child(pond_layer)
+
 	var layer := CanvasLayer.new()
 	layer.layer = 1
 	var rect := ColorRect.new()
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var mat := ShaderMaterial.new()
-	mat.shader = load("res://hd2d.gdshader")
-	rect.material = mat
+	hd2d_mat = ShaderMaterial.new()
+	hd2d_mat.shader = load("res://hd2d.gdshader")
+	rect.material = hd2d_mat
 	layer.add_child(rect)
 	add_child(layer)
-	var grad := Gradient.new()
-	grad.set_color(0, Color(1.0, 0.85, 0.6, 1.0))
-	grad.set_color(1, Color(1.0, 0.85, 0.6, 0.0))
-	var radial := GradientTexture2D.new()
-	radial.gradient = grad
-	radial.fill = GradientTexture2D.FILL_RADIAL
-	radial.fill_from = Vector2(0.5, 0.5)
-	radial.fill_to = Vector2(1.0, 0.5)
-	radial.width = 256
-	radial.height = 256
+
+	# pollen by day, fireflies by night (46 motes as in the reference), plus 7 drifting bokeh discs
+	var add_mat := CanvasItemMaterial.new()
+	add_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	var fade := Gradient.new()
+	fade.set_color(0, Color(1, 1, 1, 0))
+	fade.add_point(0.25, Color(1, 1, 1, 1))
+	fade.add_point(0.75, Color(1, 1, 1, 1))
+	fade.set_color(fade.get_point_count() - 1, Color(1, 1, 1, 0))
+	motes = CPUParticles2D.new()
+	motes.amount = 46
+	motes.lifetime = 8.0
+	motes.preprocess = 8.0
+	motes.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	motes.emission_rect_extents = Vector2(660, 370)
+	motes.direction = Vector2(0.6, -0.4)
+	motes.spread = 70.0
+	motes.initial_velocity_min = 5.0
+	motes.initial_velocity_max = 16.0
+	motes.gravity = Vector2.ZERO
+	motes.scale_amount_min = 0.012
+	motes.scale_amount_max = 0.035
+	motes.texture = radial_tex
+	motes.color_ramp = fade
+	motes.material = add_mat
+	motes.position = Vector2(640, 360)
+	layer.add_child(motes)
+	bokeh = CPUParticles2D.new()
+	bokeh.amount = 7
+	bokeh.lifetime = 40.0
+	bokeh.preprocess = 40.0
+	bokeh.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	bokeh.emission_rect_extents = Vector2(700, 60)
+	bokeh.direction = Vector2(1, 0)
+	bokeh.spread = 5.0
+	bokeh.initial_velocity_min = 8.0
+	bokeh.initial_velocity_max = 12.0
+	bokeh.gravity = Vector2.ZERO
+	bokeh.scale_amount_min = 0.25
+	bokeh.scale_amount_max = 0.5
+	bokeh.texture = radial_tex
+	bokeh.color_ramp = fade
+	bokeh.material = add_mat
+	bokeh.position = Vector2(640, 640)
+	layer.add_child(bokeh)
+
 	glow_light = PointLight2D.new()
-	glow_light.texture = radial
-	glow_light.texture_scale = 1.6
+	glow_light.texture = radial_tex
+	glow_light.color = Color(1.0, 0.85, 0.6)
+	glow_light.texture_scale = 0.6
 	glow_light.energy = 0.0
 	glow_light.z_index = 4
 	player.add_child(glow_light)
+
+
+## Day to night: the warm or blue multiply grade (the reference's), shafts or moon wash, lights, motes.
+func _update_daynight() -> void:
+	var day := smoothstep(0.1, 0.9, daylight())
+	tint.color = NIGHT_TINT.lerp(DAY_TINT, day)
+	if hd2d_mat != null:
+		hd2d_mat.set_shader_parameter("night", 1.0 - day)
+	if glow_light != null:
+		glow_light.energy = lerpf(0.55, 0.0, day)
+	if motes != null:
+		motes.color = Color(1.0, 0.94, 0.75, 0.7).lerp(Color(0.75, 1.0, 0.6, 1.0), 1.0 - day)
+		bokeh.color = Color(1.0, 0.9, 0.67, 0.14).lerp(Color(0.59, 0.67, 1.0, 0.16), 1.0 - day)
+	_update_tower_lamps(day)
+
+
+## Warm light in every tower's window: strong at night, faint by day, with a flicker.
+func _update_tower_lamps(day: float) -> void:
+	if radial_tex == null:
+		return
+	for tw in get_tree().get_nodes_in_group("towers"):
+		var lamp: PointLight2D = tw.get_node_or_null("Lamp")
+		if lamp == null:
+			lamp = PointLight2D.new()
+			lamp.name = "Lamp"
+			lamp.texture = radial_tex
+			lamp.color = Color(1.0, 0.67, 0.31)
+			lamp.position = Vector2(0, -6)
+			tw.add_child(lamp)
+		var flick := 0.85 + 0.15 * sin(elapsed * 9.0 + tw.position.x) * sin(elapsed * 3.1 + tw.position.x)
+		lamp.texture_scale = lerpf(0.6, 0.25, day)
+		lamp.energy = lerpf(1.0, 0.3, day) * flick
+
+
+# --- ponds and scenery ---
+
+## A few ponds away from the base. Water is solid like a tree, so villagers path around it.
+func _make_ponds(gen: RandomNumberGenerator) -> void:
+	var made := 0
+	var tries := 0
+	while made < 6 and tries < 200:
+		tries += 1
+		var c := Vector2i(gen.randi_range(10, COLS - 11), gen.randi_range(8, ROWS - 9))
+		if Vector2(c - START_TILE).length() < 22.0:
+			continue
+		var rx := gen.randi_range(3, 5)
+		var ry := gen.randi_range(2, 4)
+		var pond := {}
+		var clear := true
+		for dx in range(-rx, rx + 1):
+			for dy in range(-ry, ry + 1):
+				if float(dx * dx) / (rx * rx) + float(dy * dy) / (ry * ry) <= 1.0:
+					var t := c + Vector2i(dx, dy)
+					if trees.has(t) or mud.has(t):
+						clear = false
+					pond[t] = true
+		if not clear:
+			continue
+		# trim thin tips: every shore tile needs a drawn edge, so no cell may touch grass on 3 sides
+		var changed := true
+		while changed:
+			changed = false
+			for t in pond.keys():
+				var open_sides := 0
+				for d in [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]:
+					if not pond.has(t + d):
+						open_sides += 1
+				if open_sides >= 3:
+					pond.erase(t)
+					changed = true
+		for t in pond:
+			water[t] = true
+			trees[t] = true
+		made += 1
+
+
+## Bushes, rocks, flowers, fences and gravestones: scenery with no collision.
+func _scatter_props() -> void:
+	var pr := RandomNumberGenerator.new()
+	pr.seed = SEED + 77
+	var names := ["prop_bush", "prop_rocks_1", "prop_rocks_2", "prop_flowers_1", "prop_flowers_2", "prop_flowers_1", "prop_flowers_2", "prop_bush"]
+	for i in 650:
+		var t := Vector2i(pr.randi_range(2, COLS - 3), pr.randi_range(2, ROWS - 3))
+		if trees.has(t) or mud.has(t) or props.has(t) or Vector2(t - START_TILE).length() < 4.0:
+			continue
+		props[t] = names[pr.randi_range(0, names.size() - 1)]
+	for k in 7:
+		var g := Vector2i(pr.randi_range(12, COLS - 13), pr.randi_range(10, ROWS - 11))
+		if Vector2(g - START_TILE).length() < 16.0:
+			continue
+		for j in 3:
+			var t := g + Vector2i(j * 2, pr.randi_range(0, 1))
+			if not trees.has(t) and not mud.has(t):
+				props[t] = "prop_gravestone"
+	for k in 6:
+		var f := Vector2i(pr.randi_range(12, COLS - 20), pr.randi_range(10, ROWS - 11))
+		if Vector2(f - START_TILE).length() < 14.0:
+			continue
+		for j in 6:
+			var t := f + Vector2i(j, 0)
+			if not trees.has(t) and not mud.has(t):
+				props[t] = "prop_fence"
+
+
+## A soft shadow under something, falling to the lower right (light from the top left).
+func _shadow(foot: Vector2, rx: float, ry: float, shift: float = 0.0) -> void:
+	if shadow_tex != null:
+		draw_texture_rect(shadow_tex, Rect2(foot.x + shift - rx, foot.y - ry, rx * 2.0, ry * 2.0), false)
+
+
+func _draw_prop(t: Vector2i, name: String) -> void:
+	var tex := Sprites.tex(name)
+	if tex == null:
+		return
+	var w := tex.get_width()
+	var h := tex.get_height()
+	var foot := Vector2(t.x * TILE + TILE * 0.5, (t.y + 1) * TILE - 1)
+	_shadow(foot, maxf(5.0, w * (0.25 if name.begins_with("prop_fence") else 0.2)), 2.5, 2.0)
+	draw_texture(tex, Vector2(t.x * TILE + (TILE - w) * 0.5, (t.y + 1) * TILE - h))
 
 
 # --- map ---
@@ -285,8 +468,10 @@ func _generate() -> void:
 				trees.erase(t)
 				mud.erase(t)
 
+	_make_ponds(gen)
 	_find_open_tiles()
 	_build_nav()
+	_scatter_props()
 
 	# Starting villagers: spread out, reachable, never near the start.
 	var placed: Array[Vector2i] = []
@@ -1098,8 +1283,15 @@ func _draw() -> void:
 		draw_circle(r.position + Vector2(9, 11), 4.0, Color("55401f"))
 		draw_circle(r.position + Vector2(22, 20), 5.0, Color("7d5e38"))
 
+	for t in props:
+		_draw_prop(t, props[t])
+
 	for t in trees:
+		if water.has(t):
+			continue
 		var c := Vector2(t.x + 0.5, t.y + 0.5) * TILE
+		_shadow(c + Vector2(0, 14), 13.0, 4.0, 11.0)
+		_shadow(c + Vector2(0, 7), 10.0, 4.5, 18.0)
 		var tt: Texture2D = tree_tex[(t.x + t.y) % 2]
 		if tt != null:
 			# the 32x48 tree stands on its tile: trunk foot at the tile's lower middle
