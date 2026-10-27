@@ -85,9 +85,13 @@
     <h2>Change log</h2>
     <ul class="log" id="log">
       <!-- LOG: newest first -->
+      <li><time>2026-10-27</time><span>Decided: budget plan for the remaining pixel art. 9 lines in version 1, forms built from about 60 parts plus recolours, no walk cycles, HD-2D look from Godot lighting, Fable only for new parts under a sprite cap. Open: exact line count and cap. Details in art-budget-plan.md.</span></li>
       <li><time>2026-10-27</time><span>Correction: the Godot prototype had used an invented 5-form path (Beast, Demon...). Replaced with the decided Undead line 1, all 10 stages Zombie → Vampire Lord, in 4 tiers. The old 5-form list is kept under Evolution as an early idea.</span></li>
+      <li><time>2026-10-27</time><span>Built: the status effect system (burn, chill, freeze, root, shock, poison, bleed, charm, curse), the 7 family traits and the first 8 signature abilities (Blood Drain, Bone Servants, Molten Trail, Fire Breath, Pack Howl, Rooted, Stone Skin, Hellfire Rain). 282 automated checks pass. Numbers are first drafts to tune after play.</span></li>
+      <li><time>2026-10-27</time><span>Drafted the next design (minimap, 26 line abilities with status effects and elements, 7 new enemy attacks) in design-abilities.md. A draft only: nothing is decided or built.</span></li>
       <li><time>2026-10-27</time><span>Checked the game against the YouTube Playables certification requirements (assuming that is what "YouTube game" means). Gaps are listed under the new YouTube Playables branch.</span></li>
       <li><time>2026-10-27</time><span>The game now has sound: music that follows evolution (nights have their own track) and 26 generated sound effects, with the music credit shown on screen. The project is 7.3 MB.</span></li>
+      <li><time>2026-10-27</time><span>Level rules changed: max level 100, a form every 10 levels (first evolution and line choice at Lv 10), a normal skill pick every 3 levels, a special skill pick every 12 levels (12 specials, my draft list), and an EXP curve tuned so the final form comes around 15 to 16 minutes (in bot tests, good runs finished in 14 to 16 min; some stalled, which is why a catch-up EXP bonus was added). 322 checks pass.</span></li>
       <li><time>2026-10-27</time><span>Stage 1 update 5: a gentle start (30 villagers; no ranged attacks or day bonus for 3 minutes, no skills for 6, no hidden enemies for 10; they notice 小怪 only when close at first). Levelling is quick early and steep in the middle (Lv 50 needs 20625 EXP), and the final form earns the strongest skill, Final Calamity. The village grows with every evolution (+22 each, cap 360). Enemies get 17 attack types spread across their professions. Specific skill sets and numbers are my draft.</span></li>
       <li><time>2026-10-27</time><span>Stage 1 update 4: levelling is slower (max level 50) and a new form comes every 5 levels, so the first evolution is at Lv 5; he grows a little with each level. The bone wall is now selected by default with a build bar at the bottom ([1] tower, [2] wall, [X] remove). X removes a tower or wall and refunds half the bones, so nothing can trap 小怪.</span></li>
       <li><time>2026-10-27</time><span>Decided: the triggers for the four automatic skills (Bone Nova, Spirit Bolt, Roar, Shadow Step dodge).</span></li>
@@ -134,13 +138,13 @@
     { hue: 150, t: 'Evolution', c: [
       ['小怪 levels up and evolves', 'd',
         ['Level from EXP: 1 per bite, plus EXP for each villager', 'd'],
-        ['Fast start: Lv 5 needs only 57 EXP', 'd'],
-        ['Steep middle game: Lv 20 needs 2240 EXP; Lv 50 needs 20625', 'd'],
+        ['Fast first half: Lv 10 needs about 100 EXP and Lv 50 comes near 8 min', 'd'],
+        ['Slower second half: the final form (Lv 100) around 15 to 16 min; a catch-up bonus helps slow players', 'd'],
         ['Final form (Lv 50) earns the strongest skill: Final Calamity', 'd'],
-        ['Max level 50; a new form every 5 levels (was every 3)', 'd'],
-        ['Levels 1–4: base form Xiao Guai', ''],
-        ['First evolution (Lv 5): choose any of the 26 lines', 'd'],
-        ['Then follow that line: 10 forms, the last at Lv 50', 'd'],
+        ['Max level 100; a new form every 10 levels', 'd'],
+        ['Levels 1–9: base form Xiao Guai', ''],
+        ['First evolution (Lv 10): choose any of the 26 lines', 'd'],
+        ['Then follow that line: 10 forms, the last at Lv 100', 'd'],
         ['He grows 4% bigger with every level, plus a ring on level-up', 'r'],
         ['Families bias stats: Slime tanky, Dragon hard-hitting, Beast fast', 'r'],
         ['Tiers: forms 1–2, 3–5, 6–8, 9–10', ''],
@@ -234,6 +238,15 @@
     ]},
     { hue: 330, t: 'Art & Audio', c: [
       ['2D pixel art, all assets', 'd', ['Sprite sheet made (5 forms, enemies, tiles)', ''], ['Canvas 16 / 24 / 32 px, 1 px outline', '']],
+      ['Budget plan for the remaining art', 'd',
+        ['167 sprites drawn (batch 1 + 2); about 218 hero forms still missing', ''],
+        ['Version 1 offers 9 lines (3 Undead + Slime, Dragon, Beast, Nature, Material, Demon); the other 17 shown as coming soon', 'd'],
+        ['Forms built by script from about 60 drawn parts (3 body sizes per family, overlays, one recolour per line)', 'd'],
+        ['No walk cycles: squash, bob and flip in Godot', 'd'],
+        ['HD-2D look from Godot lighting, glow, blur and night tint, not extra art', 'd'],
+        ['Fable only for new parts and final boss forms; hard sprite cap per session; one polish pass', 'd'],
+        ['Paid pixel tool (PixelLab, Retro Diffusion) and free packs: optional, not chosen', ''],
+        ['Open: exact line count and sprite cap; put the 167 sprites into Godot to check', 'r']],
       ['One trait kept in every form', '', ['Horn / stripe / big eyes', '']],
       ['Music', '',
         ['Boss battle: 交响乐 symphonic', 'd',
@@ -266,13 +279,14 @@
         ['WASD still works', '']],
       ['Auto attack: bites the nearest enemy in reach', 'd'],
       ['Sprint (Shift): 10 s, then 15 s cooldown (was 60 s)', 'd'],
-      ['小怪 skills: pick 1 of 3 at every level', 'd',
+      ['小怪 skills: pick 1 of 3 every 3 levels (33 picks), plus a special pick every 12 levels (8 picks)', 'd',
         ['All passive, no keys to press', 'd'],
         ['Stat: Tough Hide, Sharp Fangs, Swift Paws, Quick Jaws, Soul Drain, Bone Collector', 'd'],
         ['Automatic: Bone Nova (villagers close), Spirit Bolt (nearest villager)', 'd'],
         ['Automatic: Roar (surrounded or low HP), Shadow Step (10% dodge per rank)', 'd'],
         ['Picking a skill again raises its rank (max 5)', 'd'],
-        ['Skill list confirmed', 'd']],
+        ['Skill list confirmed', 'd'],
+        ['Special skills (pick 1 of 3): Overdrive Bites, Frenzy, Iron Will, Second Wind, Phoenix, Cleave, Stormcaller, Blood Moon, Gravity Maw, Titan Reach, Mastery, Bone Hoard', 'r']],
       ['Building (E): towers and bone walls', 'd',
         ['Place anywhere you point, within reach (replaces the fixed pads)', 'd'],
         ['No towers at the start: build them yourself', 'd'],
@@ -316,7 +330,26 @@
       ['Lunge (right-click): double bite damage, 3 s cooldown', 'd'],
       ['Mud slows to half speed; roll and lunge ignore it', 'd'],
       ['Slides along trees instead of sticking', ''],
-      ['Not built yet: minimap, devour-family trigger, elements', 'q'],
+      ['Status effects on villagers (built)', 'd',
+        ['Burn, poison (stacks to 3), bleed: 1 damage a second', 'd'],
+        ['Chill -35% speed; freeze 1.2 s with a 4 s immunity; root stops walking', 'd'],
+        ['Shock chains damage; curse +50% damage taken; charm fights for 小怪', 'd'],
+        ['Hidden forms resist freeze, root and charm', 'd']],
+      ['Family traits from form 1 (built)', 'd',
+        ['Undead heal at night · Slime split a blob · Dragon spark', 'd'],
+        ['Beast +10% speed (+25% night) · Nature regen when still', 'd'],
+        ['Material -1 damage per hit · Demon +1 bone per kill', 'd']],
+      ['First 8 signature abilities (built): form 3, stronger at 6 and 9', 'd',
+        ['Vampire line: Blood Drain · Skeleton line: Bone Servants', 'd'],
+        ['Fire Slime line: Molten Trail · Fire Dragon line: Fire Breath', 'd'],
+        ['Wolf line: Pack Howl · World Tree line: Rooted', 'd'],
+        ['Clay line: Stone Skin · Demon Lord line: Hellfire Rain', 'd'],
+        ['The other 18 lines get theirs next (design-abilities.md)', 'q']],
+      ['Still a draft, not built (design-abilities.md)', 'q',
+        ['Minimap: dots for villagers, towers, hidden enemies; optional fog', ''],
+        ['Elements: villager professions get weaknesses and resistances', ''],
+        ['7 new enemy attacks: catapult, mounted charge, trap, dispel, curse, squad, poison arrow', '']],
+      ['Not built yet: devour-family trigger', 'q'],
     ]},
     { hue: 85, t: 'Plan', c: [
       ['Stage 1 prototype playable in Godot (godot-xiaoguai folder)', 'd'],

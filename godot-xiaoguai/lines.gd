@@ -43,6 +43,14 @@ const LINES := [
 ]
 
 
+## Version 1 ships these 9 lines (identified by their first form); the rest show as "coming soon".
+const RELEASED := ["Zombie", "Skeleton", "Wisp", "Slime", "Hatchling", "Wolf Pup", "Seed", "Clay Lump", "Imp"]
+
+
+static func released(i: int) -> bool:
+	return RELEASED.has(LINES[i]["forms"][0]) and not (LINES[i]["forms"][0] == "Slime" and i != 6)
+
+
 ## "Zombie → Vampire Lord"
 static func title(i: int) -> String:
 	var forms: Array = LINES[i]["forms"]

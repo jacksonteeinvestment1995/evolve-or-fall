@@ -13,6 +13,8 @@ var color := Color(1.0, 0.45, 0.2)
 var knock := 0.0           ## player zones: push villagers away at this speed
 var stun := 0.0            ## player zones: seconds villagers are frozen
 var source = null          ## the player, for team "player": hits earn EXP
+var status := ""           ## player zones: a status put on every villager hit (burn, chill...)
+var status_time := 0.0
 var age := 0.0
 var detonated := false
 var warned := false
@@ -50,6 +52,8 @@ func _detonate() -> void:
 			e.take_hit(damage, away)
 			if source != null and is_instance_valid(source):
 				source.add_xp(1)
+		if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
+			e.apply_status(status, status_time)
 		if knock > 0.0:
 			e.knock = away * knock
 		if stun > 0.0:

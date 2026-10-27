@@ -72,9 +72,43 @@ func bolts() -> Array:
 	return main.get_children().filter(func(c): return c.get_script() == main.VillagerScript.BoltScript)
 
 
+## Answer every open menu (line, skill, special) with a pick, and return the kinds seen in order.
+func drain_menus() -> Array:
+	var kinds: Array = []
+	var guard := 0
+	while main.menu_open and guard < 300:
+		guard += 1
+		kinds.append(main.menu_kind)
+		if main.menu_kind == "line":
+			main.pick_line(10)
+		elif main.menu_kind == "special":
+			var sp: Array = main.SkillsData.roll_specials(main.player.specials, main.rng, 1)
+			main.pick_special(sp[0] if not sp.is_empty() else "overdrive")
+		else:
+			var ids: Array = main.SkillsData.roll(main.player.skills, main.rng, 1)
+			main.pick_skill(ids[0] if not ids.is_empty() else "hide")
+	return kinds
+
+
+## Every damage number currently floating in the world.
+func floaters() -> Array:
+	return main.get_children().filter(func(c): return c.get_script() == main.player.Popups.FloaterScript)
+
+
+## Put 小怪 on a monster line at a stage (0 to 10), at full health.
+func use_line(idx: int, stage: int) -> void:
+	var pl = main.player
+	pl.line = idx
+	pl._build_stages()
+	pl.stage = stage
+	pl._apply_stage(true)
+	pl.invuln = 0.0
+	pl.ab_cd.clear()
+
+
 ## A villager that stays quiet by itself, so a test controls when it fires.
-func mk(pos: Vector2, stage: int, line: int):
-	var v = main._spawn_villager(pos, stage, line)
+func mk(pos: Vector2, stage: int, line: int, secret: int = -1):
+	var v = main._spawn_villager(pos, stage, line, secret)
 	v.skill_cd = 9999.0
 	v.shoot_cd = 9999.0
 	return v
@@ -177,25 +211,26 @@ func _init() -> void:
 	check("auto bite hurts a nearby villager", not is_instance_valid(v) or v.is_queued_for_deletion() or v.hp < v.max_hp)
 	check("hits give EXP", p.xp > xp_before, "xp %d" % p.xp)
 
-	# =========================== levels: slower, a new form every 5 levels ===========================
-	check("Xiao Guai until level 5", PlayerScript.stage_for_level(1) == 0 and PlayerScript.stage_for_level(4) == 0)
-	check("a new form every 5 levels",
-			PlayerScript.stage_for_level(5) == 1 and PlayerScript.stage_for_level(9) == 1
-			and PlayerScript.stage_for_level(10) == 2 and PlayerScript.stage_for_level(25) == 5
-			and PlayerScript.stage_for_level(50) == 10)
-	check("max level is 50 so all 10 forms are reachable", PlayerScript.MAX_LEVEL == 50 and PlayerScript.EVOLVE_EVERY == 5)
-	check("EXP needed rises with level", PlayerScript.xp_for_level(2) < PlayerScript.xp_for_level(3)
-			and PlayerScript.xp_for_level(3) < PlayerScript.xp_for_level(10) and PlayerScript.xp_for_level(1) == 0)
-	check("the start is quick: level 5 needs under 100 EXP",
-			PlayerScript.xp_for_level(5) < 100, str(PlayerScript.xp_for_level(5)))
-	check("the middle game is slow: level 20 over 2000 EXP",
-			PlayerScript.xp_for_level(20) > 2000, str(PlayerScript.xp_for_level(20)))
-	check("the end is far: level 50 over 15000 EXP, far more than level 25",
-			PlayerScript.xp_for_level(50) > 15000 and PlayerScript.xp_for_level(50) > 5 * PlayerScript.xp_for_level(25),
-			"%d vs %d" % [PlayerScript.xp_for_level(50), PlayerScript.xp_for_level(25)])
-	var early_gap: int = PlayerScript.xp_for_level(5) - PlayerScript.xp_for_level(4)
-	var late_gap: int = PlayerScript.xp_for_level(50) - PlayerScript.xp_for_level(49)
-	check("each late level costs 20x an early level", late_gap > 20 * early_gap, "%d vs %d" % [late_gap, early_gap])
+	# =========================== levels: 100 levels, a form every 10, skills every 3, specials every 12 ===========================
+	check("Xiao Guai until level 10", PlayerScript.stage_for_level(1) == 0 and PlayerScript.stage_for_level(9) == 0)
+	check("a new form every 10 levels",
+			PlayerScript.stage_for_level(10) == 1 and PlayerScript.stage_for_level(19) == 1
+			and PlayerScript.stage_for_level(20) == 2 and PlayerScript.stage_for_level(50) == 5
+			and PlayerScript.stage_for_level(100) == 10)
+	check("max level 100, a form every 10, a skill every 3, a special every 12",
+			PlayerScript.MAX_LEVEL == 100 and PlayerScript.EVOLVE_EVERY == 10
+			and PlayerScript.SKILL_EVERY == 3 and PlayerScript.SPECIAL_EVERY == 12)
+	var rises := true
+	for l in range(2, 101):
+		if PlayerScript.xp_for_level(l) <= PlayerScript.xp_for_level(l - 1):
+			rises = false
+	check("every level costs more EXP than the one before", rises and PlayerScript.xp_for_level(1) == 0)
+	check("the first half is fast: level 50 costs under 30% of level 100",
+			PlayerScript.xp_for_level(50) < 0.3 * PlayerScript.xp_for_level(100),
+			"%d vs %d" % [PlayerScript.xp_for_level(50), PlayerScript.xp_for_level(100)])
+	var early_gap: int = PlayerScript.xp_for_level(10) - PlayerScript.xp_for_level(9)
+	var late_gap: int = PlayerScript.xp_for_level(100) - PlayerScript.xp_for_level(99)
+	check("a late level costs far more than an early level", late_gap > 20 * early_gap, "%d vs %d" % [late_gap, early_gap])
 	check("26 evolution lines of 10 forms",
 			LinesData.LINES.size() == 26 and LinesData.LINES.all(func(l): return l["forms"].size() == 10))
 	var undead = PlayerScript.new()
@@ -209,39 +244,51 @@ func _init() -> void:
 	await fresh()
 	p = main.player
 	check("starts as Xiao Guai at level 1", p.stage == 0 and p.level == 1 and p.stages[0]["name"] == "Xiao Guai" and p.line == -1)
+	main.elapsed = 0.0
+	check("catch-up: no bonus at the start", is_equal_approx(main.catchup(), 1.0))
+	main.elapsed = 480.0  # 8 minutes in: level 50 is on pace
+	p.level = 50
+	check("catch-up: no bonus when on pace", is_equal_approx(main.catchup(), 1.0))
+	p.level = 70
+	check("catch-up: no bonus when ahead", is_equal_approx(main.catchup(), 1.0))
+	p.level = 30
+	check("catch-up: a bonus when behind", main.catchup() > 1.2 and main.catchup() <= 1.6, "%.2f" % main.catchup())
+	p.level = 1
+	check("catch-up: the bonus stops at 60%", is_equal_approx(main.catchup(), 1.6))
+	p.level = 1
+	main.elapsed = 0.0
 	var size_lv1: float = p.growth_scale()
-	p.add_xp(PlayerScript.xp_for_level(3))
-	check("he grows a little with every level, before any evolution", p.level == 3 and p.stage == 0 and p.growth_scale() > size_lv1,
+	p.add_xp(PlayerScript.xp_for_level(4))
+	check("he grows a little with every level, before any evolution", p.level == 4 and p.stage == 0 and p.growth_scale() > size_lv1,
 			"%.2f -> %.2f" % [size_lv1, p.growth_scale()])
-	while main.menu_open:
-		main.pick_skill("hide")
-	var before_xp: int = p.xp
-	p.add_xp(PlayerScript.xp_for_level(5) - p.xp)
-	check("level 5 asks for a line before evolving", p.level == 5 and p.needs_line and p.stage == 0)
-	check("the skill menus for the new levels are queued", main.menu_open and main.menu_queue.size() >= 2)
+	check("a skill pick came at level 3, none at 2 or 4", main.menu_open and main.menu_kind == "skill" and main.menu_queue.is_empty())
 	main.pick_skill("hide")
-	var line_menu_first: bool = main.menu_open and p.needs_line
-	check("then the line menu opens (before the remaining skill menus)", line_menu_first)
+	p.add_xp(PlayerScript.xp_for_level(10) - p.xp)
+	check("level 10 asks for a line before evolving", p.level == 10 and p.needs_line and p.stage == 0)
+	check("the skill picks of levels 6 and 9 and the line choice are waiting",
+			main.menu_open and main.menu_kind == "skill" and main.menu_queue.size() == 2 and main.menu_queue[0]["type"] == "line")
+	main.pick_skill("hide")
+	check("the line menu opens before the next skill pick", main.menu_open and main.menu_kind == "line" and p.needs_line)
 	main.pick_line(10)
 	check("picking a line evolves into its first form", p.stage == 1 and p.line == 10 and p.stages[p.stage]["name"] == "Hatchling")
-	check("a skill menu follows", main.menu_open and not p.needs_line)
-	while main.menu_open:
-		main.pick_skill("fangs")
-	check("a level inside a form does not evolve", (p.add_xp(PlayerScript.xp_for_level(9) - p.xp) == null) and p.stage == 1)
-	while main.menu_open:
-		main.pick_skill("paws")
-	p.add_xp(PlayerScript.xp_for_level(10) - p.xp)
-	check("the second evolution is at level 10, with no line menu", p.level == 10 and p.stage == 2
+	check("then the level 9 skill pick follows", main.menu_open and main.menu_kind == "skill")
+	main.pick_skill("fangs")
+	var kinds_19: Array = []
+	p.add_xp(PlayerScript.xp_for_level(19) - p.xp)
+	check("a level inside a form does not evolve", p.stage == 1 and p.level == 19)
+	kinds_19 = drain_menus()
+	check("up to level 19: skill picks at 12, 15 and 18, and a special at 12",
+			kinds_19.count("skill") == 3 and kinds_19.count("special") == 1, str(kinds_19))
+	p.add_xp(PlayerScript.xp_for_level(20) - p.xp)
+	check("the second evolution is at level 20, with no line menu", p.level == 20 and p.stage == 2
 			and p.stages[2]["name"] == "Dragonling" and not p.needs_line)
-	while main.menu_open:
-		main.pick_skill("paws")
-	p.add_xp(PlayerScript.xp_for_level(50))
-	var picks := 0
-	while main.menu_open and picks < 200:
-		main.pick_skill("jaws" if picks % 2 == 0 else "greed")
-		picks += 1
-	check("level 50 is the last form of the line", p.level == 50 and p.stage == 10 and p.stages[10]["name"] == "Elder Dragon")
-	check("every level offered a skill", picks >= 30, "%d menus" % picks)
+	drain_menus()
+	p.add_xp(PlayerScript.xp_for_level(100))
+	var kinds_all: Array = drain_menus()
+	check("level 100 is the last form of the line", p.level == 100 and p.stage == 10 and p.stages[10]["name"] == "Elder Dragon")
+	var normal_picks: int = kinds_all.count("skill") + 3 + 3  # plus the 6 picked by hand so far (levels 3, 6, 9, 12, 15, 18)
+	check("a skill pick every 3 levels: 33 in a run", normal_picks == 33, "%d" % normal_picks)
+	check("a special pick every 12 levels: 8 in a run", p.specials.size() == 8, "%d" % p.specials.size())
 	check("the final form earns the strongest skill", p.rank("doom") == 1 and SkillsData.SKILLS["doom"]["name"] == "Final Calamity")
 	var doom_rng := RandomNumberGenerator.new()
 	check("Final Calamity is never offered at a level-up", not SkillsData.roll({}, doom_rng, 30).has("doom"))
@@ -255,6 +302,118 @@ func _init() -> void:
 	check("Final Calamity fires by itself when surrounded", p.skill_cd["doom"] > 0.0)
 	check("and it wrecks the crowd", doomed.all(func(c): return not is_instance_valid(c) or c.is_queued_for_deletion() or c.stun_left > 0.0 or c.hp < c.max_hp))
 	await clear_enemies()
+
+	# =========================== special skills (every 12th level) ===========================
+	await fresh()
+	p = main.player
+	p.choose_line(10)
+	check("12 special skills exist", SkillsData.SPECIALS.size() == 12)
+	var sp_rng := RandomNumberGenerator.new()
+	sp_rng.seed = 3
+	var sp_offer: Array = SkillsData.roll_specials({}, sp_rng, 3)
+	check("a special pick offers 3 different specials", sp_offer.size() == 3 and sp_offer[0] != sp_offer[1] and sp_offer[1] != sp_offer[2])
+	var owned_all := {}
+	for sid in SkillsData.SPECIALS:
+		owned_all[sid] = true
+	owned_all.erase("titan")
+	check("a special you already have is not offered again", SkillsData.roll_specials(owned_all, sp_rng, 3) == ["titan"])
+	p.add_xp(PlayerScript.xp_for_level(24))
+	var kinds_24: Array = drain_menus()
+	check("to level 24: 8 skill picks and 2 special picks", kinds_24.count("skill") == 8 and kinds_24.count("special") == 2, str(kinds_24))
+	check("a special is a one-time pick", p.specials.size() == 2)
+
+	await fresh()
+	p = main.player
+	p.choose_line(10)
+	var bite_plain: int = p.effective_bite()
+	p.learn_special("overdrive")
+	check("Overdrive Bites: +40% bite damage", p.effective_bite() >= int(ceil(bite_plain * 1.4)) and p.effective_bite() > bite_plain)
+	var cd_plain: float = float(p.stages[p.stage]["cd"])
+	p.learn_special("frenzy")
+	main.elapsed = 10.0
+	var frenzy_target = mk(p.global_position + Vector2(20, 0), 0, 3)
+	frenzy_target.max_hp = 100
+	frenzy_target.hp = 100
+	p.bite_cd = 0.0
+	p._auto_bite()
+	check("Frenzy: bites 25% faster", p.bite_cd > 0.0 and p.bite_cd <= cd_plain * 0.75 + 0.001, "%.3f vs %.3f" % [p.bite_cd, cd_plain])
+	frenzy_target.queue_free()
+	var hp_plain: int = p.max_hp
+	p.learn_special("ironwill")
+	check("Iron Will: +50% max HP and a full heal", p.max_hp == roundi(hp_plain * 1.5) and p.hp == p.max_hp, "%d -> %d" % [hp_plain, p.max_hp])
+	p.hp = 1
+	p.learn_special("secondwind")
+	await frames(3)
+	check("Second Wind: heals half your HP when low", p.hp >= p.max_hp * 0.5 - 1, "hp %d of %d" % [p.hp, p.max_hp])
+	p.wind_cd = 60.0
+	check("Second Wind is limited to once a minute", p.wind_cd > 0.0)
+	p.learn_special("phoenix")
+	p.invuln = 0.0
+	p.hp = 1
+	p.take_hit(5, Vector2.LEFT)
+	check("Phoenix: a deadly hit brings you back with 60% HP", p.hp == roundi(p.max_hp * 0.6) and p.phoenix_used)
+	p.invuln = 0.0
+	p.hp = 1
+	p.take_hit(5, Vector2.LEFT)
+	check("Phoenix works only once", p.hp <= 0)
+	await fresh()
+	p = main.player
+	p.choose_line(10)
+	await clear_enemies()
+	main.elapsed = 10.0
+	p.global_position = at(8, 8)
+	p.learn_special("cleave")
+	var c1 = mk(p.global_position + Vector2(25, 0), 0, 3)
+	var c2 = mk(p.global_position + Vector2(-25, 0), 0, 3)
+	var c3 = mk(p.global_position + Vector2(0, 25), 0, 3)
+	for c in [c1, c2, c3]:
+		c.max_hp = 100
+		c.hp = 100
+	p.on_bite_landed(c1, 3)
+	check("Cleave: a bite also hits other villagers nearby", c2.hp < 100 and c3.hp < 100 and c1.hp == 100)
+	await clear_enemies()
+	p.global_position = at(8, 8)
+	p.learn_special("gravity")
+	var far_pull = mk(p.global_position + Vector2(120, 0), 0, 3)
+	far_pull.apply_status("root", 10.0)
+	var pull_d0: float = far_pull.global_position.distance_to(p.global_position)
+	await frames(60)
+	check("Gravity Maw: pulls villagers in even when they cannot walk", far_pull.global_position.distance_to(p.global_position) < pull_d0 - 15.0)
+	await clear_enemies()
+	var reach0: float = float(p.stages[p.stage]["range"])
+	p.learn_special("titan")
+	var titan_target = mk(p.global_position + Vector2(reach0 + 8.0, 0), 0, 3)
+	titan_target.max_hp = 100
+	titan_target.hp = 100
+	titan_target.apply_status("root", 10.0)
+	await frames(30)
+	check("Titan Reach: bites villagers just beyond the normal reach", titan_target.hp < 100)
+	await clear_enemies()
+	main.clock = 30.0  # day
+	var bite_by_day: int = p.effective_bite()
+	p.learn_special("bloodmoon")
+	check("Blood Moon: night strength by day", p.effective_bite() > bite_by_day and p._power() >= 1.5)
+	p.learn("nova")
+	p.learn_special("stormcaller")
+	p.ab_cd.clear()
+	p.cast("nova")
+	check("Stormcaller: automatic skills recharge faster", p.skill_cd["nova"] < 8.0 * 0.7, "%.1f" % p.skill_cd["nova"])
+	p.learn("hide")
+	p.learn("fangs")
+	var hide_rank: int = p.rank("hide")
+	var fangs_rank: int = p.rank("fangs")
+	p.learn_special("mastery")
+	check("Mastery: every skill you own gains a rank", p.rank("hide") == hide_rank + 1 and p.rank("fangs") == fangs_rank + 1 and p.rank("nova") == 2)
+	var bones_pre: int = main.bones
+	var tower_cost_pre: int = main.build_cost("tower", Vector2i(30, 30))
+	p.learn_special("bonehoard")
+	main._on_villager_defeated(4, 3, true)
+	check("Bone Hoard: double bones", main.bones - bones_pre >= 6, str(main.bones - bones_pre))
+	check("Bone Hoard: 30% cheaper towers and walls",
+			main.build_cost("tower", Vector2i(30, 30)) == roundi(tower_cost_pre * 0.7) and main.build_cost("wall", Vector2i(30, 30)) < main.WALL_COST)
+	var specials_before: int = p.specials.size()
+	p.learn_special("cleave")
+	check("a special cannot be taken twice", p.specials.size() == specials_before)
 
 	# =========================== skills ===========================
 	await fresh()
@@ -872,12 +1031,408 @@ func _init() -> void:
 	await frames(90)
 	check("villagers attack towers", not is_instance_valid(tower) or tower.hp < thp)
 
+	# =========================== status effects ===========================
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	main.elapsed = 10.0  # gentle start: far villagers do not notice 小怪
+	p.global_position = at(8, 8)
+	var far_spot := at(60, 60)
+	var sv = mk(far_spot, 4, 4)
+	sv.max_hp = 200
+	sv.hp = 200
+	var start_hp: int = sv.hp
+	sv.apply_status("burn", 3.5)
+	await frames(130)
+	check("burn hurts once a second", start_hp - sv.hp >= 2 and start_hp - sv.hp <= 3, "lost %d" % (start_hp - sv.hp))
+	await frames(100)
+	check("a status wears off", not sv.has_status("burn"))
+	start_hp = sv.hp
+	sv.apply_status("poison", 5.0)
+	sv.apply_status("poison", 5.0)
+	sv.apply_status("poison", 5.0)
+	sv.apply_status("poison", 5.0)
+	check("poison stacks up to 3", sv.poison_stacks == 3)
+	await frames(70)
+	check("poison hurts once per stack each second", start_hp - sv.hp >= 3, "lost %d" % (start_hp - sv.hp))
+	sv.statuses.clear()
+	sv.poison_stacks = 0
+	start_hp = sv.hp
+	sv.apply_status("bleed", 3.5)
+	await frames(70)
+	check("bleed hurts once a second", start_hp - sv.hp >= 1)
+	sv.statuses.clear()
+	var base_speed: float = sv.effective_speed()
+	sv.apply_status("chill", 3.0)
+	check("chill slows to 65% speed", is_equal_approx(sv.effective_speed(), base_speed * 0.65))
+	sv.statuses.clear()
+	check("a villager can be frozen", sv.apply_status("freeze", 5.0) and sv.has_status("freeze"))
+	check("a freeze lasts at most 1.2 s", sv.statuses["freeze"] <= 1.2)
+	check("it cannot be frozen again right away", not sv.apply_status("freeze", 1.0))
+	var boss_v = mk(far_spot + Vector2(200, 0), 4, 4, 0)
+	check("hidden forms resist freeze, root and charm",
+			not boss_v.apply_status("freeze", 1.0) and not boss_v.apply_status("root", 1.0) and not boss_v.apply_status("charm", 1.0))
+	check("but they can burn", boss_v.apply_status("burn", 1.0))
+	boss_v.queue_free()
+	sv.statuses.clear()
+	sv.freeze_immune = 0.0
+	var hp_pre: int = sv.hp
+	sv.take_hit(10, Vector2.RIGHT)
+	var dmg_plain: int = hp_pre - sv.hp
+	sv.apply_status("curse", 5.0)
+	hp_pre = sv.hp
+	sv.take_hit(10, Vector2.RIGHT)
+	check("curse makes a villager take +50% damage", dmg_plain == 10 and hp_pre - sv.hp == 15, "%d then %d" % [dmg_plain, hp_pre - sv.hp])
+	sv.statuses.clear()
+	var near_mate = mk(far_spot + Vector2(60, 0), 4, 4)
+	near_mate.max_hp = 500
+	near_mate.hp = 500
+	sv.apply_status("shock", 30.0)
+	var mate_hp: int = near_mate.hp
+	sv.hp = 200
+	for i in 80:
+		sv.take_hit(1, Vector2.RIGHT)
+	check("shock passes some damage to the nearest villager", near_mate.hp < mate_hp, "%d -> %d" % [mate_hp, near_mate.hp])
+	near_mate.queue_free()
+	sv.queue_free()
+
+	# root and charm
+	await clear_enemies()
+	p.global_position = at(8, 8)
+	var free_one = mk(p.global_position + Vector2(300, 0), 0, 3)
+	var rooted_one = mk(p.global_position + Vector2(0, 300), 0, 3)
+	rooted_one.apply_status("root", 5.0)
+	var free_d0: float = free_one.global_position.distance_to(p.global_position)
+	var root_d0: float = rooted_one.global_position.distance_to(p.global_position)
+	await frames(60)
+	check("a free villager walks toward 小怪", free_one.global_position.distance_to(p.global_position) < free_d0 - 10.0)
+	check("a rooted villager cannot move", absf(rooted_one.global_position.distance_to(p.global_position) - root_d0) < 4.0)
+	free_one.queue_free()
+	rooted_one.queue_free()
+	await clear_enemies()
+	p.global_position = at(8, 8)
+	var charmed = mk(far_spot, 4, 4)
+	var victim_v = mk(far_spot + Vector2(50, 0), 0, 3)
+	victim_v.max_hp = 40
+	victim_v.hp = 40
+	charmed.apply_status("charm", 10.0)
+	var player_hp_before: int = p.hp
+	await frames(200)
+	check("a charmed villager attacks other villagers", not is_instance_valid(victim_v) or victim_v.is_queued_for_deletion() or victim_v.hp < 40)
+	check("and leaves 小怪 alone", p.hp == player_hp_before)
+	await clear_enemies()
+
+	# =========================== family traits and first abilities ===========================
+	var AbilitiesData = main.player.AbilitiesData
+	check("ability rank: none before form 3, then 1, 2, 3 at forms 3, 6, 9",
+			AbilitiesData.rank_for_stage(2) == 0 and AbilitiesData.rank_for_stage(3) == 1
+			and AbilitiesData.rank_for_stage(6) == 2 and AbilitiesData.rank_for_stage(9) == 3)
+	check("8 abilities are built, one per listed line", AbilitiesData.ABILITIES.size() == 8)
+	check("every family has a trait", ["Undead", "Slime", "Dragon", "Beast", "Nature", "Material", "Demon"].all(func(f): return AbilitiesData.FAMILY_TRAITS.has(f)))
+
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	main.elapsed = 10.0
+	p.global_position = at(8, 8)
+	use_line(0, 2)
+	check("no ability before form 3", p.ability().is_empty())
+	use_line(2, 5)
+	check("lines without a built ability have none", p.ability().is_empty())
+
+	# Undead: heal at night
+	use_line(0, 1)
+	main.clock = 90.0
+	p.hp = p.max_hp - 3
+	var undead_hp: int = p.hp
+	await frames(140)
+	check("Undead: heals 1 HP per second at night", p.hp >= undead_hp + 2, "%d -> %d" % [undead_hp, p.hp])
+	main.clock = 30.0
+	p.hp = p.max_hp - 3
+	undead_hp = p.hp
+	await frames(140)
+	check("Undead: no healing by day", p.hp == undead_hp)
+
+	# Slime: a blob when hit
+	use_line(7, 1)
+	var blob_target = mk(p.global_position + Vector2(100, 0), 0, 3)
+	p.invuln = 0.0
+	p.take_hit(2, Vector2.LEFT)
+	await frames(3)
+	check("Slime: damage taken splits off a blob", bolts().any(func(b): return b.team == "player"))
+	blob_target.queue_free()
+	await clear_enemies()
+
+	# Dragon: spark
+	use_line(10, 1)
+	p.spark_chance = 1.0
+	var d1 = mk(p.global_position + Vector2(40, 0), 0, 3)
+	var d2 = mk(p.global_position + Vector2(-40, 0), 0, 3)
+	d1.max_hp = 50
+	d1.hp = 50
+	d2.max_hp = 50
+	d2.hp = 50
+	p.on_bite_landed(d1, 3)
+	check("Dragon: a bite can spark onto a second villager", d2.hp < 50 and d1.hp == 50)
+	p.spark_chance = 0.15
+	await clear_enemies()
+
+	# Beast: speed
+	use_line(14, 1)
+	main.clock = 30.0
+	check("Beast: +10% speed by day", is_equal_approx(p.trait_speed(), 1.10))
+	main.clock = 90.0
+	use_line(15, 1)
+	check("Beast: +25% speed at night", is_equal_approx(p.trait_speed(), 1.25))
+
+	# Nature: regenerate standing still
+	use_line(18, 1)
+	p.hp = p.max_hp - 3
+	var nature_hp: int = p.hp
+	await frames(260)
+	check("Nature: regenerates while standing still", p.hp > nature_hp, "%d -> %d" % [nature_hp, p.hp])
+
+	# Material: less damage per hit
+	use_line(21, 1)
+	check("Material: every hit does 1 less (never below 1)", p.reduce_damage(3) == 2 and p.reduce_damage(1) == 1)
+
+	# Demon: extra bone per kill
+	use_line(22, 1)
+	var bones_before_demon: int = main.bones
+	main._on_villager_defeated(4, 1, true)
+	check("Demon: a kill drops 1 extra bone", main.bones - bones_before_demon == 2, str(main.bones - bones_before_demon))
+
+	# --- the 8 abilities ---
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	main.elapsed = 10.0
+	p.global_position = at(8, 8)
+
+	use_line(0, 3)
+	p.hp = 1
+	var drain_target = mk(p.global_position + Vector2(30, 0), 0, 3)
+	p.on_bite_landed(drain_target, 3)
+	check("Blood Drain: a bite heals you", p.hp > 1)
+	use_line(0, 9)
+	var mist_target = mk(p.global_position + Vector2(40, 0), 0, 3)
+	mist_target.max_hp = 100
+	mist_target.hp = 100
+	mist_target.global_position = p.global_position + Vector2(40, 0)
+	check("Blood Drain rank 3: the red mist makes nearby villagers bleed", p.crimson_mist() >= 1 and mist_target.has_status("bleed"))
+	mist_target.global_position = p.global_position + Vector2(200, 0)
+	mist_target.statuses.clear()
+	p.crimson_mist()
+	check("the mist is short range", not mist_target.has_status("bleed"))
+	await clear_enemies()
+
+	use_line(1, 3)
+	var crowd2: Array = []
+	for i in 3:
+		crowd2.append(mk(p.global_position + Vector2(120 + 15 * i, 20 * i - 20), 0, 3))
+		crowd2[i].max_hp = 300
+		crowd2[i].hp = 300
+	await frames(6)
+	check("Bone Servants: 2 skeletons rise when villagers crowd near", get_nodes_in_group("allies").size() == 2, str(get_nodes_in_group("allies").size()))
+	check("Bone Servants has a cooldown", p.ab_cd["bone_servants"] > 0.0)
+	var crowd_hp: int = crowd2.map(func(c): return c.hp).reduce(func(a, b): return a + b, 0)
+	await frames(200)
+	check("the skeletons bite villagers", crowd2.map(func(c): return c.hp if is_instance_valid(c) else 0).reduce(func(a, b): return a + b, 0) < crowd_hp)
+	await clear_enemies()
+	for h in get_nodes_in_group("allies"):
+		h.queue_free()
+	await frames(3)
+	use_line(1, 9)
+	p.ab_cd.clear()
+	for i in 3:
+		var cc = mk(p.global_position + Vector2(120 + 15 * i, 20 * i - 20), 0, 3)
+		cc.max_hp = 300
+		cc.hp = 300
+	await frames(6)
+	check("Bone Servants rank 3: 4 skeletons", get_nodes_in_group("allies").size() == 4, str(get_nodes_in_group("allies").size()))
+	await clear_enemies()
+	for h in get_nodes_in_group("allies"):
+		h.queue_free()
+	await frames(3)
+
+	use_line(6, 3)
+	p.invuln = 0.0
+	key(KEY_D, true)
+	key(KEY_SHIFT, true)
+	await frames(40)
+	key(KEY_SHIFT, false)
+	key(KEY_D, false)
+	var pools: Array = main.get_children().filter(func(c): return c.get_script() == main.PlayerScript.PoolScript)
+	check("Molten Trail: sprinting leaves goo behind", pools.size() >= 2, str(pools.size()))
+	p.global_position = at(8, 8)
+	var goo_target = mk(p.global_position + Vector2(200, 0), 0, 3)
+	goo_target.max_hp = 100
+	goo_target.hp = 100
+	goo_target.apply_status("root", 5.0)  # keep it standing in the goo
+	p.global_position = goo_target.global_position  # drop the goo right under the villager
+	p._drop_pool(1)
+	p.global_position = at(8, 8)
+	await frames(50)
+	check("Molten Trail: villagers in the goo burn", goo_target.has_status("burn"))
+	await clear_enemies()
+	p.global_position = at(8, 8)
+
+	use_line(10, 3)
+	var flame = mk(p.global_position + Vector2(120, 0), 0, 3)
+	flame.max_hp = 60
+	flame.hp = 60
+	var side = mk(p.global_position + Vector2(50, 60), 0, 3)
+	side.max_hp = 60
+	side.hp = 60
+	check("Fire Breath: a narrow cone hits ahead, not the side", p.breathe(Vector2.RIGHT, 0.5, "burn") >= 1 and flame.hp < 60 and side.hp == 60)
+	check("Fire Breath burns what it hits", flame.has_status("burn"))
+	check("rank 3 is wider: it also catches the side", p.breathe(Vector2.RIGHT, 1.0, "burn") >= 2 and side.hp < 60)
+	await clear_enemies()
+	p.ab_cd.clear()
+	var auto_fire = mk(p.global_position + Vector2(150, 0), 0, 3)
+	auto_fire.max_hp = 200
+	auto_fire.hp = 200
+	await frames(5)
+	check("Fire Breath fires by itself and then cools down", p.ab_cd["fire_breath"] > 4.0)
+	await clear_enemies()
+
+	use_line(14, 3)
+	main.clock = 90.0
+	check("Pack Howl: +40% speed at night on top of the Beast trait", is_equal_approx(p.trait_speed(), 1.65))
+	var bite_target = mk(p.global_position + Vector2(30, 0), 0, 3)
+	bite_target.max_hp = 100
+	bite_target.hp = 100
+	p.on_bite_landed(bite_target, 2)
+	check("Pack Howl: night bites make villagers bleed", bite_target.has_status("bleed"))
+	main.clock = 30.0
+	bite_target.statuses.clear()
+	p.on_bite_landed(bite_target, 2)
+	check("Pack Howl: no bleeding by day", not bite_target.has_status("bleed"))
+	await clear_enemies()
+	use_line(14, 9)
+	main.clock = 90.0
+	var howl_target = mk(p.global_position + Vector2(200, 0), 0, 3)
+	howl_target.max_hp = 300
+	howl_target.hp = 300
+	p.ab_cd.clear()
+	await frames(6)
+	check("Pack Howl rank 3: two wolf pups come at night", get_nodes_in_group("allies").size() == 2 and get_nodes_in_group("allies")[0].kind == "wolf")
+	await clear_enemies()
+	for h in get_nodes_in_group("allies"):
+		h.queue_free()
+	await frames(3)
+
+	use_line(17, 3)
+	var root_target = mk(p.global_position + Vector2(90, 0), 0, 3)
+	root_target.max_hp = 100
+	root_target.hp = 100
+	await frames(150)
+	check("Rooted: standing still roots villagers nearby", root_target.has_status("root"))
+	check("Rooted has a cooldown", p.ab_cd["rooted"] > 0.0)
+	await clear_enemies()
+
+	use_line(20, 3)
+	check("Stone Skin rank 1 with the Material trait: 5 damage becomes 2", p.reduce_damage(5) == 2, str(p.reduce_damage(5)))
+	check("Stone Skin: 10% slower", is_equal_approx(p.trait_speed(), 0.9))
+	use_line(20, 9)
+	check("Stone Skin rank 3: hits are cut by 5 but never below 1", p.reduce_damage(6) == 1 and p.reduce_damage(9) == 4)
+	var quake_target = mk(p.global_position + Vector2(100, 0), 0, 3)
+	quake_target.max_hp = 100
+	quake_target.hp = 100
+	p.ab_cd.clear()
+	await frames(30)
+	check("Stone Skin rank 3: an earthquake stuns nearby villagers", p.ab_cd["stone_skin"] > 0.0 and (quake_target.stun_left > 0.0 or quake_target.hp < 100))
+	await clear_enemies()
+
+	use_line(22, 3)
+	var rain_targets: Array = []
+	for i in 4:
+		var rt = mk(p.global_position + Vector2(150 + 20 * i, -60 + 40 * i), 0, 3)
+		rt.max_hp = 100
+		rt.hp = 100
+		rain_targets.append(rt)
+	p.ab_cd.clear()
+	await frames(5)
+	check("Hellfire Rain: 3 fireballs warn at rank 1", zones().size() == 3, str(zones().size()))
+	await frames(70)
+	check("Hellfire Rain: fireballs burn the villagers", rain_targets.filter(func(t): return t.has_status("burn") or t.hp < 100).size() >= 2)
+	await clear_enemies()
+
+	main._update_hud()
+	check("the screen shows the family trait and ability", main.hud.text.contains("Family trait") and main.hud.text.contains("Hellfire Rain"))
+
+	# =========================== damage numbers ===========================
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	main.elapsed = 10.0
+	p.global_position = at(8, 8)
+	var Pop = p.Popups
+	Pop.active = 0
+	var tv2 = mk(at(60, 60), 4, 4)
+	tv2.max_hp = 900
+	tv2.hp = 900
+	tv2.take_hit(2, Vector2.RIGHT)
+	await frames(2)
+	check("a hit shows how much damage it did", floaters().size() >= 1 and floaters().any(func(f): return f.text == "2"))
+	check("small hits are white", floaters().any(func(f): return f.text == "2" and f.color == Pop.WHITE))
+	tv2.take_hit(9, Vector2.RIGHT)
+	await frames(2)
+	check("big hits (6 or more) are yellow and bigger", floaters().any(func(f): return f.text == "9" and f.color == Pop.BIG and f.font_size >= 20))
+	tv2.take_hit(3, Vector2.RIGHT, true)
+	await frames(2)
+	check("tower damage has its own colour", floaters().any(func(f): return f.text == "3" and f.color == Pop.TOWER))
+	tv2.shield_left = 5.0
+	tv2.take_hit(8, Vector2.RIGHT)
+	await frames(2)
+	check("the number is the damage really dealt (a shield halves it)", floaters().any(func(f): return f.text == "4"))
+	tv2.shield_left = 0.0
+	tv2.apply_status("curse", 5.0)
+	tv2.take_hit(10, Vector2.RIGHT)
+	await frames(2)
+	check("a curse shows the bigger number: 10 becomes 15", floaters().any(func(f): return f.text == "15"))
+	tv2.statuses.clear()
+	tv2.apply_status("burn", 3.0)
+	await frames(75)
+	check("burn damage shows in orange", floaters().any(func(f): return f.text == "1" and f.color == Pop.BURN))
+	p.invuln = 0.0
+	p.take_hit(3, Vector2.LEFT)
+	await frames(2)
+	check("damage to 小怪 shows in red", floaters().any(func(f): return f.text == "3" and f.color == Pop.HURT))
+	check("floating numbers rise", floaters().any(func(f): return f.position.y < at(60, 60).y - 12.0) or floaters().size() > 0)
+	main.bones = 100
+	p.global_position = at(10, 10)
+	main.place_at(Vector2i(14, 10), "wall")
+	main.built[Vector2i(14, 10)].take_hit(4, Vector2.ZERO)
+	await frames(2)
+	check("damage to walls and towers shows too", floaters().any(func(f): return f.text == "4" and f.color == Pop.STRUCTURE))
+	for i in 200:
+		Pop.text(main.get_tree(), at(30, 30), "x")
+	await frames(2)
+	check("there is a cap on how many numbers float at once", floaters().size() <= Pop.MAX_ACTIVE, str(floaters().size()))
+	await frames(90)
+	check("numbers fade away and are removed", floaters().is_empty() and Pop.active == 0, "%d left, active %d" % [floaters().size(), Pop.active])
+	Pop.enabled = false
+	tv2.take_hit(5, Vector2.RIGHT)
+	await frames(2)
+	check("damage numbers can be switched off", floaters().is_empty())
+	Pop.enabled = true
+	await clear_enemies()
+
 	# =========================== sound ===========================
 	await fresh()
 	p = main.player
 	var Sfx = main.Sfx
 	var tree: SceneTree = main.get_tree()
 	await create_timer(1.3).timeout  # the earlier tests played many sounds in a few real seconds; let them end
+	for i in 40:  # wait until most of the 16 sound players are free again
+		var idle := 0
+		for pl in Sfx._pool:
+			if not pl.playing:
+				idle += 1
+		if Sfx._pool.is_empty() or idle >= 12:
+			break
+		await create_timer(0.1).timeout
 	check("there are over 20 sound effects", Sfx.names().size() > 20, "%d" % Sfx.names().size())
 	var bad := ""
 	for n in Sfx.names():
@@ -895,7 +1450,13 @@ func _init() -> void:
 	check("the same sound is not spammed", not Sfx.play(tree, "build"))
 	await create_timer(0.2).timeout  # the spam guard counts real time, and frames here are very fast
 	check("a far-away sound is skipped", not Sfx.play_at(tree, "hit", p.global_position + Vector2(5000, 0)))
-	check("a near sound plays", Sfx.play_at(tree, "hit", p.global_position + Vector2(100, 0)))
+	var free_players := 0
+	for pl in Sfx._pool:
+		if not pl.playing:
+			free_players += 1
+	var near_ok: bool = Sfx.play_at(tree, "hit", p.global_position + Vector2(100, 0))
+	check("a near sound plays", near_ok, "free players %d of %d, enabled %s, last hit %s, now %d" % [
+			free_players, Sfx._pool.size(), str(Sfx.enabled), str(Sfx._last_play.get("hit")), Time.get_ticks_msec()])
 	Sfx.enabled = false
 	check("sound can be switched off", not Sfx.play(tree, "levelup"))
 	Sfx.enabled = true

@@ -96,6 +96,7 @@ var menu_layer: CanvasLayer
 var menu_root: Control
 var menu_open := false
 var menu_queue: Array = []
+var menu_kind := ""  # what the open menu is: "line", "skill" or "special"
 var pause_on_menu := true  # the game stops while a level-up menu is open (tests turn this off)
 
 
@@ -372,12 +373,15 @@ func routes_open() -> bool:
 
 
 func build_cost(kind: String, tile: Vector2i) -> int:
-	if kind == "wall":
-		return WALL_COST
-	var existing = built.get(tile)
-	if existing != null and is_instance_valid(existing) and existing.has_method("upgrade"):
-		return TowerScript.COSTS[mini(existing.level, TowerScript.MAX_LEVEL - 1)]
-	return TowerScript.COSTS[0]
+	var base: int = WALL_COST
+	if kind != "wall":
+		base = TowerScript.COSTS[0]
+		var existing = built.get(tile)
+		if existing != null and is_instance_valid(existing) and existing.has_method("upgrade"):
+			base = TowerScript.COSTS[mini(existing.level, TowerScript.MAX_LEVEL - 1)]
+	if player != null and player.specials.has("bonehoard"):
+		return maxi(1, roundi(base * 0.7))  # Bone Hoard: 30% cheaper
+	return base
 
 
 ## "" if kind (tower or wall) can go on this tile, otherwise the reason it can't.
@@ -641,6 +645,16 @@ func _top_label(layer: CanvasLayer, top: float, size: int, color: Color) -> Labe
 
 ## How many villagers may be alive. Time raises it slowly at first and fastest near 20 minutes,
 ## and every evolution 小怪 goes through adds a big batch more.
+## The EXP curve is built so the final form (level 100) arrives around 16 minutes. A player who
+## falls behind that pace earns up to 60% more EXP from villagers, so slow runs still finish.
+const TARGET_FINAL_SECONDS := 960.0
+
+
+func catchup() -> float:
+	var expected := 100.0 * clampf(elapsed / TARGET_FINAL_SECONDS, 0.0, 1.0)
+	return clampf(1.0 + (expected - player.level) / 40.0, 1.0, 1.6)
+
+
 func target_population() -> int:
 	var f := clampf(elapsed / RAMP_SECONDS, 0.0, 1.0)
 	var by_time := VILLAGER_COUNT + roundi((POP_TIME_END - VILLAGER_COUNT) * f * f)
@@ -683,6 +697,19 @@ func _update_hud() -> void:
 		else:
 			skill_bits.append("%s r%d" % [info["name"], player.skills[id]])
 	var skill_text := "Skills: " + (", ".join(skill_bits) if not skill_bits.is_empty() else "none yet (one every level)")
+	if not player.specials.is_empty():
+		var names: Array[String] = []
+		for sid in player.specials:
+			names.append(SkillsData.SPECIALS[sid]["name"])
+		skill_text += "\nSpecials: " + ", ".join(names)
+	if player.line >= 0:
+		var trait_text: String = player.AbilitiesData.FAMILY_TRAITS[player.family()]
+		var ab: Dictionary = player.ability()
+		skill_text += "\nFamily trait: %s" % trait_text
+		if not ab.is_empty():
+			skill_text += "    Ability: %s (rank %d)" % [ab["name"], ab["rank"]]
+		elif player.AbilitiesData.ABILITIES.has(player.line):
+			skill_text += "    Ability: unlocks at form 3"
 	hud.text = "%s  Lv %d/%d  EXP %s  (%s)  HP %d/%d    %s\nBones %d    Kills %d    Villagers %d/%d    Village Lv %d/5 (%s)\n%s    %s    %s\n%s\n%s\nLeft-click walk (hold to follow)  |  Shift sprint  |  Space roll  |  Right-click lunge  |  1 / 2 pick item  |  E build  |  X remove  |  R restart" % [
 		s["name"], player.level, player.MAX_LEVEL, xp_text, form_text, player.hp, player.max_hp, time_text,
 		bones, kills, alive, target_population(), village_level, VILLAGE_TIERS[village_level - 1],
@@ -703,8 +730,10 @@ func _build_prompt() -> String:
 
 
 func _update_hotbar() -> void:
-	var slots := [["[1] TOWER  %d" % TowerScript.COSTS[0], "tower", TowerScript.COSTS[0]],
-			["[2] BONE WALL  %d" % WALL_COST, "wall", WALL_COST]]
+	var tower_cost := build_cost("tower", Vector2i(-1, -1))
+	var wall_cost := build_cost("wall", Vector2i(-1, -1))
+	var slots := [["[1] TOWER  %d" % tower_cost, "tower", tower_cost],
+			["[2] BONE WALL  %d" % wall_cost, "wall", wall_cost]]
 	for i in 2:
 		var selected: bool = build_item == slots[i][1]
 		hotbar[i].text = ("▶ " if selected else "   ") + slots[i][0]
@@ -718,9 +747,14 @@ func _update_hotbar() -> void:
 
 # --- level-ups, evolution lines and skills ---
 
-func _on_leveled(_level: int) -> void:
+## Every level gets the sound and the ring; a normal skill pick comes every 3rd level and a
+## special skill pick every 12th (12, 24, 36 ... 96).
+func _on_leveled(new_level: int) -> void:
 	Sfx.play(get_tree(), "levelup")
-	menu_queue.append({"type": "skill"})
+	if new_level % player.SKILL_EVERY == 0:
+		menu_queue.append({"type": "skill"})
+	if new_level % player.SPECIAL_EVERY == 0:
+		menu_queue.append({"type": "special"})
 	_next_menu()
 
 
@@ -733,11 +767,23 @@ func _next_menu() -> void:
 	if menu_open or menu_queue.is_empty():
 		return
 	var item: Dictionary = menu_queue.pop_front()
+	menu_kind = item["type"]
 	if item["type"] == "line":
 		var entries: Array[String] = []
 		for i in LinesData.LINES.size():
-			entries.append("%d. %s  [%s]" % [i + 1, LinesData.title(i), LinesData.LINES[i]["family"]])
-		_open_menu("FIRST EVOLUTION: choose your evolution line", entries, pick_line, 2, 440)
+			var soon := "" if LinesData.released(i) else "   (coming soon)"
+			entries.append("%d. %s  [%s]%s" % [i + 1, LinesData.title(i), LinesData.LINES[i]["family"], soon])
+		_open_menu("FIRST EVOLUTION: choose your evolution line", entries, func(i): if LinesData.released(i): pick_line(i), 2, 440)
+	elif item["type"] == "special":
+		var specials := SkillsData.roll_specials(player.specials, rng, 3)
+		if specials.is_empty():
+			_next_menu()
+			return
+		var special_entries: Array[String] = []
+		for id in specials:
+			var info: Dictionary = SkillsData.SPECIALS[id]
+			special_entries.append("%d. %s\n    %s" % [special_entries.size() + 1, info["name"], info["desc"]])
+		_open_menu("LEVEL %d: choose a SPECIAL skill" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620)
 	else:
 		var options := SkillsData.roll(player.skills, rng, 3)
 		if options.is_empty():
@@ -818,6 +864,13 @@ func pick_skill(id: String) -> void:
 	_next_menu()
 
 
+## The special-skill menu (every 12th level, or tests) picks a special.
+func pick_special(id: String) -> void:
+	_close_menu()
+	player.learn_special(id)
+	_next_menu()
+
+
 # --- events ---
 
 func _on_hp_changed(_hp: int) -> void:
@@ -828,9 +881,11 @@ func _on_villager_defeated(xp: int, bones_gain: int, by_tower: bool) -> void:
 	kills += 1
 	Sfx.play(get_tree(), "coin", -6.0)
 	village_level = mini(VILLAGE_TIERS.size(), 1 + int(kills / float(KILLS_PER_VILLAGE_LEVEL)))
-	bones += roundi(bones_gain * (1.0 + 0.25 * player.rank("greed")))
+	bones += roundi(bones_gain * (1.0 + 0.25 * player.rank("greed")) * (2.0 if player.specials.has("bonehoard") else 1.0))
+	if player.family() == "Demon":
+		bones += 1  # Demon trait: every kill drops an extra bone
 	if not by_tower:
-		player.add_xp(xp)
+		player.add_xp(roundi(xp * catchup()))
 		player.on_kill()
 
 

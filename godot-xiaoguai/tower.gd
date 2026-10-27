@@ -3,6 +3,8 @@ extends StaticBody2D
 ## Build on it again (E with the cursor over it) to upgrade. Kills made by towers give
 ## bones but no EXP.
 
+const Popups := preload("res://popups.gd")
+
 signal destroyed(tile: Vector2i)
 
 const MAX_LEVEL := 3
@@ -58,6 +60,7 @@ func _physics_process(delta: float) -> void:
 
 func take_hit(dmg: int, _dir: Vector2) -> void:
 	hp -= dmg
+	Popups.damage(get_tree(), global_position + Vector2(0, -26), dmg, Popups.STRUCTURE)
 	if hp <= 0:
 		destroyed.emit(tile)
 		queue_free()

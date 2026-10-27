@@ -1,0 +1,17 @@
+{
+ "_doc": "Night-time palette swap for the Xiao Guai HD-2D art. Every key of palette.js maps to another key of palette.js: darker and cooler, one step down its ramp (greens also lean teal, earth leans purple, water deepens). Apply it per pixel (map[key]) to any sprite to get the night version; in Godot use a palette-swap shader / a second texture built by tools/export_png.py (it writes <name>_night.png for the tiles listed in 'night_sprites'). The same table is used by preview.html.",
+ "night_sprites": ["grass_1", "grass_2", "grass_3", "mud", "stone_path", "tile_water"],
+ "map": {
+  "K": "K", "J": "K", "S": "J", "s": "S", "t": "s", "T": "t",
+  "U": "K", "P": "U", "p": "P", "q": "p",
+  "B": "S", "b": "B", "C": "b", "c": "C",
+  "R": "K", "r": "R", "e": "r", "o": "e", "y": "o", "Y": "y", "W": "Y",
+  "L": "K", "G": "L", "g": "G", "h": "g", "H": "h",
+  "D": "K", "d": "D", "w": "d", "x": "w",
+  "z": "d", "Z": "z", "k": "Z",
+  "A": "J", "a": "A", "l": "a", "I": "l",
+  "F": "A", "f": "F",
+  "M": "R", "m": "M",
+  "1": "L", "2": "1", "3": "2"
+ }
+}

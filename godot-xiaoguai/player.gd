@@ -9,16 +9,23 @@ const SkillsData := preload("res://skills.gd")
 const BoltScript := preload("res://bolt.gd")
 const ZoneScript := preload("res://zone.gd")
 const Sfx := preload("res://sfx.gd")
+const Popups := preload("res://popups.gd")
+const AbilitiesData := preload("res://abilities.gd")
+const PoolScript := preload("res://pool.gd")
+const BreathScript := preload("res://breath.gd")
+const HelperScript := preload("res://helper.gd")
 
 signal hp_changed(hp: int)
 signal died
 signal xp_changed
-signal leveled(level: int)    ## a new level: time to pick a skill
-signal line_needed            ## level 5 reached: pick the evolution line
+signal leveled(level: int)    ## a new level (a skill pick comes every 3rd, a special every 12th)
+signal line_needed            ## level 10 reached: pick the evolution line
 signal evolved(stage: int)
 
-const MAX_LEVEL := 50
-const EVOLVE_EVERY := 5
+const MAX_LEVEL := 100
+const EVOLVE_EVERY := 10      ## a new form every 10 levels; the first one (level 10) picks the line
+const SKILL_EVERY := 3        ## a normal skill pick every 3 levels
+const SPECIAL_EVERY := 12     ## a special skill pick every 12 levels (12, 24 ... 96)
 const LAST_STAGE := 10        ## stage 0 is Xiao Guai; stages 1 to 10 are the line's 10 forms
 
 const SPEED := 130.0
@@ -52,6 +59,16 @@ var skills := {}               ## skill id -> rank
 var skill_cd := {}             ## active skill id -> seconds left
 var slow_left := 0.0           ## hit by a mud ball
 var level_flash := 0.0         ## a ring that pops out on every level-up
+var specials := {}             ## special skills picked every 12 levels: id -> true
+var phoenix_used := false
+var wind_cd := 0.0             ## Second Wind cooldown
+var ab_cd := {}                ## signature ability cooldowns
+var still_time := 0.0          ## seconds spent standing still (Rooted, Nature regeneration)
+var trait_t := 0.0
+var nature_t := 0.0
+var trail_t := 0.0
+var mist_t := 0.0
+var spark_chance := 0.15       ## Dragon family: chance that a bite also sparks onto a second villager
 var max_hp := 5
 var hp := 5
 var body_radius := 8.0
@@ -83,19 +100,32 @@ func _init() -> void:
 ## He grows 4% bigger with every level inside a form (up to 16%), so you can see him grow.
 func growth_scale() -> float:
 	var into_form := (level - stage * EVOLVE_EVERY) if stage > 0 else (level - 1)
-	return 1.0 + 0.04 * clampi(into_form, 0, EVOLVE_EVERY - 1)
+	return 1.0 + 0.025 * clampi(into_form, 0, EVOLVE_EVERY - 1)
 
 
-## XP needed in total to reach level l. The curve is gentle at the start (level 5 takes
-## about a minute or two) and gets steep in the middle game: the last levels, and so the
-## final form with its strongest skill, take far more than the first ones.
+## The EXP curve: total EXP to reach level l is xp_coef * (l - 1) ^ xp_pow, then the part above
+## the middle level (50) is multiplied by xp_late_scale, so the first half is quick and the
+## second half slow. xp_scale scales everything. The pacing simulation (tests/pacing_sim.gd)
+## sets these to hit the target: the final form (level 100) around 15 to 16 minutes.
+static var xp_coef := 0.8
+static var xp_pow := 2.35
+static var xp_scale := 1.0
+static var xp_late_scale := 1.0
+const MIDDLE_LEVEL := 50
+
+
+## XP needed in total to reach level l.
 static func xp_for_level(l: int) -> int:
 	if l <= 1:
 		return 0
-	return roundi(2.2 * pow(l - 1, 2.35))
+	var cost := xp_coef * pow(l - 1, xp_pow) * xp_scale
+	if l > MIDDLE_LEVEL:
+		var at_middle := xp_coef * pow(MIDDLE_LEVEL - 1, xp_pow) * xp_scale
+		cost = at_middle + (cost - at_middle) * xp_late_scale
+	return roundi(cost)
 
 
-## The stage a level belongs to: Xiao Guai before level 5, then a new form every 5 levels.
+## The stage a level belongs to: Xiao Guai before level 10, then a new form every 10 levels.
 static func stage_for_level(l: int) -> int:
 	if l < EVOLVE_EVERY:
 		return 0
@@ -137,7 +167,7 @@ func rank(id: String) -> int:
 
 func _apply_stage(heal: bool) -> void:
 	var s: Dictionary = stages[stage]
-	max_hp = roundi(int(s["hp"]) * (1.0 + 0.2 * rank("hide")))
+	max_hp = roundi(int(s["hp"]) * (1.0 + 0.2 * rank("hide")) * (1.5 if specials.has("ironwill") else 1.0))
 	body_radius = 8.0 * s["scale"]
 	circle.radius = body_radius
 	if heal:
@@ -199,12 +229,27 @@ func learn(id: String) -> void:
 		hp_changed.emit(hp)
 
 
+## Take a special skill (the 12th-level pick). One of each, never twice.
+func learn_special(id: String) -> void:
+	if not SkillsData.SPECIALS.has(id) or specials.has(id):
+		return
+	specials[id] = true
+	if id == "ironwill":
+		_apply_stage(true)
+	elif id == "mastery":
+		for sid in skills.keys():
+			skills[sid] = mini(int(skills[sid]) + 1, int(SkillsData.SKILLS[sid]["max"]))
+		_apply_stage(false)
+		hp_changed.emit(hp)
+
+
 ## Called when a villager 小怪 fought is defeated (not a tower kill).
 func on_kill() -> void:
 	var drain := rank("drain")
 	if drain > 0 and hp > 0:
 		hp = mini(max_hp, hp + drain)
 		hp_changed.emit(hp)
+		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "+%d" % drain, Popups.HEAL, 13)
 
 
 func _physics_process(delta: float) -> void:
@@ -255,6 +300,7 @@ func _physics_process(delta: float) -> void:
 	_update_sprint(delta, dir != Vector2.ZERO)
 	var speed_mult: float = stages[stage]["speed"] * (1.0 + (_power() - 1.0) * 0.4)
 	speed_mult *= 1.0 + 0.08 * rank("paws")
+	speed_mult *= trait_speed()
 	if slow_left > 0.0:
 		speed_mult *= 0.5
 	if roll_left > 0.0:
@@ -269,9 +315,15 @@ func _physics_process(delta: float) -> void:
 	velocity += knock
 	move_and_slide()
 
+	if dir == Vector2.ZERO and not busy and knock.length() < 10.0:
+		still_time += delta
+	else:
+		still_time = 0.0
+
 	if bite_cd == 0.0:
 		_auto_bite()
 	_update_skills(delta)
+	_update_ability(delta)
 
 	modulate.a = 0.4 if invuln > 0.0 and roll_left == 0.0 and int(invuln * 20.0) % 2 == 0 else 1.0
 	queue_redraw()
@@ -280,13 +332,17 @@ func _physics_process(delta: float) -> void:
 ## Nights make him stronger (the level decides how much): bite damage and speed.
 func _power() -> float:
 	var level_node = get_parent()
+	var p := 1.0
 	if level_node.has_method("player_power"):
-		return level_node.player_power()
-	return 1.0
+		p = level_node.player_power()
+	if specials.has("bloodmoon"):
+		p = maxf(p, 1.5)  # Blood Moon: night strength all day
+	return p
 
 
 func effective_bite() -> int:
-	return ceili(int(stages[stage]["bite"]) * _power() * (1.0 + 0.25 * rank("fangs")))
+	var overdrive := 1.4 if specials.has("overdrive") else 1.0
+	return ceili(int(stages[stage]["bite"]) * _power() * (1.0 + 0.25 * rank("fangs")) * overdrive)
 
 
 ## Mud and other terrain can slow him down; the level decides.
@@ -332,7 +388,7 @@ func _lunge_strike() -> void:
 func _auto_bite() -> void:
 	var s: Dictionary = stages[stage]
 	var target = null
-	var best: float = s["range"]
+	var best: float = float(s["range"]) * (1.3 if specials.has("titan") else 1.0)
 	for e in get_tree().get_nodes_in_group("enemies"):
 		var d: float = e.global_position.distance_to(global_position)
 		if d <= best:
@@ -340,12 +396,273 @@ func _auto_bite() -> void:
 			target = e
 	if target == null:
 		return
-	bite_cd = float(s["cd"]) * (1.0 - 0.1 * rank("jaws"))
+	bite_cd = float(s["cd"]) * (1.0 - 0.1 * rank("jaws")) * (0.75 if specials.has("frenzy") else 1.0)
 	bite_flash = 0.12
 	bite_dir = (target.global_position - global_position).normalized()
 	Sfx.play(get_tree(), "bite", -9.0)
-	target.take_hit(effective_bite(), bite_dir)
+	var bite := effective_bite()
+	target.take_hit(bite, bite_dir)
+	on_bite_landed(target, bite)
 	add_xp(1)
+
+
+# --- family traits and the line's signature ability ---
+
+func family() -> String:
+	return LinesData.LINES[line]["family"] if line >= 0 else ""
+
+
+## {id, name, rank} of the signature ability unlocked right now, or {} (before form 3, or no
+## ability built for this line yet).
+func ability() -> Dictionary:
+	if line < 0 or not AbilitiesData.ABILITIES.has(line):
+		return {}
+	var r := AbilitiesData.rank_for_stage(stage)
+	if r == 0:
+		return {}
+	var a: Dictionary = AbilitiesData.ABILITIES[line]
+	return {"id": a["id"], "name": a["name"], "rank": r}
+
+
+func _night() -> bool:
+	var level_node = get_parent()
+	return level_node != null and level_node.has_method("is_night") and level_node.is_night()
+
+
+## Speed bonuses and penalties from the family and the ability, added together.
+func trait_speed() -> float:
+	var bonus := 0.0
+	if family() == "Beast":
+		bonus += 0.25 if _night() else 0.10
+	var ab := ability()
+	if not ab.is_empty():
+		if ab["id"] == "pack_howl" and _night():
+			bonus += 0.40
+		if ab["id"] == "stone_skin":
+			bonus -= 0.10
+	return 1.0 + bonus
+
+
+## Material shells and Stone Skin take damage off every hit (never below 1).
+func reduce_damage(dmg: int) -> int:
+	var cut := 0
+	if family() == "Material":
+		cut += 1
+	var ab := ability()
+	if not ab.is_empty() and ab["id"] == "stone_skin":
+		cut += 1 + int(ab["rank"])  # 2, 3, 4
+	return maxi(1, dmg - cut)
+
+
+func _nearest_enemy(radius: float):
+	var best = null
+	var best_d := radius
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e.is_queued_for_deletion():
+			continue
+		var d: float = e.global_position.distance_to(global_position)
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
+
+
+func _slime_blob(taken: int) -> void:
+	var foe = _nearest_enemy(300.0)
+	if foe == null:
+		return
+	var b = BoltScript.new()
+	b.position = global_position
+	b.dir = (foe.global_position - global_position).normalized()
+	b.speed = 260.0
+	b.damage = maxi(1, ceili(taken * 0.2))
+	b.team = "player"
+	b.color = Color("7ad0ff")
+	b.source = self
+	_add_to_level(b)
+
+
+func _spawn_helper(kind: String, life: float, dmg: int) -> void:
+	var h = HelperScript.new()
+	h.kind = kind
+	h.life = life
+	h.damage = dmg
+	h.position = global_position + Vector2(randf_range(-24.0, 24.0), randf_range(-24.0, 24.0))
+	_add_to_level(h)
+
+
+## Called after every bite: lifesteal, bleeding bites and the Dragon spark.
+func on_bite_landed(target, dmg: int) -> void:
+	if specials.has("cleave"):
+		var extra := 0
+		for e in _enemies_within(float(stages[stage]["range"]) * (1.3 if specials.has("titan") else 1.0)):
+			if e != target and is_instance_valid(e) and not e.is_queued_for_deletion() and extra < 2:
+				extra += 1
+				e.take_hit(dmg, (e.global_position - global_position).normalized())
+	var ab := ability()
+	if not ab.is_empty() and ab["id"] == "blood_drain":
+		var frac: float = [0.10, 0.15, 0.20][int(ab["rank"]) - 1]
+		var healed := maxi(1, roundi(dmg * frac))
+		hp = mini(max_hp, hp + healed)
+		hp_changed.emit(hp)
+		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "+%d" % healed, Popups.HEAL, 13)
+	if not ab.is_empty() and ab["id"] == "pack_howl" and _night() and is_instance_valid(target):
+		target.apply_status("bleed", 4.0)
+	if family() == "Dragon" and randf() < spark_chance:
+		for e in _enemies_within(float(stages[stage]["range"]) + 40.0):
+			if e != target and is_instance_valid(e) and not e.is_queued_for_deletion():
+				e.take_hit(dmg, (e.global_position - global_position).normalized())
+				break
+
+
+## Blood Drain rank 3: a red mist makes every villager within 70 px bleed. Returns how many.
+func crimson_mist() -> int:
+	var caught := _enemies_within(70.0)
+	for e in caught:
+		e.apply_status("bleed", 3.0)
+	return caught.size()
+
+
+func _cd(id: String) -> float:
+	return float(ab_cd.get(id, 0.0))
+
+
+## A cone of fire at a villager: damage, a burn, and the picture of it.
+func breathe(to: Vector2, spread: float, status: String) -> int:
+	var dir := to.normalized()
+	var vis = BreathScript.new()
+	vis.position = global_position
+	vis.dir = dir
+	vis.spread = spread
+	vis.length = 170.0
+	_add_to_level(vis)
+	var dmg := ceili(effective_bite() * 1.5)
+	var hit := 0
+	for e in get_tree().get_nodes_in_group("enemies"):
+		var v: Vector2 = e.global_position - global_position
+		if v.length() <= 170.0 and absf(dir.angle_to(v)) <= spread:
+			e.take_hit(dmg, v.normalized())
+			if is_instance_valid(e) and not e.is_queued_for_deletion():
+				e.apply_status(status, 4.0)
+			add_xp(1)
+			hit += 1
+	Sfx.play(get_tree(), "roar", -6.0)
+	return hit
+
+
+func _drop_pool(rank_now: int) -> void:
+	var p = PoolScript.new()
+	p.position = global_position
+	p.radius = 20.0
+	p.life = [4.0, 6.0, 8.0][rank_now - 1]
+	p.status = "burn"
+	p.status_time = 3.0
+	_add_to_level(p)
+
+
+func _player_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color, stun: float = 0.0, status: String = "") -> void:
+	var z = ZoneScript.new()
+	z.position = pos
+	z.radius = rad
+	z.delay = delay
+	z.damage = dmg
+	z.team = "player"
+	z.color = color
+	z.stun = stun
+	z.status = status
+	z.status_time = 3.0
+	z.source = self
+	_add_to_level(z)
+
+
+func _update_ability(delta: float) -> void:
+	for k in ab_cd.keys():
+		ab_cd[k] = maxf(float(ab_cd[k]) - delta, 0.0)
+
+	# special skills that work over time
+	wind_cd = maxf(wind_cd - delta, 0.0)
+	if specials.has("secondwind") and wind_cd == 0.0 and hp > 0 and hp < max_hp * 0.25:
+		wind_cd = 60.0
+		hp = mini(max_hp, hp + roundi(max_hp * 0.5))
+		hp_changed.emit(hp)
+		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "Second Wind!", Popups.HEAL, 16)
+	if specials.has("gravity"):
+		for e in _enemies_within(160.0):
+			e.global_position = e.global_position.move_toward(global_position, 35.0 * delta)
+
+	# family traits, from form 1
+	var fam := family()
+	trait_t += delta
+	if trait_t >= 1.0:
+		trait_t -= 1.0
+		if fam == "Undead" and _night() and hp < max_hp:
+			hp += 1
+			hp_changed.emit(hp)
+	if fam == "Nature":
+		if still_time >= 1.0:
+			nature_t += delta
+			if nature_t >= 3.0:
+				nature_t = 0.0
+				if hp < max_hp:
+					hp += 1
+					hp_changed.emit(hp)
+		else:
+			nature_t = 0.0
+
+	var ab := ability()
+	if ab.is_empty():
+		return
+	var r: int = ab["rank"]
+	match ab["id"]:
+		"blood_drain":
+			if r >= 3:  # Crimson Mist
+				mist_t += delta
+				if mist_t >= 1.0:
+					mist_t = 0.0
+					crimson_mist()
+		"bone_servants":
+			if _cd("bone_servants") == 0.0 and _enemies_within(250.0).size() >= 3:
+				ab_cd["bone_servants"] = 12.0
+				for i in r + 1:  # 2, 3, 4
+					_spawn_helper("skeleton", 10.0, maxi(1, roundi(effective_bite() * 0.5)))
+				Sfx.play(get_tree(), "chime", -3.0)
+		"molten_trail":
+			if sprinting:
+				trail_t += delta
+				if trail_t >= 0.25:
+					trail_t = 0.0
+					_drop_pool(r)
+		"fire_breath":
+			if _cd("fire_breath") == 0.0:
+				var near = _nearest_enemy(220.0)
+				if near != null:
+					ab_cd["fire_breath"] = [8.0, 6.0, 5.0][r - 1]
+					breathe(near.global_position - global_position, 1.0 if r >= 3 else 0.5, "burn")
+		"pack_howl":
+			if r >= 3 and _night() and _cd("pack_howl") == 0.0 and not _enemies_within(300.0).is_empty():
+				ab_cd["pack_howl"] = 20.0
+				for i in 2:
+					_spawn_helper("wolf", 12.0, maxi(1, roundi(effective_bite() * 0.6)))
+		"rooted":
+			if still_time >= 2.0 and _cd("rooted") == 0.0:
+				var caught := _enemies_within(90.0 + 30.0 * r)  # 120, 150, 180
+				if not caught.is_empty():
+					ab_cd["rooted"] = 6.0
+					for e in caught:
+						e.apply_status("root", 2.0)
+						e.hurt(1)
+		"stone_skin":
+			if r >= 3 and _cd("stone_skin") == 0.0 and not _enemies_within(150.0).is_empty():
+				ab_cd["stone_skin"] = 12.0
+				_player_zone(global_position, 110.0, 0.2, ceili(effective_bite() * 2.0), Color("a08060"), 1.0)
+		"hellfire_rain":
+			if _cd("hellfire_rain") == 0.0:
+				var targets := _enemies_within(350.0)
+				if not targets.is_empty():
+					ab_cd["hellfire_rain"] = [10.0, 8.0, 6.0][r - 1]
+					targets.shuffle()
+					for i in mini(r + 2, targets.size()):  # 3, 4, 5 fireballs
+						_player_zone(targets[i].global_position, 40.0, 0.8, ceili(effective_bite() * 2.0), Color(1.0, 0.4, 0.1), 0.0, "burn")
 
 
 # --- auto skills: Bone Nova, Spirit Bolt, Roar trigger on their own; Shadow Step is a dodge ---
@@ -410,7 +727,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			b.position = global_position
 			b.dir = direction
 			b.speed = 380.0
-			b.damage = ceili(effective_bite() * 4.0 * power)
+			b.damage = ceili(effective_bite() * 3.0 * power)
 			b.team = "player"
 			b.color = Color("c9a0ff")
 			b.pierce = true
@@ -446,7 +763,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			_add_to_level(z)
 		_:
 			return false
-	skill_cd[id] = float(SkillsData.SKILLS[id]["cd"]) * (1.0 - 0.1 * (r - 1))
+	skill_cd[id] = float(SkillsData.SKILLS[id]["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
 	Sfx.play(get_tree(), "dodge" if id == "step" else id)  # sounds are named nova, bolt, roar, doom
 	return true
 
@@ -478,12 +795,26 @@ func take_hit(dmg: int, dir: Vector2) -> void:
 		skill_cd["step"] = float(SkillsData.SKILLS["step"]["cd"])
 		blink(-dir if dir != Vector2.ZERO else -facing)
 		Sfx.play(get_tree(), "dodge")
+		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "Dodge!", Popups.HEAL, 16)
 		return
+	dmg = reduce_damage(dmg)
 	hp -= dmg
+	Popups.damage(get_tree(), global_position + Vector2(0, -22.0 * stages[stage]["scale"]), dmg, Popups.HURT)
 	invuln = 0.8
 	knock = dir * 220.0
 	hp_changed.emit(hp)
+	if hp <= 0 and specials.has("phoenix") and not phoenix_used:
+		phoenix_used = true  # Phoenix: one comeback per run
+		hp = roundi(max_hp * 0.6)
+		invuln = 2.0
+		hp_changed.emit(hp)
+		_player_zone(global_position, 160.0, 0.0, ceili(effective_bite() * 5.0), Color("ff8a30"), 1.5)
+		Popups.text(get_tree(), global_position + Vector2(0, -26.0), "Phoenix!", Popups.BIG, 20)
+		Sfx.play(get_tree(), "evolve")
+		return
 	Sfx.play(get_tree(), "death" if hp <= 0 else "hurt")
+	if hp > 0 and family() == "Slime":
+		_slime_blob(dmg)
 	if hp <= 0:
 		died.emit()
 		queue_redraw()
@@ -505,27 +836,35 @@ func _draw() -> void:
 	draw_circle(Vector2(0, 7), 7.0, Color(0, 0, 0, 0.25))
 	if stage >= 10:
 		draw_circle(Vector2.ZERO, 15.0, Color(0.9, 0.1, 0.2, 0.18))
-	# from the 9th form on he wears a cape
-	if stage >= 9:
-		draw_colored_polygon(PackedVector2Array([Vector2(-10, -2), Vector2(10, -2), Vector2(14, 13), Vector2(-14, 13)]), body.darkened(0.6))
-	# body
-	draw_circle(Vector2.ZERO, 9.0, body)
-	draw_circle(Vector2(-2, -3), 4.0, light)
-	# horns
-	draw_colored_polygon(PackedVector2Array([Vector2(-6, -6), Vector2(-3, -6), Vector2(-6, -12)]), Color("f2e6c9"))
-	draw_colored_polygon(PackedVector2Array([Vector2(6, -6), Vector2(3, -6), Vector2(6, -12)]), Color("f2e6c9"))
-	# eyes look where he faces; red from the 5th form on
-	var look := facing * 1.5
-	var eye := Color("ff3030") if stage >= 5 else Color.WHITE
-	var pupil := Color.WHITE if stage >= 5 else Color.BLACK
-	draw_circle(Vector2(-3, -1) + look, 2.2, eye)
-	draw_circle(Vector2(3, -1) + look, 2.2, eye)
-	draw_circle(Vector2(-3, -1) + look * 1.6, 1.0, pupil)
-	draw_circle(Vector2(3, -1) + look * 1.6, 1.0, pupil)
-	# fangs from the 6th form on
-	if stage >= 6:
-		draw_colored_polygon(PackedVector2Array([Vector2(-3, 4), Vector2(-1, 4), Vector2(-2, 7)]), Color.WHITE)
-		draw_colored_polygon(PackedVector2Array([Vector2(1, 4), Vector2(3, 4), Vector2(2, 7)]), Color.WHITE)
+	var art := ""
+	if line >= 0:
+		art = Sprites.hero(LinesData.LINES[line]["forms"], stage)
+	elif stage == 0:
+		art = "xiaoguai_base"
+	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 26.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE):
+		pass
+	else:
+		# from the 9th form on he wears a cape
+		if stage >= 9:
+			draw_colored_polygon(PackedVector2Array([Vector2(-10, -2), Vector2(10, -2), Vector2(14, 13), Vector2(-14, 13)]), body.darkened(0.6))
+		# body
+		draw_circle(Vector2.ZERO, 9.0, body)
+		draw_circle(Vector2(-2, -3), 4.0, light)
+		# horns
+		draw_colored_polygon(PackedVector2Array([Vector2(-6, -6), Vector2(-3, -6), Vector2(-6, -12)]), Color("f2e6c9"))
+		draw_colored_polygon(PackedVector2Array([Vector2(6, -6), Vector2(3, -6), Vector2(6, -12)]), Color("f2e6c9"))
+		# eyes look where he faces; red from the 5th form on
+		var look := facing * 1.5
+		var eye := Color("ff3030") if stage >= 5 else Color.WHITE
+		var pupil := Color.WHITE if stage >= 5 else Color.BLACK
+		draw_circle(Vector2(-3, -1) + look, 2.2, eye)
+		draw_circle(Vector2(3, -1) + look, 2.2, eye)
+		draw_circle(Vector2(-3, -1) + look * 1.6, 1.0, pupil)
+		draw_circle(Vector2(3, -1) + look * 1.6, 1.0, pupil)
+		# fangs from the 6th form on
+		if stage >= 6:
+			draw_colored_polygon(PackedVector2Array([Vector2(-3, 4), Vector2(-1, 4), Vector2(-2, 7)]), Color.WHITE)
+			draw_colored_polygon(PackedVector2Array([Vector2(1, 4), Vector2(3, 4), Vector2(2, 7)]), Color.WHITE)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if level_flash > 0.0:
 		draw_arc(Vector2.ZERO, (14.0 + (0.8 - level_flash) * 40.0) * sc, 0.0, TAU, 32, Color(1, 0.9, 0.4, level_flash), 3.0)

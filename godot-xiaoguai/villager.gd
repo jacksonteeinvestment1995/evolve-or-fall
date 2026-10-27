@@ -12,6 +12,7 @@ signal defeated(xp: int, bones: int, by_tower: bool)
 const BoltScript := preload("res://bolt.gd")
 const ZoneScript := preload("res://zone.gd")
 const Sfx := preload("res://sfx.gd")
+const Popups := preload("res://popups.gd")
 
 const MAX_STAGE := 4          ## each line has 5 forms: stage 0 to 4
 const EVOLVE_AFTER := 45.0    ## seconds alive before a villager moves to its next form
@@ -119,6 +120,10 @@ var cast_color := Color.WHITE
 var flash := 0.0
 var evolve_flash := 0.0
 var knock := Vector2.ZERO
+var statuses := {}            ## status name -> seconds left: burn chill freeze root shock poison bleed charm curse
+var poison_stacks := 0
+var freeze_immune := 0.0     ## after a freeze they cannot be frozen again for a while
+var dot_t := 0.0
 var los := true              ## clear straight line to the target (refreshed a few times a second)
 var path := PackedVector2Array()
 var path_i := 0
@@ -202,7 +207,7 @@ func effective_damage() -> int:
 func effective_speed() -> float:
 	var level_node = get_parent()
 	var early: float = level_node.enemy_speed_mult() if level_node.has_method("enemy_speed_mult") else 1.0
-	return speed * (1.0 + (_power() - 1.0) * 0.5) * early
+	return speed * (1.0 + (_power() - 1.0) * 0.5) * early * (0.65 if has_status("chill") else 1.0)
 
 
 func _apply_form() -> void:
@@ -497,9 +502,12 @@ func _physics_process(delta: float) -> void:
 		skill_timers[id] = maxf(float(skill_timers[id]) - delta, 0.0)
 	knock = knock.move_toward(Vector2.ZERO, 800.0 * delta)
 	_grow(delta)
+	_tick_statuses(delta)
+	if is_queued_for_deletion():
+		return
 
-	if stun_left > 0.0:
-		stun_left -= delta
+	if stun_left > 0.0 or has_status("freeze"):
+		stun_left = maxf(stun_left - delta, 0.0)
 		velocity = knock
 		move_and_slide()
 		queue_redraw()
@@ -525,6 +533,10 @@ func _physics_process(delta: float) -> void:
 			target = t
 			reach = 30.0  # a tower or wall is 28 to 30 px wide, and hits knock them back a little
 
+	if has_status("charm"):
+		target = _nearest_foe(400.0)  # a charmed villager fights for 小怪
+		reach = 26.0
+
 	var dir := Vector2.ZERO
 	var move_speed := effective_speed()
 	if charge_left > 0.0:
@@ -538,7 +550,7 @@ func _physics_process(delta: float) -> void:
 		var to: Vector2 = target.global_position - global_position
 		var dist := to.length()
 		_nav_update(target.global_position, delta)
-		var cfg := ranged_config()
+		var cfg: Dictionary = {} if has_status("charm") else ranged_config()
 		var standing := false
 		if not cfg.is_empty() and dist <= cfg["range"] and los:
 			standing = true  # stand and shoot
@@ -551,21 +563,114 @@ func _physics_process(delta: float) -> void:
 		if dist < reach and hit_cd == 0.0:
 			hit_cd = HIT_COOLDOWN
 			target.take_hit(effective_damage(), to.normalized())
-		if skill_cd == 0.0:
+		if skill_cd == 0.0 and not has_status("charm"):
 			if use_skill(target, dist):
 				skill_cd = skill_cooldown()
 			else:
 				skill_cd = 0.5  # nothing to use it on yet; look again shortly
+	if has_status("root"):
+		dir = Vector2.ZERO  # rooted: cannot walk, but can still shoot and use skills
 	velocity = dir * move_speed + knock
 	move_and_slide()
 	queue_redraw()
 
 
+# --- status effects ---
+
+func has_status(status_name: String) -> bool:
+	return float(statuses.get(status_name, 0.0)) > 0.0
+
+
+## Put a status on this villager. Returns false if it resisted: the hidden forms cannot be
+## frozen, rooted or charmed, and a freeze cannot be repeated right away.
+func apply_status(status_name: String, seconds: float, stacks: int = 1) -> bool:
+	if secret >= 0 and status_name in ["freeze", "root", "charm"]:
+		return false
+	if status_name == "freeze":
+		if freeze_immune > 0.0:
+			return false
+		seconds = minf(seconds, 1.2)
+		freeze_immune = seconds + 4.0
+	if status_name == "poison":
+		poison_stacks = mini(poison_stacks + stacks, 3)
+	statuses[status_name] = maxf(float(statuses.get(status_name, 0.0)), seconds)
+	return true
+
+
+func _tick_statuses(delta: float) -> void:
+	freeze_immune = maxf(freeze_immune - delta, 0.0)
+	for s in statuses.keys():
+		statuses[s] = float(statuses[s]) - delta
+		if statuses[s] <= 0.0:
+			statuses.erase(s)
+			if s == "poison":
+				poison_stacks = 0
+	if statuses.is_empty():
+		dot_t = 0.0
+		return
+	dot_t += delta
+	if dot_t >= 1.0:  # burn, poison (per stack) and bleed hurt once a second
+		dot_t -= 1.0
+		var tick := 0
+		if has_status("burn"):
+			tick += 1
+		if has_status("poison"):
+			tick += poison_stacks
+		if has_status("bleed"):
+			tick += 1
+		if tick > 0:
+			hurt(tick)
+
+
+## Damage over time and other hits that should not knock the villager around.
+func hurt(dmg: int) -> void:
+	if is_queued_for_deletion():
+		return
+	hp -= dmg
+	flash = 0.1
+	var tint := Popups.WHITE
+	if has_status("burn"):
+		tint = Popups.BURN
+	elif has_status("poison"):
+		tint = Popups.POISON
+	elif has_status("bleed"):
+		tint = Popups.BLEED
+	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), dmg, tint)
+	if hp <= 0:
+		defeated.emit(xp_value, bones_value, false)
+		queue_free()
+
+
+## The nearest other villager that is not charmed (the target of a charmed villager).
+func _nearest_foe(radius: float):
+	var best = null
+	var best_d := radius
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e == self or e.is_queued_for_deletion() or e.has_status("charm"):
+			continue
+		var d: float = e.global_position.distance_to(global_position)
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
+
+
 func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
-	hp -= ceili(dmg * 0.5) if shield_left > 0.0 else dmg
+	if is_queued_for_deletion():
+		return
+	var amount := ceili(dmg * 0.5) if shield_left > 0.0 else dmg
+	if has_status("curse"):
+		amount = ceili(amount * 1.5)
+	hp -= amount
 	flash = 0.15
 	knock = dir * 260.0
+	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
 	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
+	if hp > 0 and has_status("shock") and randf() < 0.25:
+		# shocked villagers pass part of every hit on to the nearest other villager
+		var other = _nearest_foe(120.0)
+		if other != null:
+			other.hurt(maxi(1, int(amount / 2.0)))
 	if hp <= 0:
 		defeated.emit(xp_value, bones_value, by_tower)
 		queue_free()
@@ -596,32 +701,36 @@ func _draw() -> void:
 		shirt = Color.WHITE
 		skin = Color.WHITE
 
-	draw_rect(Rect2(-6, -2, 12, 12), shirt)
-	draw_circle(Vector2(0, -6), 5.0, skin)
-	draw_rect(Rect2(-8, -10, 16, 3), hat)
-	draw_rect(Rect2(-4, -14, 8, 5), hat)
-
-	if secret < 0:
-		if stage >= 2:
-			draw_line(Vector2(9, 8), Vector2(9, -12), Color("7a7a82"), 1.5)  # weapon
-			draw_line(Vector2(6, -12), Vector2(12, -12), Color("7a7a82"), 1.5)
-		if stage >= 3:
-			draw_circle(Vector2(-8, 3), 4.0, Color("a0a0aa"))  # shield
-		if stage >= 4:
-			draw_rect(Rect2(-1, -19, 2, 5), Color("d03030"))  # plume
+	var art := Sprites.villager(line, stage, secret)
+	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, false, Color(2, 2, 2) if flash > 0.0 else Color.WHITE):
+		pass
 	else:
-		# demon horns on every hidden form
-		draw_colored_polygon(PackedVector2Array([Vector2(-5, -12), Vector2(-2, -12), Vector2(-6, -19)]), Color("c02030"))
-		draw_colored_polygon(PackedVector2Array([Vector2(5, -12), Vector2(2, -12), Vector2(6, -19)]), Color("c02030"))
-		if secret == 0:
-			draw_line(Vector2(-6, 2), Vector2(-11, 8), Color("5ac040"), 1.5)  # parasite tendrils
-			draw_line(Vector2(6, 2), Vector2(11, 8), Color("5ac040"), 1.5)
-		elif secret == 1:
-			draw_colored_polygon(PackedVector2Array([Vector2(-8, -2), Vector2(8, -2), Vector2(12, 14), Vector2(-12, 14)]), Color(0.1, 0.05, 0.15, 0.7))
+		draw_rect(Rect2(-6, -2, 12, 12), shirt)
+		draw_circle(Vector2(0, -6), 5.0, skin)
+		draw_rect(Rect2(-8, -10, 16, 3), hat)
+		draw_rect(Rect2(-4, -14, 8, 5), hat)
+
+		if secret < 0:
+			if stage >= 2:
+				draw_line(Vector2(9, 8), Vector2(9, -12), Color("7a7a82"), 1.5)  # weapon
+				draw_line(Vector2(6, -12), Vector2(12, -12), Color("7a7a82"), 1.5)
+			if stage >= 3:
+				draw_circle(Vector2(-8, 3), 4.0, Color("a0a0aa"))  # shield
+			if stage >= 4:
+				draw_rect(Rect2(-1, -19, 2, 5), Color("d03030"))  # plume
 		else:
-			draw_arc(Vector2(0, -20), 6.0, 0.0, TAU, 20, Color("ffe680"), 2.0)  # halo
-			draw_colored_polygon(PackedVector2Array([Vector2(-6, 0), Vector2(-18, -8), Vector2(-16, 6)]), Color(1, 1, 1, 0.8))
-			draw_colored_polygon(PackedVector2Array([Vector2(6, 0), Vector2(18, -8), Vector2(16, 6)]), Color(1, 1, 1, 0.8))
+			# demon horns on every hidden form
+			draw_colored_polygon(PackedVector2Array([Vector2(-5, -12), Vector2(-2, -12), Vector2(-6, -19)]), Color("c02030"))
+			draw_colored_polygon(PackedVector2Array([Vector2(5, -12), Vector2(2, -12), Vector2(6, -19)]), Color("c02030"))
+			if secret == 0:
+				draw_line(Vector2(-6, 2), Vector2(-11, 8), Color("5ac040"), 1.5)  # parasite tendrils
+				draw_line(Vector2(6, 2), Vector2(11, 8), Color("5ac040"), 1.5)
+			elif secret == 1:
+				draw_colored_polygon(PackedVector2Array([Vector2(-8, -2), Vector2(8, -2), Vector2(12, 14), Vector2(-12, 14)]), Color(0.1, 0.05, 0.15, 0.7))
+			else:
+				draw_arc(Vector2(0, -20), 6.0, 0.0, TAU, 20, Color("ffe680"), 2.0)  # halo
+				draw_colored_polygon(PackedVector2Array([Vector2(-6, 0), Vector2(-18, -8), Vector2(-16, 6)]), Color(1, 1, 1, 0.8))
+				draw_colored_polygon(PackedVector2Array([Vector2(6, 0), Vector2(18, -8), Vector2(16, 6)]), Color(1, 1, 1, 0.8))
 
 	if evolve_flash > 0.0:
 		draw_arc(Vector2(0, -2), 12.0 + (0.6 - evolve_flash) * 20.0, 0.0, TAU, 24, Color(1, 1, 1, evolve_flash), 2.0)
@@ -629,6 +738,31 @@ func _draw() -> void:
 		draw_arc(Vector2(0, -2), 16.0, 0.0, TAU, 24, Color(cast_color, cast_flash * 2.0), 3.0)
 	if stun_left > 0.0:
 		draw_arc(Vector2(0, -20), 6.0, 0.0, TAU, 12, Color("ffe680"), 2.0)
+	# status marks
+	if has_status("burn"):
+		draw_colored_polygon(PackedVector2Array([Vector2(-4, -2), Vector2(0, -12), Vector2(4, -2)]), Color(1.0, 0.5, 0.1, 0.8))
+	if has_status("chill") or has_status("freeze"):
+		draw_arc(Vector2(0, 2), 11.0, 0.0, TAU, 16, Color("8fd8ff"), 2.0)
+	if has_status("freeze"):
+		draw_rect(Rect2(-8, -12, 16, 22), Color(0.6, 0.85, 1.0, 0.45))
+	if has_status("root"):
+		draw_line(Vector2(-8, 10), Vector2(-4, 4), Color("5ac040"), 2.0)
+		draw_line(Vector2(8, 10), Vector2(4, 4), Color("5ac040"), 2.0)
+	if has_status("poison"):
+		for k in poison_stacks:
+			draw_circle(Vector2(-5 + 5 * k, -16), 1.8, Color("7ae040"))
+	if has_status("bleed"):
+		draw_circle(Vector2(6, 8), 1.8, Color("d03030"))
+		draw_circle(Vector2(-6, 10), 1.5, Color("d03030"))
+	if has_status("shock"):
+		draw_line(Vector2(-3, -14), Vector2(1, -10), Color("fff060"), 2.0)
+		draw_line(Vector2(1, -10), Vector2(-1, -6), Color("fff060"), 2.0)
+	if has_status("curse"):
+		draw_line(Vector2(-4, -18), Vector2(4, -10), Color("a050e0"), 2.0)
+		draw_line(Vector2(4, -18), Vector2(-4, -10), Color("a050e0"), 2.0)
+	if has_status("charm"):
+		draw_circle(Vector2(-3, -18), 2.2, Color("ff70a0"))
+		draw_circle(Vector2(3, -18), 2.2, Color("ff70a0"))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var label_color := Color(1, 0.85, 0.4) if secret >= 0 else Color(1, 1, 1, 0.9)
 	draw_string(ThemeDB.fallback_font, Vector2(-30, -22 - 8 * sc), form_name(), HORIZONTAL_ALIGNMENT_CENTER, 60, 8, label_color)

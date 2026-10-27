@@ -3,6 +3,8 @@ extends StaticBody2D
 ## if it is the nearest thing in their way. The map never lets walls and towers seal off
 ## every route, so there is always a way in.
 
+const Popups := preload("res://popups.gd")
+
 signal destroyed(tile: Vector2i)
 
 const COST := 5
@@ -24,6 +26,7 @@ func _ready() -> void:
 
 func take_hit(dmg: int, _dir: Vector2) -> void:
 	hp -= dmg
+	Popups.damage(get_tree(), global_position + Vector2(0, -22), dmg, Popups.STRUCTURE)
 	queue_redraw()
 	if hp <= 0:
 		destroyed.emit(tile)
