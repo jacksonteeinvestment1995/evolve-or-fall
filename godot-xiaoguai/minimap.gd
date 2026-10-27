@@ -105,6 +105,13 @@ func _draw() -> void:
 			var stage: int = e.get("stage") if e.get("stage") != null else 0
 			var sz := 1.6 + minf(float(stage), 4.0) * 0.4
 			draw_rect(Rect2(pos - Vector2(sz, sz) * 0.5, Vector2(sz, sz)), Color("e04040"))
+	for ch in get_tree().get_nodes_in_group("treasures"):
+		if ch.opened or not _revealed(main_node.tile_of(ch.global_position)):
+			continue
+		var tc: Color = ch.TIERS[ch.tier]["trim"]
+		var cp: Vector2 = ch.global_position / tile_px * SCALE
+		draw_rect(Rect2(cp - Vector2(1.6, 1.6), Vector2(3.2, 3.2)), tc)
+		draw_rect(Rect2(cp - Vector2(1.6, 1.6), Vector2(3.2, 3.2)), Color(0, 0, 0, 0.8), false, 0.8)
 	var pp: Vector2 = main_node.player.global_position / tile_px * SCALE
 	draw_circle(pp, 2.6, Color.WHITE)
 	draw_line(pp, pp + main_node.player.facing * 6.0, Color.WHITE, 1.5)

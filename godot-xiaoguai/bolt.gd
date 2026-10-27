@@ -52,6 +52,8 @@ func _physics_process(delta: float) -> void:
 			if global_position.distance_to(e.global_position) < 10.0 + radius:
 				hit_ids.append(id)
 				e.take_hit(damage, dir)
+				if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
+					e.apply_status(status, status_time)
 				if source != null and is_instance_valid(source):
 					source.add_xp(1)
 				if not pierce:
@@ -60,12 +62,17 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 
-var style := ""            ## "spirit" draws a ghost wisp instead of a plain ball
+var style := ""            ## "spirit" draws a ghost wisp; the volley skills use acid, spear, orb, glob, fire, claw, seed, rock, hell
+var status := ""           ## player bolts: a status put on every villager hit
+var status_time := 0.0
 
 
 func _draw() -> void:
 	if style == "spirit":
 		SkillFx.draw_wisp(self, dir, radius, color)
+		return
+	if style != "":
+		SkillFx.draw_bolt(self, style, dir, radius, color)
 		return
 	draw_line(-dir * radius * 2.5, Vector2.ZERO, Color(color, 0.4), radius)
 	draw_circle(Vector2.ZERO, radius, color)

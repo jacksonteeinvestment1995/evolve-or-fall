@@ -6,6 +6,7 @@ extends CharacterBody2D
 
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
+const TreasureData := preload("res://treasure.gd")
 const BoltScript := preload("res://bolt.gd")
 const ZoneScript := preload("res://zone.gd")
 const Sfx := preload("res://sfx.gd")
@@ -65,7 +66,9 @@ var wind_cd := 0.0             ## Second Wind cooldown
 var ab_cd := {}                ## signature ability cooldowns
 var still_time := 0.0          ## seconds spent standing still (Rooted, Nature regeneration)
 var trait_t := 0.0
-var regen_acc := 0.0       ## fractions of HP from form-skill regeneration
+var regen_acc := 0.0
+var buffs := {}               ## timed treasure buffs: id -> seconds left
+var relics := {}              ## permanent treasure relics: id -> how many       ## fractions of HP from form-skill regeneration
 var nature_t := 0.0
 var trail_t := 0.0
 var mist_t := 0.0
@@ -184,6 +187,8 @@ func add_xp(amount: int) -> void:
 	while level < MAX_LEVEL and xp >= xp_for_level(level + 1):
 		level += 1
 		level_flash = 0.8
+		SkillFx.spawn_levelup(self)
+		Popups.text(get_tree(), global_position + Vector2(0, -34.0), "LEVEL UP!", Popups.HEAL, 16)
 		hp = mini(max_hp, hp + roundi(max_hp * 0.3))
 		hp_changed.emit(hp)
 		leveled.emit(level)
@@ -580,6 +585,10 @@ func _player_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color
 
 
 func _update_ability(delta: float) -> void:
+	for bid in buffs.keys():
+		buffs[bid] = float(buffs[bid]) - delta
+		if float(buffs[bid]) <= 0.0:
+			buffs.erase(bid)
 	for k in ab_cd.keys():
 		ab_cd[k] = maxf(float(ab_cd[k]) - delta, 0.0)
 
@@ -859,7 +868,7 @@ func _draw() -> void:
 		art = Sprites.hero(LinesData.LINES[line]["forms"], stage)
 	elif stage == 0:
 		art = "xiaoguai_base"
-	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 26.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0)))):
+	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 26.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0))), (Time.get_ticks_msec() * 0.016) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
 		# from the 9th form on he wears a cape
@@ -884,8 +893,6 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([Vector2(-3, 4), Vector2(-1, 4), Vector2(-2, 7)]), Color.WHITE)
 			draw_colored_polygon(PackedVector2Array([Vector2(1, 4), Vector2(3, 4), Vector2(2, 7)]), Color.WHITE)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if level_flash > 0.0:
-		draw_arc(Vector2.ZERO, (14.0 + (0.8 - level_flash) * 40.0) * sc, 0.0, TAU, 32, Color(1, 0.9, 0.4, level_flash), 3.0)
 	if slow_left > 0.0:
 		draw_arc(Vector2.ZERO, 12.0 * sc, 0.0, TAU, 16, Color("7d5e38"), 2.0)
 	if has_target:
@@ -899,6 +906,10 @@ func _draw() -> void:
 ## Sum of one modifier over every form skill owned, times its rank.
 func form_mod(key: String) -> float:
 	var total := 0.0
+	for rid in relics:
+		total += float(TreasureData.RELICS[rid]["mods"].get(key, 0.0)) * int(relics[rid])
+	for bid in buffs:
+		total += float(TreasureData.BUFFS[bid]["mods"].get(key, 0.0))
 	var all := SkillsData.form_skills()
 	for id in skills:
 		if all.has(id) and all[id].get("mods", {}).has(key):
@@ -940,13 +951,18 @@ func _update_form_autos() -> void:
 	var all := SkillsData.form_skills()
 	for id in skills:
 		if all.has(id) and all[id].has("auto") and float(skill_cd.get(id, 0.0)) == 0.0:
-			if not _enemies_within(float(all[id]["auto"]["radius"]) * 0.9).is_empty():
+			var a: Dictionary = all[id]["auto"]
+			# volleys reach out to their radius; blasts wait until villagers are inside
+			var trigger := float(a["radius"]) * (1.0 if a.get("volley", false) else 0.9)
+			if not _enemies_within(trigger).is_empty():
 				cast(id)
 
 
 func _cast_form(id: String) -> bool:
 	var a: Dictionary = SkillsData.form_skills()[id]["auto"]
 	var r := rank(id)
+	if a.get("volley", false):
+		return _cast_volley(id, a, r)
 	var z = ZoneScript.new()
 	z.position = global_position
 	z.radius = float(a["radius"]) * (1.0 + 0.1 * (r - 1))
@@ -959,7 +975,60 @@ func _cast_form(id: String) -> bool:
 	z.status_time = float(a.get("secs", 0.0))
 	z.fx = str(a.get("fx", ""))
 	z.source = self
+	if a.has("style"):
+		z.style = str(a["style"])
+		z.dur = 0.65
 	_add_to_level(z)
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
 	Sfx.play(get_tree(), "nova")
 	return true
+
+
+## Volley skills: shots + rank - 1 bolts, each at a different near villager when there are several.
+func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
+	var near := _enemies_within(float(a["radius"]))
+	if near.is_empty():
+		return false
+	near.sort_custom(func(x, y): return x.global_position.distance_to(global_position) < y.global_position.distance_to(global_position))
+	var count := int(a["shots"]) + r - 1
+	for i in count:
+		var target = near[i % near.size()]
+		var fan := 0.0 if near.size() > 1 else (float(i) - float(count - 1) * 0.5) * 0.18
+		var aim: Vector2 = (target.global_position - global_position).normalized().rotated(fan)
+		var b = BoltScript.new()
+		b.position = global_position + aim * 10.0
+		b.dir = aim
+		b.speed = 330.0
+		b.damage = ceili(effective_bite() * float(a["mult"]) * (1.0 + 0.2 * (r - 1)))
+		b.team = "player"
+		b.color = Color(str(a["color"]))
+		b.style = str(a["style"])
+		b.pierce = b.style == "spear" or b.style == "claw"
+		b.life = float(a["radius"]) / 330.0 + 0.25
+		b.radius = 6.0
+		b.status = str(a.get("status", ""))
+		b.status_time = float(a.get("secs", 0.0))
+		b.source = self
+		_add_to_level(b)
+	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	Sfx.play(get_tree(), "bolt")
+	return true
+
+
+## A timed treasure buff (Rage, Swift, Mend, Ward). Picking the same one again refreshes it.
+func add_buff(id: String, secs: float) -> void:
+	if not TreasureData.BUFFS.has(id):
+		return
+	buffs[id] = maxf(float(buffs.get(id, 0.0)), secs)
+
+
+## A permanent treasure relic; it stacks.
+func add_relic(id: String) -> void:
+	if not TreasureData.RELICS.has(id):
+		return
+	var old_max := max_hp
+	relics[id] = mini(int(relics.get(id, 0)) + 1, TreasureData.MAX_RELIC)
+	if TreasureData.RELICS[id]["mods"].has("hp"):
+		_apply_stage(false)
+		hp += max_hp - old_max
+		hp_changed.emit(hp)

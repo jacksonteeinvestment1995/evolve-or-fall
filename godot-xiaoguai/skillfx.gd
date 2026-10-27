@@ -33,6 +33,8 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if kind == "tooth":
 		draw_tooth(self, dir, sc, age / life)
+	elif kind == "levelup":
+		draw_levelup(self, age / life)
 
 
 static func _ease_out(t: float) -> float:
@@ -153,3 +155,182 @@ static func draw_wisp(ci: CanvasItem, dir: Vector2, radius: float, tint: Color) 
 	var eye_a := side * radius * 0.38
 	ci.draw_circle(dir * radius * 0.25 + eye_a, radius * 0.22, Color(0.15, 0.1, 0.3))
 	ci.draw_circle(dir * radius * 0.25 - eye_a, radius * 0.22, Color(0.15, 0.1, 0.3))
+
+
+## Styled player bolts for the volley skills: acid, spear, orb, glob, fire, claw, seed, rock and hell.
+static func draw_bolt(ci: CanvasItem, style: String, dir: Vector2, radius: float, tint: Color) -> void:
+	var tm := Time.get_ticks_msec() * 0.01
+	var side := dir.rotated(PI * 0.5)
+	match style:
+		"fire":
+			for i in 5:
+				var f := float(i + 1) / 5.0
+				ci.draw_circle(-dir * f * radius * 3.2 + side * sin(tm + float(i)) * 2.0, radius * (1.0 - f * 0.7), Color(1.0, 0.45 + 0.4 * f, 0.1, 0.7 * (1.0 - f)))
+			ci.draw_circle(Vector2.ZERO, radius * 1.1, Color(1.0, 0.5, 0.1))
+			ci.draw_circle(Vector2.ZERO, radius * 0.65, Color(1.0, 0.9, 0.4))
+		"acid":
+			ci.draw_circle(Vector2.ZERO, radius * 1.1 + sin(tm * 1.5) * 0.6, Color(0.35, 0.8, 0.2))
+			ci.draw_circle(-side * radius * 0.4 - dir * radius * 0.3, radius * 0.4, Color(0.7, 1.0, 0.4))
+			for i in 3:
+				ci.draw_circle(-dir * (radius * (1.4 + float(i))) + side * sin(tm + float(i) * 2.0) * radius * 0.7, 1.4, Color(0.5, 0.9, 0.3, 0.7))
+		"spear":
+			var d := Vector2.from_angle(dir.angle() + sin(tm * 0.8) * 0.35)
+			var n := d.rotated(PI * 0.5)
+			ci.draw_line(-d * radius * 2.4, d * radius * 1.4, Color(0.93, 0.9, 0.78), 2.2)
+			ci.draw_colored_polygon(PackedVector2Array([d * radius * 2.6, d * radius * 1.2 + n * 2.2, d * radius * 1.2 - n * 2.2]), Color(1, 1, 0.95))
+			ci.draw_circle(-d * radius * 2.4 + n * 1.4, 1.5, Color(0.93, 0.9, 0.78))
+			ci.draw_circle(-d * radius * 2.4 - n * 1.4, 1.5, Color(0.93, 0.9, 0.78))
+		"orb":
+			ci.draw_circle(Vector2.ZERO, radius * 1.5, Color(tint, 0.25))
+			ci.draw_circle(Vector2.ZERO, radius, Color(tint.lightened(0.5), 0.8))
+			ci.draw_circle(Vector2.ZERO, radius * 0.5, Color.WHITE)
+			for i in 3:
+				ci.draw_circle(Vector2.from_angle(tm * 0.5 + float(i) * TAU / 3.0) * radius * 1.7, 1.3, Color(1, 1, 1, 0.9))
+		"glob":
+			var sq := 1.0 + sin(tm * 1.2) * 0.12
+			ci.draw_set_transform(Vector2.ZERO, dir.angle(), Vector2(sq, 1.0 / sq))
+			ci.draw_circle(Vector2.ZERO, radius * 1.15, Color(0.25, 0.55, 1.0))
+			ci.draw_circle(Vector2(-radius * 0.3, -radius * 0.4), radius * 0.4, Color(0.7, 0.9, 1.0))
+			ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			ci.draw_circle(-dir * radius * 1.8, radius * 0.5, Color(0.25, 0.55, 1.0, 0.6))
+		"claw":
+			for k in 3:
+				var o := side * (float(k) - 1.0) * radius * 1.1
+				var pts := PackedVector2Array()
+				for j in 7:
+					var u := float(j) / 6.0
+					pts.append(o - dir * radius * 1.6 * (1.0 - u) + side * sin(u * PI) * radius * 0.5 * (1.0 if k != 1 else -1.0))
+				ci.draw_polyline(pts, Color(0.97, 0.92, 0.8, 0.95), 2.0 - 0.3 * float(k))
+		"seed":
+			ci.draw_set_transform(Vector2.ZERO, dir.angle() + tm * 0.7, Vector2(1.5, 1.0))
+			ci.draw_circle(Vector2.ZERO, radius, Color(0.55, 0.38, 0.2))
+			ci.draw_circle(Vector2(radius * 0.2, 0), radius * 0.45, Color(0.7, 0.55, 0.3))
+			ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			ci.draw_colored_polygon(PackedVector2Array([-dir * radius, -dir * radius * 2.6 + side * 3.0, -dir * radius * 2.0]), Color(0.4, 0.8, 0.3, 0.9))
+		"rock":
+			var pts2 := PackedVector2Array()
+			for j in 7:
+				pts2.append(Vector2.from_angle(tm * 0.6 + float(j) / 7.0 * TAU) * radius * (1.0 + 0.3 * sin(float(j) * 2.7)))
+			ci.draw_colored_polygon(pts2, Color(0.55, 0.45, 0.35))
+			ci.draw_polyline(pts2 + PackedVector2Array([pts2[0]]), Color(0.3, 0.24, 0.2), 1.2)
+			ci.draw_circle(Vector2(-radius * 0.3, -radius * 0.3), radius * 0.3, Color(0.75, 0.65, 0.5))
+		"hell":
+			for i in 4:
+				var f2 := float(i + 1) / 4.0
+				ci.draw_circle(-dir * f2 * radius * 3.0 + side * sin(tm * 1.3 + float(i)) * 2.5, radius * (1.0 - f2 * 0.6), Color(0.8, 0.1, 0.35, 0.6 * (1.0 - f2)))
+			ci.draw_circle(Vector2.ZERO, radius * 1.1, Color(0.15, 0.02, 0.12))
+			ci.draw_circle(Vector2.ZERO, radius * 0.7, Color(0.9, 0.15, 0.4))
+			ci.draw_circle(dir * radius * 0.2, radius * 0.3, Color(1.0, 0.8, 0.5))
+		_:
+			ci.draw_line(-dir * radius * 2.5, Vector2.ZERO, Color(tint, 0.4), radius)
+			ci.draw_circle(Vector2.ZERO, radius, tint)
+
+
+## Themed bursts for the style skills: cloud, flames, spikes, droplets, waves, rubble and shards.
+static func draw_burst(ci: CanvasItem, motif: String, radius: float, t: float, tint: Color) -> void:
+	var e := _ease_out(clampf(t, 0.0, 1.0))
+	var a := 1.0 - smoothstep(0.5, 1.0, t)
+	match motif:
+		"cloud":
+			for i in 10:
+				var ang := float(i) * TAU / 10.0 + t * 1.4
+				var r := radius * (0.25 + 0.65 * e) * (0.75 + 0.25 * sin(float(i) * 3.1))
+				var c := Vector2.from_angle(ang) * r
+				var pr := radius * (0.18 + 0.14 * e) * (0.8 + 0.2 * sin(float(i) * 1.7))
+				ci.draw_circle(c, pr, Color(tint, 0.38 * a))
+				ci.draw_circle(c + Vector2(-pr * 0.25, -pr * 0.25), pr * 0.55, Color(tint.lightened(0.35), 0.3 * a))
+			ci.draw_circle(Vector2.ZERO, radius * 0.4 * e, Color(tint, 0.3 * a))
+		"flames":
+			for i in 12:
+				var ang2 := float(i) * TAU / 12.0 + t * 3.5
+				var base := Vector2.from_angle(ang2) * radius * (0.2 + 0.7 * e)
+				var outward := Vector2.from_angle(ang2 + 0.6)
+				var side := outward.rotated(PI * 0.5)
+				var hgt := radius * 0.28 * (1.0 - t * 0.5)
+				ci.draw_colored_polygon(PackedVector2Array([base + side * hgt * 0.35, base + outward * hgt, base - side * hgt * 0.35]), Color(tint, 0.85 * a))
+				ci.draw_colored_polygon(PackedVector2Array([base + side * hgt * 0.15, base + outward * hgt * 0.65, base - side * hgt * 0.15]), Color(1.0, 0.85, 0.35, 0.9 * a))
+		"spikes":
+			for i in 14:
+				var d := Vector2.from_angle(float(i) * TAU / 14.0)
+				var base_r := radius * 0.35
+				var length := radius * 0.65 * e * (0.7 + 0.3 * fposmod(float(i) * 0.37, 1.0))
+				var n := d.rotated(PI * 0.5) * 4.0
+				ci.draw_colored_polygon(PackedVector2Array([d * base_r + n, d * (base_r + length), d * base_r - n]), Color(tint.lightened(0.15), a))
+			ci.draw_arc(Vector2.ZERO, radius * 0.35, 0.0, TAU, 36, Color(tint.lightened(0.4), a * 0.7), 1.5)
+		"droplets":
+			for i in 16:
+				var reach := radius * e * (0.55 + 0.45 * fposmod(float(i) * 0.53, 1.0))
+				var pos := Vector2.from_angle(float(i) * TAU / 16.0 + 0.3) * reach + Vector2(0, -sin(t * PI) * radius * 0.25)
+				ci.draw_circle(pos, 2.4 * (1.0 - t * 0.4), Color(tint, a))
+				ci.draw_circle(pos + Vector2(-0.7, -0.7), 0.9, Color(1, 1, 1, a * 0.9))
+		"waves":
+			for k in 3:
+				var rr := radius * e * (0.35 + 0.3 * float(k))
+				for j in 6:
+					var mid := float(j) * TAU / 6.0 + float(k) * 0.3
+					ci.draw_arc(Vector2.ZERO, rr, mid - 0.3, mid + 0.3, 8, Color(tint.lightened(0.25 * float(k)), a * (0.9 - 0.2 * float(k))), 2.4)
+		"rubble":
+			for i in 13:
+				var r5 := radius * (0.25 + 0.7 * fposmod(float(i) * 0.41, 1.0))
+				var fall := (1.0 - smoothstep(0.0, 0.45, t)) * 40.0
+				var c5 := Vector2.from_angle(float(i) * TAU / 13.0 + 0.4) * r5 + Vector2(0, -fall)
+				var sz := 3.0 + fposmod(float(i) * 0.77, 1.0) * 3.5
+				var pts := PackedVector2Array()
+				for j in 6:
+					pts.append(c5 + Vector2.from_angle(float(j) / 6.0 * TAU + float(i)) * sz * (0.8 + 0.3 * sin(float(j) * 2.1 + float(i))))
+				ci.draw_colored_polygon(pts, Color(tint, a))
+			if t > 0.4:
+				for i in 6:
+					ci.draw_circle(Vector2.from_angle(float(i) * 1.1) * radius * (0.3 + 0.5 * e), 7.0 * e, Color(0.8, 0.72, 0.6, 0.18 * a))
+		_:
+			for i in 10:
+				var d6 := Vector2.from_angle(float(i) * TAU / 10.0)
+				var n6 := d6.rotated(PI * 0.5) * 3.0
+				ci.draw_colored_polygon(PackedVector2Array([d6 * radius * 0.2 * e + n6, d6 * radius * e, d6 * radius * 0.2 * e - n6]), Color(tint.lightened(0.3), a))
+
+
+## Level up: a pillar of light, rising gold stars and chevrons, and a burst of sparks. No ring.
+static func spawn_levelup(parent: Node2D) -> void:
+	if parent == null:
+		return
+	var fx := SkillFx.new()
+	fx.kind = "levelup"
+	fx.life = 1.3
+	fx.z_index = 30
+	parent.add_child(fx)
+
+
+static func _star(ci: CanvasItem, c: Vector2, s: float, col: Color) -> void:
+	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s), c + Vector2(s * 0.28, -s * 0.28), c + Vector2(s, 0), c + Vector2(s * 0.28, s * 0.28),
+		c + Vector2(0, s), c + Vector2(-s * 0.28, s * 0.28), c + Vector2(-s, 0), c + Vector2(-s * 0.28, -s * 0.28)]), col)
+
+
+static func draw_levelup(ci: CanvasItem, t: float) -> void:
+	var rise := _ease_out(clampf(t * 1.6, 0.0, 1.0))
+	var fade := 1.0 - smoothstep(0.55, 1.0, t)
+	var height := 90.0 * rise
+	# pillar: stacked soft bars, brightest at the feet
+	for i in 6:
+		var w := 14.0 - float(i) * 1.8
+		var a := (0.30 - float(i) * 0.04) * fade
+		ci.draw_rect(Rect2(-w * 0.5, -height, w, height + 4.0), Color(1.0, 0.92, 0.5, a))
+	ci.draw_rect(Rect2(-1.5, -height, 3.0, height + 4.0), Color(1, 1, 0.9, 0.7 * fade))
+	# rising stars
+	for i in 10:
+		var speed := 0.55 + fposmod(float(i) * 0.37, 1.0) * 0.8
+		var y := -fposmod(t * speed * 120.0 + float(i) * 13.0, 100.0)
+		var x := sin(float(i) * 2.4 + t * 5.0) * (6.0 + fposmod(float(i) * 0.61, 1.0) * 10.0)
+		var tw := 0.6 + 0.4 * sin(t * 18.0 + float(i) * 3.0)
+		_star(ci, Vector2(x, y), 2.0 + fposmod(float(i) * 0.43, 1.0) * 2.5, Color(1.0, 0.9 + 0.1 * tw, 0.5, fade * tw))
+	# chevrons climbing the beam
+	for k in 3:
+		var cy := -fposmod(t * 140.0 + float(k) * 32.0, 96.0)
+		var ca := fade * (1.0 - absf(cy) / 100.0)
+		ci.draw_polyline(PackedVector2Array([Vector2(-6, cy + 4), Vector2(0, cy - 3), Vector2(6, cy + 4)]), Color(1.0, 0.95, 0.6, ca), 2.0)
+	# a burst of spark lines at the feet at the start
+	if t < 0.4:
+		var b := t / 0.4
+		for j in 14:
+			var ang := float(j) / 14.0 * TAU + 0.2
+			var d := Vector2.from_angle(ang) * Vector2(1.0, 0.5)
+			ci.draw_line(d * 8.0 * (1.0 + b * 2.0), d * 22.0 * (1.0 + b * 2.4), Color(1, 0.95, 0.6, 1.0 - b), 1.6)

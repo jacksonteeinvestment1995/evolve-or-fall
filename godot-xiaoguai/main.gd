@@ -60,6 +60,7 @@ const WallScript := preload("res://wall.gd")
 const GhostScript := preload("res://ghost.gd")
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
+const TreasureScript := preload("res://treasure.gd")
 const Popups := preload("res://popups.gd")
 const Sfx := preload("res://sfx.gd")
 const MusicScript := preload("res://music.gd")
@@ -84,6 +85,7 @@ var last_phase := 0
 var tint: CanvasModulate
 var glow_light: PointLight2D
 var hd2d_mat: ShaderMaterial
+var treasure_spots: Array = []   # chests made during generation, added to the scene in _ready
 var minimap: Control
 var motes: CPUParticles2D
 var bokeh: CPUParticles2D
@@ -120,6 +122,8 @@ func _ready() -> void:
 	_generate()
 	for t in trees:
 		_add_tree_body(Vector2(t.x + 0.5, t.y + 0.5) * TILE)
+	for chest in treasure_spots:
+		add_child(chest)
 	_spawn_player(_tile_center(START_TILE))
 	last_phase = int(clock / DAY_SECONDS)
 	tint = CanvasModulate.new()
@@ -423,6 +427,40 @@ func _draw_prop(t: Vector2i, name: String) -> void:
 	draw_texture(tex, Vector2(t.x * TILE + (TILE - w) * 0.5, (t.y + 1) * TILE - h))
 
 
+## Chests: mostly wooden near the base, silver and gold further out, a few cursed ones anywhere.
+func _scatter_treasures() -> void:
+	var tr := RandomNumberGenerator.new()
+	tr.seed = SEED + 99
+	var placed: Array[Vector2i] = []
+	var plan := {"wood": 28, "silver": 12, "gold": 5, "cursed": 4}
+	for tier in plan:
+		var count: int = plan[tier]
+		var tries := 0
+		while count > 0 and tries < 4000:
+			tries += 1
+			var t: Vector2i = open_tiles[tr.randi_range(0, open_tiles.size() - 1)]
+			var dist := Vector2(t - START_TILE).length()
+			if trees.has(t) or mud.has(t) or water.has(t) or props.has(t) or dist < 9.0:
+				continue
+			if tier == "silver" and dist < 25.0:
+				continue
+			if tier == "gold" and dist < 55.0:
+				continue
+			var near := false
+			for o in placed:
+				if Vector2(o - t).length() < 7.0:
+					near = true
+					break
+			if near:
+				continue
+			placed.append(t)
+			count -= 1
+			var chest = TreasureScript.new()
+			chest.tier = tier
+			chest.position = _tile_center(t)
+			treasure_spots.append(chest)
+
+
 # --- map ---
 
 func _tile_center(t: Vector2i) -> Vector2:
@@ -476,6 +514,7 @@ func _generate() -> void:
 	_find_open_tiles()
 	_build_nav()
 	_scatter_props()
+	_scatter_treasures()
 
 	# Starting villagers: spread out, reachable, never near the start.
 	var placed: Array[Vector2i] = []
@@ -997,6 +1036,17 @@ func _update_hud() -> void:
 			skill_bits.append("%s r%d %s" % [info["name"], player.skills[id], "ready" if cd <= 0.0 else "%.1fs" % cd])
 		else:
 			skill_bits.append("%s r%d" % [info["name"], player.skills[id]])
+	var buff_bits: Array[String] = []
+	for bid in player.buffs:
+		buff_bits.append("%s %ds" % [TreasureScript.BUFFS[bid]["name"], ceili(float(player.buffs[bid]))])
+	var relic_bits: Array[String] = []
+	for rid in player.relics:
+		relic_bits.append("%s x%d" % [TreasureScript.RELICS[rid]["name"], player.relics[rid]])
+	var treasure_text := ""
+	if not buff_bits.is_empty():
+		treasure_text += "\nBuffs: " + ", ".join(buff_bits)
+	if not relic_bits.is_empty():
+		treasure_text += "\nRelics: " + ", ".join(relic_bits)
 	var skill_text := "Skills: " + (", ".join(skill_bits) if not skill_bits.is_empty() else "none yet (one every level)")
 	if not player.specials.is_empty():
 		var names: Array[String] = []
@@ -1014,7 +1064,7 @@ func _update_hud() -> void:
 	hud.text = "%s  Lv %d/%d  EXP %s  (%s)  HP %d/%d    %s\nBones %d    Kills %d    Villagers %d/%d    Village Lv %d/5 (%s)\n%s    %s    %s\n%s\n%s\nLeft-click walk (hold to follow)  |  Shift sprint  |  Space roll  |  Right-click lunge  |  1 / 2 pick item  |  E build  |  X remove  |  R restart" % [
 		s["name"], player.level, player.MAX_LEVEL, xp_text, form_text, player.hp, player.max_hp, time_text,
 		bones, kills, alive, target_population(), village_level, VILLAGE_TIERS[village_level - 1],
-		sprint, roll, lunge, skill_text, _build_prompt()]
+		sprint, roll, lunge, skill_text + treasure_text, _build_prompt()]
 
 
 func _build_prompt() -> String:

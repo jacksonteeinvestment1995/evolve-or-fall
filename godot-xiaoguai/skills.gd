@@ -106,6 +106,44 @@ const FORM_LIST := [
 	["e_spark", 22, 7, "Hellspark", "Automatic: hellfire burst around you", 3, {"auto": {"fx": "fx_skill_spark", "cd": 9.0, "radius": 100.0, "mult": 1.5, "status": "burn", "secs": 4.0, "color": "ff3030"}}],
 	["e_curse", 22, 8, "Curse Mark", "Bites curse villagers: 25% per rank", 3, {"onbite": {"status": "curse", "chance": 0.25, "secs": 6.0}}],
 	["e_might", 22, 10, "Infernal Might", "+20% bite damage and +5% speed per rank", 3, {"mods": {"bite": 0.2, "speed": 0.05}}],
+	# --- second wave: forms 3, 6 and 9 of every released line. "volley" skills fire styled bolts at the
+	# nearest villagers; "style" skills blast around you with a themed burst (not just a circle). ---
+	# Zombie line (0)
+	["z_spit", 0, 3, "Rot Spit", "Automatic: spits acid blobs that poison", 3, {"auto": {"volley": true, "style": "acid", "shots": 1, "cd": 6.0, "radius": 230.0, "mult": 1.5, "status": "poison", "secs": 5.0, "color": "7ae040"}}],
+	["z_cloud", 0, 6, "Plague Cloud", "Automatic: a rotting cloud poisons everyone near", 3, {"auto": {"style": "cloud", "cd": 11.0, "radius": 95.0, "mult": 0.5, "status": "poison", "secs": 6.0, "color": "7ab040"}}],
+	["z_surge", 0, 9, "Grave Surge", "+15% bite damage and regenerate 0.5 HP per second per rank", 3, {"mods": {"bite": 0.15, "regen": 0.5}}],
+	# Skeleton line (1)
+	["s_toss", 1, 3, "Bone Toss", "Automatic: hurls spinning bone spears", 3, {"auto": {"volley": true, "style": "spear", "shots": 2, "cd": 5.0, "radius": 240.0, "mult": 1.2, "color": "e8e0c8"}}],
+	["s_rattle", 1, 6, "Death Rattle", "Automatic: bone spikes erupt and stun", 3, {"auto": {"style": "spikes", "cd": 11.0, "radius": 90.0, "mult": 1.5, "stun": 0.6, "color": "e8e0c8"}}],
+	["s_ossuary", 1, 9, "Ossuary", "+15% max HP and take 1 less damage per rank", 2, {"mods": {"hp": 0.15, "cut": 1}}],
+	# Wisp line (2)
+	["w_orbs", 2, 3, "Wisp Orbs", "Automatic: sends out chilling spirit orbs", 3, {"auto": {"volley": true, "style": "orb", "shots": 2, "cd": 6.0, "radius": 250.0, "mult": 1.2, "status": "chill", "secs": 3.0, "color": "b0c0ff"}}],
+	["w_mist", 2, 6, "Haunting Mist", "Automatic: a cold mist chills and curses", 3, {"auto": {"style": "cloud", "cd": 12.0, "radius": 100.0, "mult": 0.5, "status": "curse", "secs": 5.0, "color": "a8b8ff"}}],
+	["w_phase", 2, 9, "Phase Shift", "+6% speed and take 1 less damage per rank", 2, {"mods": {"speed": 0.06, "cut": 1}}],
+	# Slime line (6)
+	["l_glob", 6, 3, "Goo Glob", "Automatic: lobs sticky goo that slows", 3, {"auto": {"volley": true, "style": "glob", "shots": 2, "cd": 6.0, "radius": 220.0, "mult": 1.2, "status": "chill", "secs": 3.0, "color": "5aa0ff"}}],
+	["l_burst", 6, 6, "Jelly Burst", "Automatic: bursts into bouncing droplets", 3, {"auto": {"style": "droplets", "cd": 10.0, "radius": 95.0, "mult": 1.5, "color": "5aa0ff"}}],
+	["l_ooze", 6, 9, "Endless Ooze", "+15% max HP and regenerate 0.5 HP per second per rank", 3, {"mods": {"hp": 0.15, "regen": 0.5}}],
+	# Dragon line (10)
+	["d_fireball", 10, 3, "Fireball", "Automatic: throws fireballs that burn", 3, {"auto": {"volley": true, "style": "fire", "shots": 2, "cd": 6.0, "radius": 260.0, "mult": 1.6, "status": "burn", "secs": 4.0, "color": "ff7a20"}}],
+	["d_wingstorm", 10, 6, "Wing Storm", "Automatic: flames whirl around you", 3, {"auto": {"style": "flames", "cd": 10.0, "radius": 105.0, "mult": 1.8, "status": "burn", "secs": 4.0, "color": "ff5a20"}}],
+	["d_scales", 10, 9, "Dragon Scales", "+10% max HP and take 1 less damage per rank", 2, {"mods": {"hp": 0.1, "cut": 1}}],
+	# Beast line (14)
+	["b_claw", 14, 3, "Claw Wave", "Automatic: slashes that make villagers bleed", 3, {"auto": {"volley": true, "style": "claw", "shots": 3, "cd": 5.0, "radius": 200.0, "mult": 1.0, "status": "bleed", "secs": 4.0, "color": "f0e0c0"}}],
+	["b_howl", 14, 6, "Moon Howl", "Automatic: a howl that rattles and stuns", 3, {"auto": {"style": "waves", "cd": 13.0, "radius": 120.0, "mult": 0.5, "stun": 0.9, "color": "c0d0ff"}}],
+	["b_pack", 14, 9, "Pack Leader", "+6% speed and +10% bite damage per rank", 3, {"mods": {"speed": 0.06, "bite": 0.1}}],
+	# Nature line (17)
+	["n_seeds", 17, 3, "Seed Shot", "Automatic: fires poison seeds", 3, {"auto": {"volley": true, "style": "seed", "shots": 3, "cd": 5.5, "radius": 220.0, "mult": 1.0, "status": "poison", "secs": 5.0, "color": "7ad050"}}],
+	["n_spores", 17, 6, "Spore Burst", "Automatic: a burst of spores poisons nearby villagers", 3, {"auto": {"style": "cloud", "cd": 11.0, "radius": 100.0, "mult": 0.6, "status": "poison", "secs": 6.0, "color": "b0d070"}}],
+	["n_grove", 17, 9, "Living Grove", "Regenerate 0.7 HP per second and +10% max HP per rank", 3, {"mods": {"regen": 0.7, "hp": 0.1}}],
+	# Material line (20)
+	["m_rocks", 20, 3, "Rock Throw", "Automatic: hurls boulders", 3, {"auto": {"volley": true, "style": "rock", "shots": 1, "cd": 6.0, "radius": 230.0, "mult": 2.2, "stun": 0.4, "color": "a08060"}}],
+	["m_slide", 20, 6, "Landslide", "Automatic: rubble crashes down and stuns", 3, {"auto": {"style": "rubble", "cd": 12.0, "radius": 105.0, "mult": 1.8, "stun": 0.7, "color": "a08060"}}],
+	["m_fortress", 20, 9, "Living Fortress", "Take 1 less damage and +15% max HP per rank", 2, {"mods": {"cut": 1, "hp": 0.15}}],
+	# Demon line (22)
+	["e_hellbolt", 22, 3, "Hellbolt", "Automatic: fires burning dark bolts", 3, {"auto": {"volley": true, "style": "hell", "shots": 2, "cd": 5.5, "radius": 250.0, "mult": 1.5, "status": "burn", "secs": 4.0, "color": "e02060"}}],
+	["e_ruin", 22, 6, "Rain of Ruin", "Automatic: cursed flames burst around you", 3, {"auto": {"style": "flames", "cd": 11.0, "radius": 105.0, "mult": 1.6, "status": "curse", "secs": 5.0, "color": "c02050"}}],
+	["e_dominion", 22, 9, "Dominion", "+15% bite damage and heal 5% of bite damage per rank", 3, {"mods": {"bite": 0.15, "drain": 0.05}}],
 ]
 
 static var _form_cache := {}

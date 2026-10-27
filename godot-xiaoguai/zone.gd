@@ -79,6 +79,8 @@ func _draw() -> void:
 					SkillFx.draw_roar(self, radius, st, color)
 				"doom":
 					SkillFx.draw_doom(self, radius, st, color)
+				_:
+					SkillFx.draw_burst(self, style, radius, st, color)
 			return
 		var t: Texture2D = Sprites.tex(fx) if fx != "" else null
 		if t != null:

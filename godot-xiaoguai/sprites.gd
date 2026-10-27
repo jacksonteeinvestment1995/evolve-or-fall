@@ -165,7 +165,7 @@ static func hero(forms: Array, form: int) -> String:
 
 
 ## Draw frame `frame` of a strip centred on the origin, `size` pixels wide on screen.
-static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bool = false, modulate: Color = Color.WHITE, look: Vector2i = Vector2i.ZERO) -> bool:
+static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bool = false, modulate: Color = Color.WHITE, look: Vector2i = Vector2i.ZERO, walk: float = -1.0) -> bool:
 	var t := tex_look(name, look, flip)
 	if t == null:
 		return false
@@ -174,5 +174,23 @@ static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bo
 	var src := Rect2((frame % frames) * fh, 0, fh, fh)
 	size *= sqrt(fh / 16.0)  # bigger frames are bigger forms, softened because the body also grows
 	var dst := Rect2(-size * 0.5, -size * 0.6, size, size)
-	ci.draw_texture_rect_region(t, dst, src, modulate)
+	if walk < 0.0:
+		ci.draw_texture_rect_region(t, dst, src, modulate)
+		return true
+	# walking: bob the body, then let the two halves of the legs lift and swing in turn
+	var s := sin(walk)
+	var cut := 0.72
+	var bob := absf(s) * size * 0.045
+	var top_src := Rect2(src.position.x, src.position.y, fh, fh * cut)
+	ci.draw_texture_rect_region(t, Rect2(dst.position.x, dst.position.y - bob, size, size * cut), top_src, modulate)
+	var ly := dst.position.y + size * cut
+	var lh := size * (1.0 - cut)
+	var half := size * 0.5
+	var lift_l := maxf(s, 0.0) * size * 0.10
+	var lift_r := maxf(-s, 0.0) * size * 0.10
+	var sway := s * size * 0.05
+	var leg_y := src.position.y + fh * cut
+	var leg_h := fh * (1.0 - cut)
+	ci.draw_texture_rect_region(t, Rect2(dst.position.x + sway, ly - lift_l - bob * 0.5, half, lh), Rect2(src.position.x, leg_y, fh * 0.5, leg_h), modulate)
+	ci.draw_texture_rect_region(t, Rect2(dst.position.x + half - sway, ly - lift_r - bob * 0.5, half, lh), Rect2(src.position.x + fh * 0.5, leg_y, fh * 0.5, leg_h), modulate)
 	return true

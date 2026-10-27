@@ -702,7 +702,7 @@ func _draw() -> void:
 		skin = Color.WHITE
 
 	var art := Sprites.villager(line, stage, secret)
-	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, false, Color(2, 2, 2) if flash > 0.0 else Color.WHITE):
+	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, velocity.x < -6.0, Color(2, 2, 2) if flash > 0.0 else Color.WHITE, Vector2i.ZERO, (Time.get_ticks_msec() * 0.016 + float(get_instance_id() % 7)) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
 		draw_rect(Rect2(-6, -2, 12, 12), shirt)

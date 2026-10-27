@@ -1503,7 +1503,7 @@ func _init() -> void:
 	for id in fk_fs:
 		fk_per_line[fk_fs[id]["line"]] = int(fk_per_line.get(fk_fs[id]["line"], 0)) + 1
 		fk_forms_ok = fk_forms_ok and int(fk_fs[id]["form"]) >= 2 and int(fk_fs[id]["form"]) <= 10 and main.LinesData.released(int(fk_fs[id]["line"]))
-	check("form skills: 6 for each of the 9 released lines", fk_fs.size() == 54 and fk_released_lines.all(func(l): return fk_per_line.get(l, 0) == 6), str(fk_per_line))
+	check("form skills: 9 for each of the 9 released lines", fk_fs.size() == 81 and fk_released_lines.all(func(l): return fk_per_line.get(l, 0) == 9), str(fk_per_line))
 	check("form skills: unlock forms are 2 to 10 and only on released lines", fk_forms_ok)
 	p.choose_line(10)
 	p.stage = 3
@@ -1511,7 +1511,7 @@ func _init() -> void:
 	check("form 3 Dragon: offered Scale Hide, not Ember Bite (form 4)", fk_pool.has("d_scale") and not fk_pool.has("d_ember"), str(fk_pool))
 	p.stage = 10
 	fk_pool = SkillsD.form_pool(10, 10)
-	check("form 10 Dragon: all 6 Dragon skills, none from other lines", fk_pool.size() == 6 and fk_pool.all(func(i): return i.begins_with("d_")), str(fk_pool))
+	check("form 10 Dragon: all 9 Dragon skills, none from other lines", fk_pool.size() == 9 and fk_pool.all(func(i): return i.begins_with("d_")), str(fk_pool))
 	var frng := RandomNumberGenerator.new()
 	frng.seed = 7
 	var fk_seen := {}
@@ -1638,6 +1638,75 @@ func _init() -> void:
 	var nova_ok: bool = p.cast("nova")
 	await frames(2)
 	check("Bone Nova casts with its bone style", nova_ok and zones().any(func(z): return z.style == "nova"))
+
+	# =========================== second wave of form skills, treasure, level-up effect ===========================
+	await fresh()
+	p = main.player
+	p.choose_line(10)
+	p.stage = 10
+	for id in ["d_fireball", "d_wingstorm", "d_scales"]:
+		p.learn(id)
+	await clear_enemies()
+	var mt_near_a = mk(p.global_position + Vector2(60, 0), 0, 0)
+	var mt_near_b = mk(p.global_position + Vector2(-60, 20), 0, 0)
+	var mt_bolts_before: int = bolts().size()
+	var mt_vol_ok: bool = p.cast("d_fireball")
+	await frames(2)
+	check("Fireball: a volley of styled bolts flies out", mt_vol_ok and bolts().size() >= mt_bolts_before + 2 and bolts().any(func(b): return b.style == "fire"))
+	check("the bolts carry the burn", bolts().any(func(b): return b.status == "burn"))
+	var mt_wing_ok: bool = p.cast("d_wingstorm")
+	await frames(2)
+	check("Wing Storm: a flame burst zone", zones().any(func(z): return z.style == "flames"))
+	var mt_cut_before: int = p.reduce_damage(6)
+	p.learn("d_scales")
+	check("Dragon Scales: take less damage", p.reduce_damage(6) < mt_cut_before)
+	check("every released line has 9 form skills", SkillsD.form_skills().size() == 81)
+
+	# treasure
+	await fresh()
+	p = main.player
+	check("the map has treasure chests of every tier", get_nodes_in_group("treasures").size() >= 40 and ["wood", "silver", "gold", "cursed"].all(func(t): return get_nodes_in_group("treasures").any(func(c): return c.tier == t)))
+	var mt_chest = main.TreasureScript.new()
+	mt_chest.tier = "silver"
+	mt_chest.position = p.global_position + Vector2(200, 0)
+	main.add_child(mt_chest)
+	var mt_bones0: int = main.bones
+	var mt_lines: Array = mt_chest.open(p)
+	check("a silver chest gives bones and a buff", main.bones > mt_bones0 and not p.buffs.is_empty() and mt_lines.size() >= 2, str(mt_lines))
+	check("a chest opens only once", mt_chest.open(p).is_empty())
+	p.add_buff("rage", 10.0)
+	var mt_bite_buffed: int = p.effective_bite()
+	p.buffs.clear()
+	check("Rage raises the bite", mt_bite_buffed > p.effective_bite())
+	p.add_buff("swift", 0.5)
+	p._update_ability(1.0)
+	check("buffs run out", not p.buffs.has("swift"))
+	var mt_hp_max: int = p.max_hp
+	p.add_relic("iron_heart")
+	check("Iron Heart: permanent extra max HP", p.max_hp > mt_hp_max)
+	for i in 5:
+		p.add_relic("fang_charm")
+	check("a relic stacks to 3 and no further", int(p.relics["fang_charm"]) == 3)
+	var mt_gold = main.TreasureScript.new()
+	mt_gold.tier = "gold"
+	main.add_child(mt_gold)
+	var mt_bones1: int = main.bones
+	mt_gold.open(p)
+	check("a gold chest pays well and gives a relic", main.bones - mt_bones1 >= 80 and not p.relics.is_empty())
+	await clear_enemies()
+	var mt_cursed = main.TreasureScript.new()
+	mt_cursed.tier = "cursed"
+	mt_cursed.position = p.global_position + Vector2(300, 0)
+	main.add_child(mt_cursed)
+	mt_cursed.open(p)
+	await frames(3)
+	check("a cursed chest springs an ambush", enemies().size() >= 5, str(enemies().size()))
+
+	# level-up effect, walking
+	var mt_fx_n: int = p.get_children().filter(func(n): return n is SkillFx).size()
+	p.add_xp(p.xp_for_level(p.level + 1) - p.xp)
+	await frames(2)
+	check("levelling up plays the pillar-of-light effect", p.get_children().filter(func(n): return n is SkillFx and n.kind == "levelup").size() >= 1, str(mt_fx_n))
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)
