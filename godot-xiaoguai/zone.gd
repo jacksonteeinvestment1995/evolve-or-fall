@@ -17,6 +17,8 @@ var status := ""           ## player zones: a status put on every villager hit (
 var status_time := 0.0
 var fx := ""                ## sprite strip in art/export drawn when the blast goes off (4 frames)
 var age := 0.0
+var style := ""            ## player zones: "nova", "roar" or "doom" draw their own styled effect
+var dur := 0.25            ## seconds the burst stays on screen after it goes off
 var detonated := false
 var warned := false
 
@@ -31,7 +33,7 @@ func _physics_process(delta: float) -> void:
 		detonated = true
 		Sfx.play_at(get_tree(), "explosion" if damage > 0 else "roar", global_position, -3.0)
 		_detonate()
-	if age >= delay + 0.25:
+	if age >= delay + dur:
 		queue_free()
 	queue_redraw()
 
@@ -68,6 +70,16 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.85), 2.0)
 	else:
 		var a := clampf(1.0 - (age - delay) / 0.25, 0.0, 1.0)
+		if style != "":
+			var st := clampf((age - delay) / dur, 0.0, 1.0)
+			match style:
+				"nova":
+					SkillFx.draw_bone_nova(self, radius, st, color)
+				"roar":
+					SkillFx.draw_roar(self, radius, st, color)
+				"doom":
+					SkillFx.draw_doom(self, radius, st, color)
+			return
 		var t: Texture2D = Sprites.tex(fx) if fx != "" else null
 		if t != null:
 			var fh := t.get_height()

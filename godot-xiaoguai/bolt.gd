@@ -60,6 +60,12 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 
+var style := ""            ## "spirit" draws a ghost wisp instead of a plain ball
+
+
 func _draw() -> void:
+	if style == "spirit":
+		SkillFx.draw_wisp(self, dir, radius, color)
+		return
 	draw_line(-dir * radius * 2.5, Vector2.ZERO, Color(color, 0.4), radius)
 	draw_circle(Vector2.ZERO, radius, color)

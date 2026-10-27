@@ -9,6 +9,8 @@ const SEED := 7
 const TREE_CLUSTERS := 110      # few and small, so paths stay open
 const MUD_PATCHES := 70
 const MUD_SLOW := 0.5
+const WATER_SLOW := 0.65         # wading is slow...
+const DROWN_SECONDS := 10.0      # ...and anything that stays in water this long drowns
 const START_TILE := Vector2i(4, 4)
 
 ## The village grows slowly at first and fastest near the end of RAMP_SECONDS (20 min).
@@ -58,6 +60,7 @@ const WallScript := preload("res://wall.gd")
 const GhostScript := preload("res://ghost.gd")
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
+const Popups := preload("res://popups.gd")
 const Sfx := preload("res://sfx.gd")
 const MusicScript := preload("res://music.gd")
 
@@ -81,6 +84,7 @@ var last_phase := 0
 var tint: CanvasModulate
 var glow_light: PointLight2D
 var hd2d_mat: ShaderMaterial
+var minimap: Control
 var motes: CPUParticles2D
 var bokeh: CPUParticles2D
 var radial_tex: GradientTexture2D
@@ -234,6 +238,7 @@ func _build_hd2d() -> void:
 	var pond_layer := preload("res://water.gd").new()
 	pond_layer.cells = water
 	add_child(pond_layer)
+	move_child(pond_layer, 0)  # draw under the player, villagers and buildings so their whole bodies show in water
 
 	var layer := CanvasLayer.new()
 	layer.layer = 1
@@ -334,17 +339,17 @@ func _update_tower_lamps(day: float) -> void:
 
 # --- ponds and scenery ---
 
-## A few ponds away from the base. Water is solid like a tree, so villagers path around it.
+## Ponds away from the base. You can wade in (slowly) but drown after 10 seconds, and so does everything else.
 func _make_ponds(gen: RandomNumberGenerator) -> void:
 	var made := 0
 	var tries := 0
-	while made < 6 and tries < 200:
+	while made < 18 and tries < 600:
 		tries += 1
 		var c := Vector2i(gen.randi_range(10, COLS - 11), gen.randi_range(8, ROWS - 9))
-		if Vector2(c - START_TILE).length() < 22.0:
+		if Vector2(c - START_TILE).length() < 16.0:
 			continue
-		var rx := gen.randi_range(3, 5)
-		var ry := gen.randi_range(2, 4)
+		var rx := gen.randi_range(3, 7)
+		var ry := gen.randi_range(2, 5)
 		var pond := {}
 		var clear := true
 		for dx in range(-rx, rx + 1):
@@ -370,7 +375,6 @@ func _make_ponds(gen: RandomNumberGenerator) -> void:
 					changed = true
 		for t in pond:
 			water[t] = true
-			trees[t] = true
 		made += 1
 
 
@@ -381,7 +385,7 @@ func _scatter_props() -> void:
 	var names := ["prop_bush", "prop_rocks_1", "prop_rocks_2", "prop_flowers_1", "prop_flowers_2", "prop_flowers_1", "prop_flowers_2", "prop_bush"]
 	for i in 650:
 		var t := Vector2i(pr.randi_range(2, COLS - 3), pr.randi_range(2, ROWS - 3))
-		if trees.has(t) or mud.has(t) or props.has(t) or Vector2(t - START_TILE).length() < 4.0:
+		if trees.has(t) or mud.has(t) or water.has(t) or props.has(t) or Vector2(t - START_TILE).length() < 4.0:
 			continue
 		props[t] = names[pr.randi_range(0, names.size() - 1)]
 	for k in 7:
@@ -390,7 +394,7 @@ func _scatter_props() -> void:
 			continue
 		for j in 3:
 			var t := g + Vector2i(j * 2, pr.randi_range(0, 1))
-			if not trees.has(t) and not mud.has(t):
+			if not trees.has(t) and not mud.has(t) and not water.has(t):
 				props[t] = "prop_gravestone"
 	for k in 6:
 		var f := Vector2i(pr.randi_range(12, COLS - 20), pr.randi_range(10, ROWS - 11))
@@ -398,7 +402,7 @@ func _scatter_props() -> void:
 			continue
 		for j in 6:
 			var t := f + Vector2i(j, 0)
-			if not trees.has(t) and not mud.has(t):
+			if not trees.has(t) and not mud.has(t) and not water.has(t):
 				props[t] = "prop_fence"
 
 
@@ -577,7 +581,64 @@ func find_path(a: Vector2, b: Vector2) -> PackedVector2Array:
 
 
 func speed_mult_at(pos: Vector2) -> float:
-	return MUD_SLOW if mud.has(tile_of(pos)) else 1.0
+	var t := tile_of(pos)
+	if water.has(t):
+		return WATER_SLOW
+	return MUD_SLOW if mud.has(t) else 1.0
+
+
+func is_water_at(pos: Vector2) -> bool:
+	return water.has(tile_of(pos))
+
+
+## Time spent in water per body (instance id -> seconds). Leaving the water cools it down twice as fast.
+var drown := {}
+
+
+## Anything that stays in water for DROWN_SECONDS drowns: 小怪 and villagers alike. Villagers that
+## drown give no EXP or bones, so luring them into a pond is not a farm.
+func _update_drowning(delta: float) -> void:
+	if water.is_empty():
+		return
+	var bodies: Array = get_tree().get_nodes_in_group("enemies").duplicate()
+	if player != null and player.hp > 0:
+		bodies.append(player)
+	var alive := {}
+	for b in bodies:
+		if not is_instance_valid(b) or b.is_queued_for_deletion():
+			continue
+		var id: int = b.get_instance_id()
+		alive[id] = true
+		var t: float = drown.get(id, 0.0)
+		if is_water_at(b.global_position):
+			t += delta
+			if b == player:
+				var left := ceili(DROWN_SECONDS - t)
+				if t >= DROWN_SECONDS * 0.5 and int(t) != int(t - delta):
+					Popups.text(get_tree(), b.global_position + Vector2(0, -26), "Drowning %d" % maxi(left, 0), Popups.WHITE, 15)
+			if t >= DROWN_SECONDS:
+				_drown(b)
+				drown.erase(id)
+				continue
+		else:
+			t = maxf(t - delta * 2.0, 0.0)
+		if t > 0.0:
+			drown[id] = t
+		else:
+			drown.erase(id)
+	for id in drown.keys():
+		if not alive.has(id):
+			drown.erase(id)
+
+
+func _drown(b) -> void:
+	if b == player:
+		player.invuln = 0.0
+		player.take_hit(999999, Vector2.ZERO)
+	else:
+		b.xp_value = 0
+		b.bones_value = 0
+		b.hurt(999999)
 
 
 ## Put a tree on a tile (used by the tests to build obstacles).
@@ -634,6 +695,8 @@ func build_error(tile: Vector2i, kind: String) -> String:
 		return "Occupied"
 	if trees.has(tile):
 		return "A tree is there"
+	if water.has(tile):
+		return "Cannot build on water"
 	if center.distance_to(player.global_position) < 26.0:
 		return "Too close to you"
 	for e in get_tree().get_nodes_in_group("enemies"):
@@ -853,6 +916,11 @@ func _build_hud() -> void:
 	credit.add_theme_color_override("font_outline_color", Color.BLACK)
 	credit.add_theme_constant_override("outline_size", 5)
 	layer.add_child(credit)
+
+	minimap = preload("res://minimap.gd").new()
+	layer.add_child(minimap)
+	minimap.setup(self)
+	minimap.position = Vector2(20, 570)
 
 	menu_layer = CanvasLayer.new()
 	menu_layer.layer = 10
@@ -1203,6 +1271,7 @@ func _process(delta: float) -> void:
 		elapsed += delta
 		clock += delta
 		_update_spawner(delta)
+		_update_drowning(delta)
 		for step in [[GRACE_SECONDS, "Villagers can shoot now, and daylight makes them stronger"],
 				[SKILLS_AT, "Villagers have learned their skills"],
 				[HIDDEN_FROM, "Hidden enemies may appear at dawn and dusk"]]:

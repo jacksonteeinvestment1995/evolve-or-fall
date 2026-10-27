@@ -1582,5 +1582,62 @@ func _init() -> void:
 	check("auto form skill goes on cooldown", float(p.skill_cd["z_chill"]) > 0.0 and not p.cast("z_chill"))
 	check("unlearned form skill cannot be cast", not p.cast("z_plague"))
 
+	# =========================== water: wade in, drown after 10 seconds ===========================
+	await fresh()
+	p = main.player
+	var wt_tiles: Array = main.water.keys()
+	check("the map has many pond tiles", wt_tiles.size() >= 150, str(wt_tiles.size()))
+	var wt: Vector2i = wt_tiles[0]
+	var wpos: Vector2 = main._tile_center(wt)
+	check("water is not solid: bodies can stand in it", not main.is_solid_at(wpos))
+	check("wading is slower", is_equal_approx(main.speed_mult_at(wpos), main.WATER_SLOW))
+	main.bones = 500
+	p.global_position = wpos + Vector2(60, 0)
+	check("towers cannot be built on water", main.build_error(wt, "tower") == "Cannot build on water", main.build_error(wt, "tower"))
+	check("walls cannot be built on water", main.build_error(wt, "wall") == "Cannot build on water", main.build_error(wt, "wall"))
+	check("the pond layer draws under the units", main.get_child(0).get_script() != null and main.get_child(0).get("cells") != null)
+	await clear_enemies()
+	var wv = mk(wpos, 0, 0)
+	wv.xp_value = 5
+	wv.bones_value = 5
+	var wv_dry = mk(Vector2(main._tile_center(main.START_TILE)), 0, 0)
+	main._update_drowning(9.0)
+	check("a villager in water for 9 s is still alive", is_instance_valid(wv) and not wv.is_queued_for_deletion())
+	main._update_drowning(1.2)
+	check("after 10 s in water the villager drowns", not is_instance_valid(wv) or wv.is_queued_for_deletion())
+	check("a villager on dry land is untouched", is_instance_valid(wv_dry) and not wv_dry.is_queued_for_deletion())
+	var bones_before: int = main.bones
+	await frames(2)
+	check("drowning gives no bones", main.bones == bones_before, "%d -> %d" % [bones_before, main.bones])
+	var wv2 = mk(wpos, 0, 0)
+	main._update_drowning(8.0)
+	wv2.global_position = main._tile_center(main.START_TILE) + Vector2(0, 90)
+	main._update_drowning(4.0)
+	check("leaving the water in time saves it", is_instance_valid(wv2) and not wv2.is_queued_for_deletion())
+	p.global_position = wpos
+	p.hp = p.max_hp
+	main._update_drowning(10.5)
+	check("小怪 drowns too after 10 s in water", p.hp <= 0)
+
+	# =========================== minimap and styled skill effects ===========================
+	await fresh()
+	p = main.player
+	check("the minimap exists in the HUD", main.minimap != null and main.minimap.is_inside_tree())
+	await frames(20)
+	check("the minimap reveals the area around 小怪", main.minimap._revealed(main.tile_of(p.global_position)))
+	check("the far corner is still fogged", not main.minimap._revealed(Vector2i(main.COLS - 5, main.ROWS - 5)))
+	var fx_before: int = main.get_children().filter(func(n): return n is SkillFx).size()
+	SkillFx.spawn_tooth(main, p.global_position, Vector2.RIGHT, 1.0)
+	check("a bite leaves a tooth mark effect", main.get_children().filter(func(n): return n is SkillFx).size() == fx_before + 1)
+	await frames(60)
+	check("the tooth mark fades away", main.get_children().filter(func(n): return n is SkillFx).size() == fx_before)
+	p.choose_line(0)
+	p.learn("nova")
+	await clear_enemies()
+	mk(p.global_position + Vector2(30, 0), 0, 0)
+	var nova_ok: bool = p.cast("nova")
+	await frames(2)
+	check("Bone Nova casts with its bone style", nova_ok and zones().any(func(z): return z.style == "nova"))
+
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

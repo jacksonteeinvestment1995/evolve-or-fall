@@ -404,6 +404,7 @@ func _auto_bite() -> void:
 	var bite := effective_bite()
 	target.take_hit(bite, bite_dir)
 	on_bite_landed(target, bite)
+	SkillFx.spawn_tooth(get_parent(), target.global_position, bite_dir, maxf(0.8, float(s["scale"]) * 0.8))
 	add_xp(1)
 
 
@@ -729,6 +730,8 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.damage = ceili(effective_bite() * 3.0 * power)
 			z.team = "player"
 			z.color = Color("a070ff")
+			z.style = "nova"
+			z.dur = 0.6
 			z.stun = 0.5
 			z.source = self
 			_add_to_level(z)
@@ -740,6 +743,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			b.damage = ceili(effective_bite() * 3.0 * power)
 			b.team = "player"
 			b.color = Color("c9a0ff")
+			b.style = "spirit"
 			b.pierce = true
 			b.life = 1.2
 			b.radius = 7.0
@@ -755,6 +759,8 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.damage = 0
 			z.team = "player"
 			z.color = Color("ff8040")
+			z.style = "roar"
+			z.dur = 0.55
 			z.knock = 450.0
 			z.stun = 1.2 + 0.3 * r
 			z.source = self
@@ -767,6 +773,8 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.damage = ceili(effective_bite() * 10.0)
 			z.team = "player"
 			z.color = Color("ff2040")
+			z.style = "doom"
+			z.dur = 0.8
 			z.knock = 500.0
 			z.stun = 1.5
 			z.source = self
