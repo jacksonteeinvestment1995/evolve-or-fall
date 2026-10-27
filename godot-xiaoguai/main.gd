@@ -78,6 +78,7 @@ var announced := {}
 var clock := START_CLOCK
 var last_phase := 0
 var tint: CanvasModulate
+var glow_light: PointLight2D
 var spawn_cd := SPAWN_SLOW
 var rng := RandomNumberGenerator.new()
 var player
@@ -114,6 +115,7 @@ func _ready() -> void:
 	ghost = GhostScript.new()
 	ghost.z_index = 5
 	add_child(ghost)
+	_build_hd2d()
 	_build_hud()
 	music = MusicScript.new()
 	add_child(music)
@@ -187,7 +189,51 @@ func player_power() -> float:
 
 
 func _update_daynight() -> void:
-	tint.color = NIGHT_TINT.lerp(Color.WHITE, smoothstep(0.1, 0.9, daylight()))
+	var day := smoothstep(0.1, 0.9, daylight())
+	tint.color = NIGHT_TINT.lerp(Color.WHITE, day)
+	if glow_light != null:
+		glow_light.energy = lerpf(1.25, 0.0, day)  # a lantern glow around 小怪 after dark
+
+
+## The HD-2D finish: a screen shader (tilt-shift blur, vignette, colour grade), bloom on bright
+## things, and a soft light that follows 小怪 at night.
+func _build_hd2d() -> void:
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.glow_enabled = true
+	env.glow_intensity = 0.7
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	var we := WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+	var layer := CanvasLayer.new()
+	layer.layer = 1
+	var rect := ColorRect.new()
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://hd2d.gdshader")
+	rect.material = mat
+	layer.add_child(rect)
+	add_child(layer)
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.85, 0.6, 1.0))
+	grad.set_color(1, Color(1.0, 0.85, 0.6, 0.0))
+	var radial := GradientTexture2D.new()
+	radial.gradient = grad
+	radial.fill = GradientTexture2D.FILL_RADIAL
+	radial.fill_from = Vector2(0.5, 0.5)
+	radial.fill_to = Vector2(1.0, 0.5)
+	radial.width = 256
+	radial.height = 256
+	glow_light = PointLight2D.new()
+	glow_light.texture = radial
+	glow_light.texture_scale = 1.6
+	glow_light.energy = 0.0
+	glow_light.z_index = 4
+	player.add_child(glow_light)
 
 
 # --- map ---
@@ -567,6 +613,7 @@ func _spawn_player(p: Vector2) -> void:
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
+	layer.layer = 2  # above the HD-2D finish
 	add_child(layer)
 	hud = Label.new()
 	hud.position = Vector2(16, 12)
