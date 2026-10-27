@@ -47,6 +47,10 @@ func _detonate() -> void:
 			if t.global_position.distance_to(global_position) <= radius:
 				t.take_hit(damage, Vector2.ZERO)
 		return
+	Juice.light(get_parent(), global_position, color, radius / 55.0, 1.5, 0.4)
+	if damage > 0:
+		Juice.scorch(get_parent(), global_position, radius * 0.7, color)
+		Juice.punch(get_parent(), clampf(radius / 6000.0, 0.01, 0.03))
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if e.global_position.distance_to(global_position) > radius:
 			continue

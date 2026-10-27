@@ -33,6 +33,7 @@ const TIERS := {
 	"silver": {"body": Color("7a8696"), "band": Color("4a5666"), "trim": Color("e6eef8")},
 	"gold": {"body": Color("d4a02a"), "band": Color("8a5a10"), "trim": Color("fff0a0")},
 	"cursed": {"body": Color("5a2a6a"), "band": Color("2a1038"), "trim": Color("e060ff")},
+	"mimic": {"body": Color("d4a02a"), "band": Color("8a5a10"), "trim": Color("fff0a0")},   # looks like gold, bites
 }
 
 var tier := "wood"
@@ -68,6 +69,9 @@ func open(pl) -> Array[String]:
 	opened = true
 	Sfx.play(get_tree(), "pick")
 	var level_node = get_parent()
+	if tier == "mimic":
+		_reveal_mimic(pl, level_node)
+		return lines
 	if tier == "cursed" and level_node.has_method("_spawn_villager"):
 		for k in 6:
 			var a := float(k) / 6.0 * TAU
@@ -76,32 +80,33 @@ func open(pl) -> Array[String]:
 	var bones := 0
 	match tier:
 		"wood":
-			bones = rng.randi_range(10, 25)
+			bones = rng.randi_range(5, 12)
 		"silver":
-			bones = rng.randi_range(30, 60)
+			bones = rng.randi_range(15, 30)
 		"gold":
-			bones = rng.randi_range(80, 150)
+			bones = rng.randi_range(40, 75)
 		"cursed":
-			bones = rng.randi_range(120, 200)
+			bones = rng.randi_range(60, 100)
 	if level_node.get("bones") != null:
 		level_node.set("bones", int(level_node.get("bones")) + bones)
 	lines.append("+%d bones" % bones)
 	if tier == "wood":
-		if rng.randf() < 0.35:
-			lines.append(_give_buff(pl, 20.0))
-		elif rng.randf() < 0.15:
+		if rng.randf() < 0.2:
+			lines.append(_give_buff(pl, 15.0))
+		elif rng.randf() < 0.1:
 			var heal := roundi(pl.max_hp * 0.3)
 			pl.hp = mini(pl.max_hp, pl.hp + heal)
 			pl.hp_changed.emit(pl.hp)
 			lines.append("+%d HP" % heal)
 	elif tier == "silver":
-		lines.append(_give_buff(pl, 30.0))
-		if rng.randf() < 0.4:
+		lines.append(_give_buff(pl, 20.0))
+		if rng.randf() < 0.2:
 			lines.append(_give_relic(pl))
 	else:
-		lines.append(_give_buff(pl, 40.0 if tier == "gold" else 45.0))
-		lines.append(_give_relic(pl))
-		if tier == "gold" and rng.randf() < 0.5:
+		lines.append(_give_buff(pl, 25.0 if tier == "gold" else 30.0))
+		if tier == "cursed" or rng.randf() < 0.6:
+			lines.append(_give_relic(pl))
+		if tier == "gold" and rng.randf() < 0.25:
 			var pick: Array = SkillsData.roll(pl.skills, rng, 1, pl.line, pl.stage)
 			if not pick.is_empty():
 				pl.learn(pick[0])
@@ -136,7 +141,7 @@ func _draw() -> void:
 	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.005 + position.x)
 	draw_circle(Vector2(0, 9), 11.0, Color(0, 0, 0, 0.25))
 	if not opened:
-		if tier == "gold" or tier == "cursed":
+		if tier == "gold" or tier == "cursed" or tier == "mimic":
 			draw_circle(Vector2(0, 0), 15.0 + pulse * 3.0, Color(c["trim"], 0.12 + 0.1 * pulse))
 		# body
 		draw_rect(Rect2(-10, -2, 20, 11), c["body"])
@@ -158,3 +163,19 @@ func _draw() -> void:
 		draw_rect(Rect2(-8, 0, 16, 4), Color(0.05, 0.02, 0.0, fade))
 		var lid2 := PackedVector2Array([Vector2(-10, -4), Vector2(-9, -14), Vector2(9, -14), Vector2(10, -4)])
 		draw_colored_polygon(lid2, Color(c["body"], fade))
+
+
+## The chest was a mimic: it turns into a tough villager with teeth.
+func _reveal_mimic(pl, level_node) -> void:
+	Popups.text(get_tree(), global_position + Vector2(0, -26), "MIMIC!", Popups.BLEED, 18)
+	Sfx.play(get_tree(), "warn", -2.0)
+	if level_node.has_method("_spawn_villager"):
+		var v = level_node.call("_spawn_villager", global_position, 3, 9)
+		v.mimic = true
+		v.title_override = "Mimic"
+		v.max_hp = roundi(v.max_hp * 2.5)
+		v.hp = v.max_hp
+		v.damage += 1
+		v.force_chase = true
+		v.body_scale = 1.3
+	queue_free()

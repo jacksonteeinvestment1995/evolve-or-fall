@@ -70,6 +70,9 @@ var ab_cd := {}                ## signature ability cooldowns
 var still_time := 0.0          ## seconds spent standing still (Rooted, Nature regeneration)
 var trait_t := 0.0
 var regen_acc := 0.0
+var ghosts: Array = []         # afterimages while sprinting or rolling: {pos, flip, frame, age}
+var _ghost_t := 0.0
+var _dust_t := 0.0
 var buffs := {}               ## timed treasure buffs: id -> seconds left
 var relics := {}              ## permanent treasure relics: id -> how many       ## fractions of HP from form-skill regeneration
 var nature_t := 0.0
@@ -230,6 +233,7 @@ func learn(id: String) -> void:
 		return
 	var old_max := max_hp
 	skills[id] = mini(rank(id) + 1, int(SkillsData.info(id)["max"]))
+	SkillSounds.play(get_tree(), id, -9.0)
 	if SkillsData.info(id).get("auto", false) and not skill_cd.has(id):
 		skill_cd[id] = 0.0
 	if id == "hide" or SkillsData.info(id).get("mods", {}).has("hp"):
@@ -243,6 +247,7 @@ func learn_special(id: String) -> void:
 	if not SkillsData.SPECIALS.has(id) or specials.has(id):
 		return
 	specials[id] = true
+	SkillSounds.play(get_tree(), id, -3.0)
 	var sp_col: Color = SPECIAL_COLORS.get(id, Color.WHITE)
 	match id:
 		"ironwill":
@@ -292,7 +297,7 @@ func _physics_process(delta: float) -> void:
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if dir != Vector2.ZERO:
 		has_target = false
-	elif Input.is_action_pressed("move_mouse"):
+	elif Input.is_action_pressed("move_mouse") and get_viewport().gui_get_hovered_control() == null:
 		move_target = get_global_mouse_position()
 		has_target = true
 	if dir == Vector2.ZERO and has_target:
@@ -342,6 +347,7 @@ func _physics_process(delta: float) -> void:
 	if bite_cd == 0.0:
 		_auto_bite()
 	_update_skills(delta)
+	_juice_tick(delta)
 	_update_ability(delta)
 
 	modulate.a = 0.4 if invuln > 0.0 and roll_left == 0.0 and int(invuln * 20.0) % 2 == 0 else 1.0
@@ -425,8 +431,10 @@ func _auto_bite() -> void:
 	SkillFx.spawn_tooth(get_parent(), target.global_position, bite_dir, maxf(0.8, float(s["scale"]) * 0.8))
 	if specials.has("overdrive"):
 		SkillFx.spawn_fx(get_parent(), target.global_position, "impact", Color.WHITE, bite_dir, 1.2)
+		SkillSounds.play_at(get_tree(), "overdrive", target.global_position, -10.0)
 	if specials.has("titan"):
 		SkillFx.spawn_fx(get_parent(), global_position + bite_dir * 14.0, "slash", Color.WHITE, bite_dir, 1.6)
+		SkillSounds.play_at(get_tree(), "titan", global_position, -12.0)
 	if specials.has("frenzy"):
 		SkillFx.spawn_fx(get_parent(), global_position, "frenzy", Color.WHITE, bite_dir, 1.0)
 	add_xp(1)
@@ -528,6 +536,7 @@ func on_bite_landed(target, dmg: int) -> void:
 				extra += 1
 				e.take_hit(dmg, (e.global_position - global_position).normalized())
 				SkillFx.spawn_fx(get_parent(), e.global_position, "slash", Color.WHITE, (e.global_position - global_position).normalized(), 1.0)
+				SkillSounds.play_at(get_tree(), "cleave", e.global_position, -6.0)
 	var ab := ability()
 	if not ab.is_empty() and ab["id"] == "blood_drain":
 		var frac: float = [0.10, 0.15, 0.20][int(ab["rank"]) - 1]
@@ -620,6 +629,7 @@ func _update_ability(delta: float) -> void:
 		hp_changed.emit(hp)
 		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "Second Wind!", Popups.HEAL, 16)
 		SkillFx.spawn_fx(self, Vector2.ZERO, "heal")
+		SkillSounds.play(get_tree(), "secondwind", -2.0)
 	if specials.has("gravity"):
 		for e in _enemies_within(160.0):
 			e.global_position = e.global_position.move_toward(global_position, 35.0 * delta)
@@ -814,6 +824,8 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 	skill_cd[id] = float(SkillsData.SKILLS[id]["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
 	if specials.has("stormcaller"):
 		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
+		SkillSounds.play(get_tree(), "stormcaller", -10.0)
+	Juice.cast_burst(get_parent(), global_position, _skill_color(id))
 	Sfx.play(get_tree(), "dodge" if id == "step" else id)  # sounds are named nova, bolt, roar, doom
 	return true
 
@@ -861,6 +873,7 @@ func take_hit(dmg: int, dir: Vector2) -> void:
 		_player_zone(global_position, 160.0, 0.0, ceili(effective_bite() * 5.0), Color("ff8a30"), 1.5)
 		Popups.text(get_tree(), global_position + Vector2(0, -26.0), "Phoenix!", Popups.BIG, 20)
 		SkillFx.spawn_fx(self, Vector2.ZERO, "phoenix")
+		SkillSounds.play(get_tree(), "phoenix", -1.0)
 		Sfx.play(get_tree(), "evolve")
 		return
 	Sfx.play(get_tree(), "death" if hp <= 0 else "hurt")
@@ -892,6 +905,14 @@ func _draw() -> void:
 		art = Sprites.hero(LinesData.LINES[line]["forms"], stage)
 	elif stage == 0:
 		art = "xiaoguai_base"
+	if art != "":
+		# afterimages trail behind while sprinting, rolling or lunging
+		for g in ghosts:
+			var ga: float = 1.0 - float(g["age"]) / 0.32
+			draw_set_transform(g["pos"] - global_position, 0.0, Vector2(sc, sc))
+			Sprites.draw(self, art, int(g["frame"]), 22.0, bool(g["flip"]), Color(0.55, 0.85, 1.0, 0.38 * ga))
+		if not ghosts.is_empty():
+			draw_set_transform(Vector2.ZERO, spin, Vector2(sc, sc) * (0.85 if roll_left > 0.0 else 1.0))
 	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, facing.x < -0.2, Color(2, 2, 2) if bite_flash > 0.0 else Color.WHITE, Vector2i(roundi(clampf(facing.x * 2.0, -1.0, 1.0)), roundi(clampf(facing.y * 2.0, -1.0, 1.0))), (Time.get_ticks_msec() * 0.016) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
@@ -917,6 +938,9 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([Vector2(-3, 4), Vector2(-1, 4), Vector2(-2, 7)]), Color.WHITE)
 			draw_colored_polygon(PackedVector2Array([Vector2(1, 4), Vector2(3, 4), Vector2(2, 7)]), Color.WHITE)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	Juice.draw_family_aura(self, family(), velocity.length() > 20.0)
+	if not buffs.is_empty():
+		Juice.draw_buff_aura(self, buffs, facing)
 	if specials.has("gravity"):
 		SkillFx.draw_gravity(self, Time.get_ticks_msec() * 0.001, 160.0)
 	if specials.has("bloodmoon"):
@@ -959,6 +983,7 @@ func _form_on_bite(target, dmg: int) -> void:
 		var ob: Dictionary = all[id]["onbite"]
 		if randf() < float(ob["chance"]) * int(skills[id]):
 			target.apply_status(ob["status"], float(ob["secs"]))
+			SkillSounds.play_at(get_tree(), id, target.global_position)
 			FxMark.spawn(get_parent(), target.global_position + Vector2(0, -10), "fx_proc_" + str(ob["status"]))
 
 
@@ -1010,7 +1035,8 @@ func _cast_form(id: String) -> bool:
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
 	if specials.has("stormcaller"):
 		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
-	Sfx.play(get_tree(), "nova")
+	Juice.cast_burst(get_parent(), global_position, _skill_color(id))
+	SkillSounds.play(get_tree(), id)
 	return true
 
 
@@ -1043,7 +1069,8 @@ func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
 	if specials.has("stormcaller"):
 		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
-	Sfx.play(get_tree(), "bolt")
+	Juice.cast_burst(get_parent(), global_position, _skill_color(id))
+	SkillSounds.play(get_tree(), id)
 	return true
 
 
@@ -1064,3 +1091,48 @@ func add_relic(id: String) -> void:
 		_apply_stage(false)
 		hp += max_hp - old_max
 		hp_changed.emit(hp)
+
+
+## The colour of a skill's light and sparks.
+func _skill_color(id: String) -> Color:
+	var info: Dictionary = SkillsData.info(id)
+	if info.has("auto") and typeof(info["auto"]) == TYPE_DICTIONARY and info["auto"].has("color"):
+		return Color(str(info["auto"]["color"]))
+	match id:
+		"nova":
+			return Color("a070ff")
+		"bolt":
+			return Color("c9a0ff")
+		"roar":
+			return Color("ff8040")
+		"step":
+			return Color("60d0ff")
+		"doom":
+			return Color("ff2040")
+	return Color("ffd080")
+
+
+## Afterimages and dust, called every physics frame.
+func _juice_tick(delta: float) -> void:
+	var fast := sprinting or roll_left > 0.0 or lunge_left > 0.0
+	for g in ghosts:
+		g["age"] = float(g["age"]) + delta
+	ghosts = ghosts.filter(func(g): return float(g["age"]) < 0.32)
+	if fast:
+		_ghost_t -= delta
+		if _ghost_t <= 0.0:
+			_ghost_t = 0.035
+			ghosts.append({"pos": global_position, "flip": facing.x < -0.2, "frame": int(Time.get_ticks_msec() / 500.0) % 2, "age": 0.0})
+	if velocity.length() > 40.0 and roll_left <= 0.0:
+		_dust_t -= delta
+		if _dust_t <= 0.0:
+			_dust_t = 0.16 if not sprinting else 0.08
+			var fam := family()
+			var tint := Color(0.75, 0.68, 0.55)
+			if fam == "Undead":
+				tint = Color(0.5, 0.75, 0.6)
+			elif fam == "Slime":
+				tint = Color(0.5, 0.8, 1.0)
+			elif fam == "Nature":
+				tint = Color(0.5, 0.75, 0.4)
+			Juice.dust(get_parent(), global_position + Vector2(0, 9.0), tint)

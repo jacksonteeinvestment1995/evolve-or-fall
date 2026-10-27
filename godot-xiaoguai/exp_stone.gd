@@ -7,7 +7,8 @@ const Sfx := preload("res://sfx.gd")
 
 const LIFETIME := 45.0
 const PICKUP := 16.0
-const MAGNET := 64.0
+const MAGNET := 64.0           # the pull radius without the EXP Magnet skill
+const MAGNET_PER_RANK := 90.0   # and what each rank of it adds
 
 var value := 1
 var age := 0.0
@@ -37,8 +38,10 @@ func _physics_process(delta: float) -> void:
 	var pl = get_tree().get_first_node_in_group("player")
 	if pl != null and pl.hp > 0:
 		var d: float = pl.global_position.distance_to(global_position)
-		if d < MAGNET:
-			global_position = global_position.move_toward(pl.global_position, (80.0 + (MAGNET - d) * 4.0) * delta)
+		var reach: float = MAGNET + MAGNET_PER_RANK * pl.rank("magnet")
+		if d < reach:
+			# the nearer, the faster; stones pulled from far away still arrive quickly
+			global_position = global_position.move_toward(pl.global_position, (90.0 + (reach - d) * 3.0) * delta)
 		if d < PICKUP + pl.body_radius * 0.5:
 			_collect(pl)
 			return

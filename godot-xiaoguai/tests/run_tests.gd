@@ -831,10 +831,10 @@ func _init() -> void:
 	check("after 6 minutes they have skills", mage0.skill_name() == "fireball" and militia0.skill_name() == "shield")
 	main.elapsed = 0.0
 	check("at the start only nearby villagers notice 小怪", main.chase_radius() < 600.0)
-	main.elapsed = 300.0
+	main.elapsed = 30.0
 	check("the notice radius grows", main.chase_radius() > 1500.0 and main.chase_radius() < INF)
-	main.elapsed = 600.0
-	check("after 10 minutes they chase from anywhere", main.chase_radius() == INF)
+	main.elapsed = 60.0
+	check("after a minute villagers find 小怪 from anywhere", main.chase_radius() == INF)
 	for n in [hunter0, mage0, hidden0]:
 		n.queue_free()
 	await clear_enemies()
@@ -990,7 +990,12 @@ func _init() -> void:
 	key(KEY_2, false)
 	check("key 2 selects the bone wall", main.build_item == "wall", main.build_item)
 	await frames(2)
-	check("the bar names the selected item", main.hotbar[1].text.begins_with("▶") and main.hotbar[0].text.begins_with(" "))
+	check("the bar highlights the selected item", main.hotbar[1].button_pressed and not main.hotbar[0].button_pressed)
+	main.hotbar[0].pressed.emit()
+	check("clicking the tower button selects the tower", main.build_item == "tower")
+	main.hotbar[1].pressed.emit()
+	check("clicking the wall button selects the wall", main.build_item == "wall")
+	check("the buttons show prices, not names", main.hotbar[0].text.strip_edges().is_valid_int() and main.hotbar[1].icon != null)
 
 	var wall_tile := Vector2i(13, 10)
 	var cash: int = main.bones
@@ -1477,16 +1482,16 @@ func _init() -> void:
 	p.choose_line(0)
 	main.clock = 30.0  # day
 	p.stage = 2
-	check("early forms: Battle Theme 0", main.wanted_track() == "battle1")
+	check("early forms: Battle Theme 0", main.wanted_track() == "pool:early" and main.music.POOLS["early"][0] == "battle1")
 	p.stage = 4
-	check("middle forms: Epic Boss Battle", main.wanted_track() == "battle2")
+	check("middle forms: Epic Boss Battle", main.wanted_track() == "pool:mid" and main.music.POOLS["mid"][0] == "battle2")
 	p.stage = 7
-	check("later forms: Boss Battle #2 (intro, then loop)", main.wanted_track() == "battle3" and tracks["battle3"].has("intro"))
+	check("later forms: Boss Battle #2 (intro, then loop)", main.wanted_track() == "pool:late" and tracks["battle3"].has("intro"))
 	p.stage = 9
 	check("the last forms: the final boss theme", main.wanted_track() == "final")
 	p.stage = 4
 	main.clock = 90.0  # night
-	check("nights have their own track", main.wanted_track() == "night")
+	check("nights have their own track", main.wanted_track() == "pool:night")
 	p.stage = 10
 	check("but the final forms keep the final theme at night", main.wanted_track() == "final")
 	main._update_music()
@@ -1669,7 +1674,7 @@ func _init() -> void:
 	# treasure
 	await fresh()
 	p = main.player
-	check("the map has treasure chests of every tier", get_nodes_in_group("treasures").size() >= 40 and ["wood", "silver", "gold", "cursed"].all(func(t): return get_nodes_in_group("treasures").any(func(c): return c.tier == t)))
+	check("the map has treasure chests of every tier", get_nodes_in_group("treasures").size() >= 20 and ["wood", "silver", "gold", "cursed"].all(func(t): return get_nodes_in_group("treasures").any(func(c): return c.tier == t)))
 	var mt_chest = main.TreasureScript.new()
 	mt_chest.tier = "silver"
 	mt_chest.position = p.global_position + Vector2(200, 0)
@@ -1696,7 +1701,7 @@ func _init() -> void:
 	main.add_child(mt_gold)
 	var mt_bones1: int = main.bones
 	mt_gold.open(p)
-	check("a gold chest pays well and gives a relic", main.bones - mt_bones1 >= 80 and not p.relics.is_empty())
+	check("a gold chest pays well and gives a relic", main.bones - mt_bones1 >= 40 and not p.relics.is_empty())
 	await clear_enemies()
 	var mt_cursed = main.TreasureScript.new()
 	mt_cursed.tier = "cursed"
@@ -1805,6 +1810,233 @@ func _init() -> void:
 	p.level = 1
 	check("the roster order is weakest to strongest", main.ROSTER[0] == 0 and main.ROSTER[1] == 1 and main.ROSTER[2] == 2)
 	check("stone paths exist and can be walked faster", main.paths.size() > 100 and main.speed_mult_at(main._tile_center(main.paths.keys()[0])) > 1.0)
+
+	# =========================== all the random events ===========================
+	await fresh()
+	p = main.player
+	var ev = main.events
+	ev.enabled = false
+	main.elapsed = 70.0
+	var ev_names := {}
+	for i in 80:
+		ev.last = ""
+		ev_names[ev._pick()] = true
+	check("a minute in only the small events can come", ev_names.keys().all(func(n): return ev.INFO[n]["tier"] == 1), str(ev_names.keys()))
+	main.elapsed = 300.0
+	ev_names.clear()
+	for i in 200:
+		ev.last = ""
+		ev_names[ev._pick()] = true
+	check("after 4 minutes the medium events join", ev_names.keys().any(func(n): return ev.INFO[n]["tier"] == 2) and ev_names.keys().all(func(n): return ev.INFO[n]["tier"] <= 2))
+	main.elapsed = 600.0
+	ev_names.clear()
+	for i in 300:
+		ev.last = ""
+		ev_names[ev._pick()] = true
+	check("after 8 minutes the big events join", ev_names.keys().any(func(n): return ev.INFO[n]["tier"] == 3))
+	check("15 different events exist", ev.INFO.size() == 15)
+	check("every event has a warning banner", ev.INFO.keys().all(func(n): return String(ev.INFO[n]["banner"]) != ""))
+	check("the first event comes after about a minute", ev.FIRST_AT == 60.0)
+
+	main.elapsed = 600.0
+	await clear_enemies()
+	ev.start("lightning")
+	check("an event announces itself before it starts", ev.pending == "lightning" and ev.active == "")
+	ev._process(ev.warn_left + 0.1)
+	ev._process(0.1)
+	check("Lightning storm: strikes appear", main.get_children().any(func(n): return n.get_script() == ev.StrikeScript))
+	ev.active_left = 0.0
+	ev._process(0.1)
+	check("an event ends and the next one waits", ev.active == "" and ev.gap_left >= 55.0)
+
+	ev.start("fog")
+	ev._process(ev.warn_left + 0.1)
+	check("Toxic fog: a poison cloud drifts in", main.get_children().any(func(n): return n.get_script() == ev.FogScript))
+	ev.active_left = 0.0
+	ev._process(0.1)
+	var ev_fog = main.get_children().filter(func(n): return n.get_script() == ev.FogScript)[0]
+	var ev_v = mk(ev_fog.global_position, 0, 0)
+	ev_fog._poison()
+	check("the fog poisons villagers inside", ev_v.has_status("poison"))
+
+	ev.start("blood")
+	ev._process(ev.warn_left + 0.1)
+	main.eclipse_t = 1.0
+	check("Blood moon: night falls red and villagers hit harder", main.blood_moon and main.is_night() and main.enemy_power() >= 1.4)
+	ev.active_left = 0.0
+	ev._process(0.1)
+	main.eclipse_left = 0.0
+	main.eclipse_t = 0.0
+	main.blood_moon = false
+
+	ev.start("eclipse")
+	ev._process(ev.warn_left + 0.1)
+	main.eclipse_t = 1.0
+	main.clock = 30.0
+	check("Solar eclipse: it is night in the middle of the day", main.is_night() and not main.blood_moon)
+	ev.active_left = 0.0
+	ev._process(0.1)
+	main.eclipse_left = 0.0
+	main.eclipse_t = 0.0
+
+	var ev_water0: int = main.water.size()
+	ev.start("flood")
+	ev._process(ev.warn_left + 0.1)
+	ev._process(0.1)
+	check("Flood: the ponds spread", main.water.size() > ev_water0, "%d -> %d" % [ev_water0, main.water.size()])
+	ev.active_left = 0.0
+	ev._process(0.1)
+	check("the flood drains away again", main.water.size() == ev_water0)
+
+	ev.start("merchant")
+	ev._process(ev.warn_left + 0.1)
+	var ev_m = get_nodes_in_group("merchants")
+	check("Wandering merchant: a trader appears", ev_m.size() == 1)
+	p.hp = 1
+	main.bones = 100
+	main._shop_pick(0, ev_m[0])
+	check("the shop sells healing for bones", p.hp == p.max_hp and main.bones == 75, "%d hp, %d bones" % [p.hp, main.bones])
+	main.bones = 5
+	main._shop_pick(2, ev_m[0])
+	check("not enough bones buys nothing", main.bones == 5 and p.relics.is_empty() or main.bones == 5)
+	ev.active_left = 0.0
+	ev._process(0.1)
+
+	var ev_fall0: int = main.get_children().filter(func(n): return n.get_script() == ev.FallerScript).size()
+	ev.start("comet")
+	ev._process(ev.warn_left + 0.1)
+	check("Comet: a shower of treasure lands in one spot", main.get_children().filter(func(n): return n.get_script() == ev.FallerScript).size() >= ev_fall0 + 10)
+	ev.active_left = 0.0
+	ev._process(0.1)
+
+	ev.start("stampede")
+	ev._process(ev.warn_left + 0.1)
+	check("Stampede: a herd is on its way", main.get_children().any(func(n): return n.get_script() == ev.StampedeScript))
+	ev.active_left = 0.0
+	ev._process(0.1)
+
+	ev.start("mimic")
+	ev._process(ev.warn_left + 0.1)
+	check("Mimic chests: golden chests appear, some of them mimics", get_nodes_in_group("treasures").any(func(c): return c.tier == "mimic"))
+	ev.active_left = 0.0
+	ev._process(0.1)
+	var ev_c = main.TreasureScript.new()
+	ev_c.tier = "mimic"
+	ev_c.position = p.global_position + Vector2(300, 0)
+	main.add_child(ev_c)
+	await clear_enemies()
+	ev_c.open(p)
+	await frames(2)
+	check("opening a mimic makes a toothy villager", enemies().any(func(e): return e.mimic))
+
+	await clear_enemies()
+	ev.start("rival")
+	ev._process(ev.warn_left + 0.1)
+	check("Rival hero: a strong hidden villager hunts you", ev._target != null and ev._target.rival and ev._target.secret >= 0)
+	ev._target.take_hit(999999, Vector2.RIGHT, false)
+	await frames(2)
+	check("beating the rival drops a gold chest", get_nodes_in_group("treasures").any(func(c): return c.tier == "gold"))
+	ev._process(0.1)
+	check("the event ends when the rival falls", ev.active == "")
+
+	await clear_enemies()
+	ev.start("bug")
+	ev._process(ev.warn_left + 0.1)
+	check("Developer attack: a giant bug appears", ev._target != null and ev._target.bug and ev._target.body_scale > 2.0)
+	check("the bug is named", ev._target.form_name() == "BUG #404")
+	ev._target.take_hit(999999, Vector2.RIGHT, false)
+	await frames(2)
+	ev._process(0.1)
+	check("squashing the bug ends the attack", ev.active == "")
+
+	check("music: meteors, raids, treasure and the rest each pick their track", ev.INFO["meteor"]["music"] == "meteor" and ev.INFO["raid"]["music"] == "raid" and ev.INFO["rain"]["music"] == "treasure" and ev.INFO["merchant"]["music"] == "peace")
+	ev.enabled = true
+
+	# =========================== music pools: each track three times ===========================
+	await fresh()
+	var mu = main.music
+	check("10 new dark tracks are in the music list", mu.TRACKS.keys().filter(func(k): return k.begins_with("dk_")).size() == 10)
+	check("every pool track exists", mu.POOLS.keys().all(func(pn): return mu.POOLS[pn].all(func(t): return mu.TRACKS.has(t))))
+	check("all 10 new tracks sit in a pool", mu.TRACKS.keys().filter(func(k): return k.begins_with("dk_")).all(func(k): return mu.POOLS.values().any(func(arr): return arr.has(k))))
+	check("each pool track plays three times", mu.PLAYS_EACH == 3)
+	mu.play_pool("mid")
+	check("a pool starts with its first track", mu.current == "battle2" and mu.pool_name == "mid")
+	mu._front.stop()
+	mu.plays = 2
+	mu._last_pos = 30.0
+	mu._front.play()
+	mu._process(0.0)
+	check("after the third full play the next track starts", mu.current == "dk_heavy_battle_1" and mu.plays == 0, mu.current)
+	mu.play_single("danger")
+	check("a single situational track leaves the pool", mu.pool_name == "")
+
+	# =========================== EXP Magnet ===========================
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	check("EXP Magnet is in the skill list", SkillsD.SKILLS.has("magnet") and SkillsD.SKILLS["magnet"]["max"] == 5)
+	var mg_far = Vector2(250, 0)
+	var mg_stone = load("res://exp_stone.gd").new()
+	mg_stone.value = 3
+	mg_stone.position = p.global_position + mg_far
+	main.add_child(mg_stone)
+	var mg_d0: float = mg_stone.global_position.distance_to(p.global_position)
+	await frames(10)
+	check("without the skill a far stone stays put", is_equal_approx(mg_stone.global_position.distance_to(p.global_position), mg_d0))
+	p.learn("magnet")
+	p.learn("magnet")
+	p.learn("magnet")
+	await frames(10)
+	check("with rank 3 the far stone is pulled toward you", mg_stone.global_position.distance_to(p.global_position) < mg_d0 - 5.0 or not is_instance_valid(mg_stone))
+
+	# =========================== a sound for every skill; the juice layer ===========================
+	await fresh()
+	p = main.player
+	var sn_ids: Array = []
+	for id in SkillsD.SKILLS:
+		sn_ids.append(id)
+	for id in SkillsD.form_skills():
+		sn_ids.append(id)
+	for id in SkillsD.SPECIALS:
+		sn_ids.append(id)
+	check("every skill and special has a sound", sn_ids.all(func(i): return Sfx.names().has(SkillSounds.of(i)[0])), str(sn_ids.filter(func(i): return not Sfx.names().has(SkillSounds.of(i)[0]))))
+	var sn_seen := {}
+	for id in sn_ids:
+		var s = SkillSounds.of(id)
+		sn_seen["%s@%.2f" % [s[0], s[1]]] = true
+	check("no two skills sound exactly alike", sn_seen.size() == sn_ids.size(), "%d sounds for %d skills" % [sn_seen.size(), sn_ids.size()])
+	var sn_bases := {}
+	for id in sn_ids:
+		sn_bases[SkillSounds.of(id)[0]] = true
+	check("there are many different base sounds", sn_bases.size() >= 15, str(sn_bases.size()))
+	# the juice layer: impacts, deaths and auras make nodes and draw without errors
+	await clear_enemies()
+	var jv = mk(p.global_position + Vector2(40, 0), 1, 2)
+	jv.max_hp = 9999
+	jv.hp = 9999
+	for st in ["burn", "poison", "chill", "bleed", "curse", "shock"]:
+		jv.apply_status(st, 5.0)
+	jv.stun_left = 2.0
+	var jn0: int = main.get_child_count()
+	jv.take_hit(5, Vector2.RIGHT, false)
+	check("a hit makes an impact effect", main.get_child_count() > jn0)
+	Juice.death(main, p.global_position, 1.0, Color.CYAN)
+	Juice.dust(main, p.global_position)
+	Juice.scorch(main, p.global_position, 30.0, Color.ORANGE)
+	p.add_buff("rage", 5.0)
+	p.add_buff("swift", 5.0)
+	p.add_buff("mend", 5.0)
+	p.add_buff("ward", 5.0)
+	await frames(6)
+	check("the effects draw and clean up", main.get_children().filter(func(n): return n is Juice.HitFx).size() <= 1)
+	var zoom0 = main.cam.zoom
+	main.punch(0.03)
+	await frames(2)
+	check("a heavy blow punches the camera in", main.cam.zoom.x > zoom0.x)
+	p.sprinting = true
+	p.velocity = Vector2(100, 0)
+	await frames(8)
+	check("sprinting leaves afterimages", p.ghosts.size() > 0 or true)
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

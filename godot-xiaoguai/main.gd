@@ -26,7 +26,7 @@ const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swi
 const SKILLS_AT := 360.0        # villager skills switch on
 const HIDDEN_FROM := 600.0      # hidden enemies can appear from here
 const CHASE_START := 450.0      # villagers notice 小怪 only this close at first...
-const CHASE_FULL_AT := 600.0    # ...growing until they chase from anywhere
+const CHASE_FULL_AT := 60.0     # ...growing until, after a minute, they find 小怪 from anywhere
 const EARLY_SPEED := 0.75       # villager walking speed at the very start
 const RAMP_SECONDS := 1200.0
 const POP_TIME_END := 120       # how many the clock alone allows once the 20 minutes are up...
@@ -74,7 +74,7 @@ var ref_tiles: Array[Vector2i] = []   # far-away tiles that must always reach �
 var astar := AStarGrid2D.new()
 var bones := START_BONES
 var build_item := "wall"  # "wall" or "tower": press 1 or 2 (or B) to switch
-var hotbar: Array[Label] = []
+var hotbar: Array = []   # the two build buttons, then the remove label
 var music: Node
 var credit: Label
 var kills := 0
@@ -86,12 +86,17 @@ var last_phase := 0
 var tint: CanvasModulate
 var glow_light: PointLight2D
 var hd2d_mat: ShaderMaterial
+var eclipse_left := 0.0         # seconds of artificial night left (eclipse, blood moon)
+var eclipse_t := 0.0            # 0 day .. 1 full artificial night, eased
+var blood_moon := false
 var events: Node               # random events (events.gd)
+var punch_amp := 0.0            # a short zoom-in pulse on heavy blows
 var shake_amp := 0.0           # camera shake in pixels, decays by itself
 var calm_time := 0.0           # seconds with no villager nearby (for the quiet music)
 var _music_tick := 0.0
 var treasure_spots: Array = []   # chests made during generation, added to the scene in _ready
 var minimap: Control
+var skillbar: Control
 var motes: CPUParticles2D
 var bokeh: CPUParticles2D
 var radial_tex: GradientTexture2D
@@ -173,12 +178,12 @@ func wanted_track() -> String:
 	if s >= 9:
 		return "final"
 	if is_night():
-		return "night"
+		return "pool:night"
 	if s >= 6:
-		return "battle3"
+		return "pool:late"
 	if s >= 3:
-		return "battle2"
-	return "battle1"
+		return "pool:mid"
+	return "pool:early"
 
 
 ## A hidden enemy (Parasite Hero, Dark Hero or GOD) within about 900 px.
@@ -190,12 +195,20 @@ func _hidden_near() -> bool:
 
 
 ## Shake the camera (events and big blasts call this); the shake fades by itself.
+func punch(amount: float) -> void:
+	punch_amp = maxf(punch_amp, amount)
+
+
 func shake(amount: float) -> void:
 	shake_amp = maxf(shake_amp, amount)
 
 
 func _update_music() -> void:
-	music.play_track(wanted_track())
+	var want := wanted_track()
+	if want.begins_with("pool:"):
+		music.play_pool(want.substr(5))
+	else:
+		music.play_single(want)
 	var text: String = music.credit_text()
 	credit.text = "♪ " + text if text != "" else ""
 
@@ -205,17 +218,17 @@ func _update_music() -> void:
 ## 0.0 at midnight, 1.0 at noon. Crosses 0.5 at dawn (clock 0) and dusk.
 func daylight() -> float:
 	var cycle := DAY_SECONDS + NIGHT_SECONDS
-	return 0.5 + 0.5 * cos(TAU * (fposmod(clock, cycle) - DAY_SECONDS * 0.5) / cycle)
+	return (0.5 + 0.5 * cos(TAU * (fposmod(clock, cycle) - DAY_SECONDS * 0.5) / cycle)) * (1.0 - eclipse_t)
 
 
 func is_night() -> bool:
-	return fposmod(clock, DAY_SECONDS + NIGHT_SECONDS) >= DAY_SECONDS
+	return fposmod(clock, DAY_SECONDS + NIGHT_SECONDS) >= DAY_SECONDS or eclipse_t > 0.5
 
 
 func enemy_power() -> float:
 	if elapsed < GRACE_SECONDS:
 		return 1.0
-	return 1.0 if is_night() else DAY_ENEMY_POWER
+	return (1.0 if is_night() else DAY_ENEMY_POWER) * (1.4 if blood_moon and eclipse_t > 0.5 else 1.0)
 
 
 func ranged_unlocked() -> bool:
@@ -234,7 +247,7 @@ func chase_radius() -> float:
 
 
 func enemy_speed_mult() -> float:
-	return lerpf(EARLY_SPEED, 1.0, clampf(elapsed / GRACE_SECONDS, 0.0, 1.0))
+	return lerpf(EARLY_SPEED, 1.0, clampf(elapsed / GRACE_SECONDS, 0.0, 1.0)) * (1.2 if blood_moon and eclipse_t > 0.5 else 1.0)
 
 
 func player_power() -> float:
@@ -276,6 +289,11 @@ func _build_hd2d() -> void:
 	shadow_tex.width = 64
 	shadow_tex.height = 64
 
+	var mud_layer := preload("res://mud.gd").new()
+	mud_layer.cells = mud
+	mud_layer.cam = cam
+	add_child(mud_layer)
+	move_child(mud_layer, 0)
 	var path_layer := preload("res://water.gd").new()
 	path_layer.cells = paths
 	path_layer.base = "stone_path"
@@ -356,6 +374,8 @@ func _build_hd2d() -> void:
 func _update_daynight() -> void:
 	var day := smoothstep(0.1, 0.9, daylight())
 	tint.color = NIGHT_TINT.lerp(DAY_TINT, day)
+	if blood_moon:
+		tint.color = tint.color.lerp(Color(0.8, 0.28, 0.34), eclipse_t * 0.65)
 	if hd2d_mat != null:
 		hd2d_mat.set_shader_parameter("night", 1.0 - day)
 	if glow_light != null:
@@ -425,12 +445,12 @@ func _make_ponds(gen: RandomNumberGenerator) -> void:
 		made += 1
 
 
-## Three winding stone paths leaving the base meadow toward the far corners. Three tiles wide so the
+## Three winding stone paths leaving the base meadow toward the far corners and the middle. Two tiles wide so the
 ## edge tiles fit; they skip trees, water and mud.
 func _make_paths(gen: RandomNumberGenerator) -> void:
-	var goals := [Vector2i(COLS - 8, 8), Vector2i(COLS - 8, ROWS - 8), Vector2i(8, ROWS - 8)]
+	var goals := [Vector2i(COLS - 10, 14), Vector2i(14, ROWS - 10), Vector2i(COLS / 2, ROWS / 2)]
 	for goal in goals:
-		var pos := Vector2(START_TILE)
+		var pos := Vector2(START_TILE) + (Vector2(goal) - Vector2(START_TILE)).normalized() * 9.0
 		var target := Vector2(goal)
 		var heading := (target - pos).normalized()
 		for step in 400:
@@ -439,8 +459,8 @@ func _make_paths(gen: RandomNumberGenerator) -> void:
 			heading = (heading + (target - pos).normalized() * 0.18 + Vector2.from_angle(gen.randf_range(-0.5, 0.5)) * 0.25).normalized()
 			pos += heading
 			var c := Vector2i(roundi(pos.x), roundi(pos.y))
-			for dx in range(-1, 2):
-				for dy in range(-1, 2):
+			for dx in range(0, 2):
+				for dy in range(0, 2):
 					var t := c + Vector2i(dx, dy)
 					if t.x > 1 and t.y > 1 and t.x < COLS - 2 and t.y < ROWS - 2 and not trees.has(t) and not water.has(t) and not mud.has(t):
 						paths[t] = true
@@ -508,7 +528,7 @@ func _scatter_treasures() -> void:
 	var tr := RandomNumberGenerator.new()
 	tr.seed = SEED + 99
 	var placed: Array[Vector2i] = []
-	var plan := {"wood": 28, "silver": 12, "gold": 5, "cursed": 4}
+	var plan := {"wood": 14, "silver": 6, "gold": 3, "cursed": 2}
 	for tier in plan:
 		var count: int = plan[tier]
 		var tries := 0
@@ -1037,24 +1057,45 @@ func _build_hud() -> void:
 	bar.add_theme_constant_override("separation", 36)
 	layer.add_child(bar)
 	var hotbar_icons := ["icon_build_tower", "icon_build_wall", "icon_build_remove"]
+	var hotbar_tips := ["Tower (key 1): shoots the nearest villager. Build on it again to upgrade.", "Bone wall (key 2): blocks the way.", "Remove (key X): take back a tower or wall under the mouse for half its bones."]
 	for i in 3:
-		var cell := HBoxContainer.new()
-		cell.add_theme_constant_override("separation", 6)
-		bar.add_child(cell)
 		var ic := Sprites.icon(hotbar_icons[i], 2)
-		if ic != null:
-			var tr := TextureRect.new()
-			tr.texture = ic
-			tr.custom_minimum_size = Vector2(44, 44)
-			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			cell.add_child(tr)
-		var l := Label.new()
-		l.add_theme_font_size_override("font_size", 24)
-		l.add_theme_color_override("font_outline_color", Color.BLACK)
-		l.add_theme_constant_override("outline_size", 8)
-		cell.add_child(l)
-		hotbar.append(l)
+		if i < 2:
+			# a clickable button: the picture and the price, no name
+			var btn := Button.new()
+			btn.toggle_mode = true
+			btn.focus_mode = Control.FOCUS_NONE
+			btn.icon = ic
+			btn.expand_icon = false
+			btn.custom_minimum_size = Vector2(104, 58)
+			btn.tooltip_text = hotbar_tips[i]
+			btn.add_theme_font_size_override("font_size", 22)
+			btn.add_theme_constant_override("icon_max_width", 48)
+			var which := "tower" if i == 0 else "wall"
+			btn.pressed.connect(func():
+				build_item = which
+				ghost_dirty = true
+				_update_hotbar())
+			bar.add_child(btn)
+			hotbar.append(btn)
+		else:
+			var cell := HBoxContainer.new()
+			cell.add_theme_constant_override("separation", 6)
+			bar.add_child(cell)
+			if ic != null:
+				var tr := TextureRect.new()
+				tr.texture = ic
+				tr.custom_minimum_size = Vector2(44, 44)
+				tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				tr.tooltip_text = hotbar_tips[i]
+				cell.add_child(tr)
+			var l := Label.new()
+			l.add_theme_font_size_override("font_size", 22)
+			l.add_theme_color_override("font_outline_color", Color.BLACK)
+			l.add_theme_constant_override("outline_size", 8)
+			cell.add_child(l)
+			hotbar.append(l)
 
 	# music credit, bottom right (the final track is CC-BY and needs it)
 	credit = Label.new()
@@ -1076,7 +1117,23 @@ func _build_hud() -> void:
 	minimap = preload("res://minimap.gd").new()
 	layer.add_child(minimap)
 	minimap.setup(self)
-	minimap.position = Vector2(20, 570)
+	minimap.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	minimap.offset_left = -(minimap.size.x + 12.0)
+	minimap.offset_right = -12.0
+	minimap.offset_top = 10.0
+	minimap.offset_bottom = 10.0 + minimap.size.y
+
+	skillbar = preload("res://skillbar.gd").new()
+	layer.add_child(skillbar)
+	skillbar.setup(self)
+	skillbar.anchor_left = 0.5
+	skillbar.anchor_right = 0.5
+	skillbar.anchor_top = 1.0
+	skillbar.anchor_bottom = 1.0
+	skillbar.offset_left = -skillbar.size.x * 0.5
+	skillbar.offset_right = skillbar.size.x * 0.5
+	skillbar.offset_top = -(skillbar.size.y + 78.0)
+	skillbar.offset_bottom = -78.0
 
 	menu_layer = CanvasLayer.new()
 	menu_layer.layer = 10
@@ -1164,7 +1221,7 @@ func _update_hud() -> void:
 		treasure_text += "\nBuffs: " + ", ".join(buff_bits)
 	if not relic_bits.is_empty():
 		treasure_text += "\nRelics: " + ", ".join(relic_bits)
-	var skill_text := "Skills: " + (", ".join(skill_bits) if not skill_bits.is_empty() else "none yet (one every level)")
+	var skill_text := "Skills: %s" % ("%d learned (the bar below shows them)" % skill_bits.size() if not skill_bits.is_empty() else "none yet (one every level)")
 	if not player.specials.is_empty():
 		var names: Array[String] = []
 		for sid in player.specials:
@@ -1178,7 +1235,7 @@ func _update_hud() -> void:
 			skill_text += "    Ability: %s (rank %d)" % [ab["name"], ab["rank"]]
 		elif player.AbilitiesData.ABILITIES.has(player.line):
 			skill_text += "    Ability: unlocks at form 3"
-	hud.text = "%s  Lv %d/%d  EXP %s  (%s)  HP %d/%d    %s\nBones %d    Kills %d    Villagers %d/%d    Village Lv %d/5 (%s)\n%s    %s    %s\n%s\n%s\nLeft-click walk (hold to follow)  |  Shift sprint  |  Space roll  |  Right-click lunge  |  1 / 2 pick item  |  E build  |  X remove  |  R restart" % [
+	hud.text = "%s  Lv %d/%d  EXP %s  (%s)  HP %d/%d    %s\nBones %d    Kills %d    Villagers %d/%d    Village Lv %d/5 (%s)\n%s    %s    %s\n%s\n%s\nClick: walk  |  Shift: sprint  |  Space: roll  |  Right-click: lunge  |  E: build  |  X: remove  |  R: restart" % [
 		s["name"], player.level, player.MAX_LEVEL, xp_text, form_text, player.hp, player.max_hp, time_text,
 		bones, kills, alive, target_population(), village_level, VILLAGE_TIERS[village_level - 1],
 		sprint, roll, lunge, skill_text + treasure_text, _build_prompt()]
@@ -1198,18 +1255,19 @@ func _build_prompt() -> String:
 
 
 func _update_hotbar() -> void:
-	var tower_cost := build_cost("tower", Vector2i(-1, -1))
-	var wall_cost := build_cost("wall", Vector2i(-1, -1))
-	var slots := [["[1] TOWER  %d" % tower_cost, "tower", tower_cost],
-			["[2] BONE WALL  %d" % wall_cost, "wall", wall_cost]]
+	var costs := [build_cost("tower", Vector2i(-1, -1)), build_cost("wall", Vector2i(-1, -1))]
+	var kinds := ["tower", "wall"]
 	for i in 2:
-		var selected: bool = build_item == slots[i][1]
-		hotbar[i].text = ("▶ " if selected else "   ") + slots[i][0]
-		var c := Color("ffd84a") if selected else Color(1, 1, 1, 0.75)
-		if bones < int(slots[i][2]):
-			c = Color("ff7a7a") if selected else Color(1, 0.55, 0.55, 0.7)
-		hotbar[i].add_theme_color_override("font_color", c)
-	hotbar[2].text = "[X] REMOVE (half back)"
+		var selected: bool = build_item == kinds[i]
+		var btn: Button = hotbar[i]
+		btn.text = " %d" % costs[i]
+		btn.set_pressed_no_signal(selected)
+		var c := Color("ffd84a") if selected else Color(1, 1, 1, 0.85)
+		if bones < int(costs[i]):
+			c = Color("ff7a7a") if selected else Color(1, 0.55, 0.55, 0.8)  # too expensive right now
+		for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+			btn.add_theme_color_override(key, c)
+	hotbar[2].text = "[X]"
 	hotbar[2].add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
 
 
@@ -1302,14 +1360,19 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 	var row_h := (56 if (columns > 1 and not icons.is_empty()) else (44 if columns > 1 else 70)) + 4
 	scroll.custom_minimum_size = Vector2(width * columns + 28, mini(600, row_h * ceili(entries.size() / float(columns)) + 16))
 	box.add_child(scroll)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # text wraps, so there is never a sideways scrollbar
 	var grid := GridContainer.new()
 	grid.columns = columns
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(grid)
 	for i in entries.size():
 		var b := Button.new()
 		b.text = entries[i]
 		b.custom_minimum_size = Vector2(width, (56 if not icons.is_empty() else 44) if columns > 1 else 70)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.clip_text = false
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if i < icons.size() and icons[i] != null:
 			b.icon = icons[i]
 			b.expand_icon = false
@@ -1364,7 +1427,7 @@ func _on_villager_defeated(xp: int, bones_gain: int, by_tower: bool) -> void:
 	kills += 1
 	Sfx.play(get_tree(), "coin", -6.0)
 	village_level = mini(VILLAGE_TIERS.size(), 1 + int(kills / float(KILLS_PER_VILLAGE_LEVEL)))
-	bones += roundi(bones_gain * (1.0 + 0.25 * player.rank("greed")) * (2.0 if player.specials.has("bonehoard") else 1.0))
+	bones += roundi(bones_gain * (1.0 + 0.25 * player.rank("greed")) * (2.0 if player.specials.has("bonehoard") else 1.0) * (2.0 if blood_moon and eclipse_t > 0.5 else 1.0))
 	if player.family() == "Demon":
 		bones += 1  # Demon trait: every kill drops an extra bone
 	if not by_tower:
@@ -1444,7 +1507,14 @@ func _on_phase_change() -> void:
 
 
 func _process(delta: float) -> void:
+	if eclipse_left > 0.0:
+		eclipse_left -= delta
+	eclipse_t = move_toward(eclipse_t, 1.0 if eclipse_left > 0.0 else 0.0, delta * 0.5)
+	if eclipse_t <= 0.0:
+		blood_moon = false
 	if cam != null:
+		cam.zoom = Vector2(2.0, 2.0) * (1.0 + punch_amp)
+		punch_amp = move_toward(punch_amp, 0.0, delta * 0.18)
 		cam.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * shake_amp if shake_amp > 0.05 else Vector2.ZERO
 		shake_amp = move_toward(shake_amp, 0.0, delta * 14.0)
 	if not game_over and player != null:
@@ -1537,8 +1607,7 @@ func _draw() -> void:
 	for m in mud:
 		var r := Rect2(m.x * TILE, m.y * TILE, TILE, TILE)
 		if mud_tex != null:
-			draw_texture_rect(mud_tex, r, false)
-			continue
+			continue  # the animated mud layer (mud.gd) draws mud with bubbles and rounded corners
 		draw_rect(r, Color("6b4f2f"))
 		draw_circle(r.position + Vector2(9, 11), 4.0, Color("55401f"))
 		draw_circle(r.position + Vector2(22, 20), 5.0, Color("7d5e38"))
@@ -1561,3 +1630,48 @@ func _draw() -> void:
 		draw_rect(Rect2(c.x - 3, c.y, 6, 12), Color("5a3b22"))
 		draw_circle(c + Vector2(0, -4), 14.0, Color("2f6b2f"))
 		draw_circle(c + Vector2(-4, -8), 6.0, Color("3f8a3f"))
+
+
+# --- the wandering merchant's shop ---
+
+const SHOP := [
+	{"name": "Healing potion", "cost": 25, "desc": "restore all your HP"},
+	{"name": "Rage tonic", "cost": 35, "desc": "+40% bite damage for 60 seconds"},
+	{"name": "Mystery relic", "cost": 90, "desc": "a random permanent relic"},
+	{"name": "EXP pouch", "cost": 60, "desc": "a pile of EXP right now"},
+]
+
+
+func open_shop(merchant) -> void:
+	if menu_open:
+		return
+	menu_kind = "merchant"
+	var entries: Array[String] = []
+	for i in SHOP.size():
+		entries.append("%d. %s  (%d bones)\n    %s" % [i + 1, SHOP[i]["name"], SHOP[i]["cost"], SHOP[i]["desc"]])
+	entries.append("%d. Leave" % (SHOP.size() + 1))
+	_open_menu("MERCHANT   (you have %d bones)" % bones, entries, func(i): _shop_pick(i, merchant), 1, 560)
+
+
+func _shop_pick(i: int, merchant) -> void:
+	_close_menu()
+	if i >= SHOP.size():
+		return
+	var item: Dictionary = SHOP[i]
+	if bones < int(item["cost"]):
+		_say("Not enough bones.")
+		return
+	bones -= int(item["cost"])
+	match i:
+		0:
+			player.hp = player.max_hp
+			player.hp_changed.emit(player.hp)
+		1:
+			player.add_buff("rage", 60.0)
+		2:
+			var ids: Array = player.TreasureData.RELICS.keys()
+			player.add_relic(ids[rng.randi_range(0, ids.size() - 1)])
+		3:
+			player.add_xp(10 + 4 * player.level)
+	Sfx.play(get_tree(), "coin")
+	_say("Bought: %s" % item["name"])

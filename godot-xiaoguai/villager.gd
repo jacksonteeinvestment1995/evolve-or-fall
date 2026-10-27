@@ -13,6 +13,7 @@ const BoltScript := preload("res://bolt.gd")
 const ZoneScript := preload("res://zone.gd")
 const Sfx := preload("res://sfx.gd")
 const ExpStone := preload("res://exp_stone.gd")
+const TreasureLoot := preload("res://treasure.gd")
 const Popups := preload("res://popups.gd")
 
 const MAX_STAGE := 4          ## each line has 5 forms: stage 0 to 4
@@ -148,6 +149,8 @@ func _ready() -> void:
 
 
 func form_name() -> String:
+	if title_override != "":
+		return title_override
 	if secret >= 0:
 		return HIDDEN[secret]["name"]
 	return LINES[line]["forms"][stage]
@@ -194,6 +197,10 @@ func skill_name() -> String:
 
 
 ## How far this villager can notice 小怪 (grows during the first minutes).
+var mimic := false             ## a chest that bit back (events)
+var rival := false             ## the rival hero (events)
+var bug := false               ## the developer's escaped bug (events)
+var title_override := ""       ## a special name shown instead of the form name
 var force_chase := false      ## raiders know where 小怪 is from the start
 
 
@@ -654,6 +661,8 @@ func hurt(dmg: int) -> void:
 		tint = Popups.BLEED
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), dmg, tint)
 	if hp <= 0:
+		_boss_loot()
+		_death_burst()
 		defeated.emit(xp_value, bones_value, false)
 		queue_free()
 
@@ -684,12 +693,15 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 		knock = dir * 260.0  # towers hurt but never push villagers back
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
 	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
+	Juice.hit(get_parent(), global_position + Vector2(0, -6.0 * body_scale), dir, float(amount) / maxf(1.0, float(max_hp)) + 0.25, Color(0.7, 0.85, 1.0) if by_tower else Color(1.0, 0.92, 0.65))
 	if hp > 0 and has_status("shock") and randf() < 0.25:
 		# shocked villagers pass part of every hit on to the nearest other villager
 		var other = _nearest_foe(120.0)
 		if other != null:
 			other.hurt(maxi(1, int(amount / 2.0)))
 	if hp <= 0:
+		_boss_loot()
+		_death_burst()
 		if by_tower:
 			ExpStone.spawn(get_parent(), global_position, xp_value)  # towers and pets leave an EXP stone to pick up
 		defeated.emit(xp_value, bones_value, by_tower)
@@ -698,7 +710,8 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 
 func _draw() -> void:
 	var sc := body_scale
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(sc, sc))
+	var squash := clampf(flash * 1.4, 0.0, 0.2)   # a quick squash and stretch when hit
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(sc * (1.0 + squash), sc * (1.0 - squash)))
 	draw_circle(Vector2(0, 8), 7.0, Color(0, 0, 0, 0.25))
 
 	var shirt := Color.from_hsv(float(line) / LINES.size(), 0.5, 0.7)
@@ -722,7 +735,11 @@ func _draw() -> void:
 		skin = Color.WHITE
 
 	var art := Sprites.villager(line, stage, secret)
-	if art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, velocity.x < -6.0, Color(2, 2, 2) if flash > 0.0 else Color.WHITE, Vector2i.ZERO, (Time.get_ticks_msec() * 0.016 + float(get_instance_id() % 7)) if velocity.length() > 12.0 else -1.0):
+	if mimic:
+		_draw_mimic()
+	elif bug:
+		_draw_bug()
+	elif art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, velocity.x < -6.0, Color(2, 2, 2) if flash > 0.0 else Color.WHITE, Vector2i.ZERO, (Time.get_ticks_msec() * 0.016 + float(get_instance_id() % 7)) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
 		draw_rect(Rect2(-6, -2, 12, 12), shirt)
@@ -769,6 +786,7 @@ func _draw() -> void:
 		var mt := Sprites.tex(marks[i])
 		if mt != null:
 			draw_texture_rect(mt, Rect2(-marks.size() * 5.0 + i * 10.0 + 1.0, -34.0 - 8.0 * sc, 9.0, 9.0), false)
+	Juice.draw_status_aura(self, self, sc)
 	if has_status("freeze"):
 		draw_rect(Rect2(-8, -12, 16, 22), Color(0.6, 0.85, 1.0, 0.45))
 	if has_status("shock"):
@@ -780,3 +798,83 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var label_color := Color(1, 0.85, 0.4) if secret >= 0 else Color(1, 1, 1, 0.9)
 	draw_string(ThemeDB.fallback_font, Vector2(-30, -22 - 8 * sc), form_name(), HORIZONTAL_ALIGNMENT_CENTER, 60, 8, label_color)
+
+
+## Mimics, the rival hero and the bug pay out a gold chest where they fall.
+func _boss_loot() -> void:
+	if not (mimic or rival or bug):
+		return
+	var level_node = get_parent()
+	if level_node == null:
+		return
+	var chest = TreasureLoot.new()
+	chest.tier = "gold"
+	chest.position = global_position
+	level_node.call_deferred("add_child", chest)
+	Popups.text(get_tree(), global_position + Vector2(0, -30.0), "DEFEATED!", Popups.BIG, 18)
+	if bug:
+		SkillFx.spawn_levelup(level_node)
+
+
+## A chest with teeth: open lid full of fangs, a red tongue, glaring eyes and stubby legs.
+func _draw_mimic() -> void:
+	var t := Time.get_ticks_msec() * 0.012
+	var snap := 3.0 + absf(sin(t)) * 4.0
+	var legs := sin(t * 1.5) * 1.5
+	draw_rect(Rect2(-9, 8, 4, 3 + legs), Color("5a3b1c"))
+	draw_rect(Rect2(5, 8, 4, 3 - legs), Color("5a3b1c"))
+	draw_rect(Rect2(-10, 0, 20, 10), Color("c99a2a"))
+	draw_rect(Rect2(-10, 0, 20, 10), Color("6a4a10"), false, 1.5)
+	draw_rect(Rect2(-10, 3, 20, 2), Color("6a4a10"))
+	draw_rect(Rect2(-9, 1, 18, 3), Color("2a0a10"))
+	draw_colored_polygon(PackedVector2Array([Vector2(-3, 2), Vector2(3, 2), Vector2(2, 7), Vector2(-2, 7)]), Color("d03050"))
+	for k in 6:
+		var x := -8.0 + float(k) * 3.2
+		draw_colored_polygon(PackedVector2Array([Vector2(x, 1), Vector2(x + 3.0, 1), Vector2(x + 1.5, 4.5)]), Color.WHITE)
+	var lid := PackedVector2Array([Vector2(-10, -snap + 1), Vector2(-8, -snap - 7), Vector2(0, -snap - 9), Vector2(8, -snap - 7), Vector2(10, -snap + 1)])
+	draw_colored_polygon(lid, Color("e0b040"))
+	draw_polyline(lid, Color("6a4a10"), 1.5)
+	for k in 6:
+		var x2 := -8.0 + float(k) * 3.2
+		draw_colored_polygon(PackedVector2Array([Vector2(x2, -snap + 1), Vector2(x2 + 3.0, -snap + 1), Vector2(x2 + 1.5, -snap + 5.0)]), Color.WHITE)
+	draw_circle(Vector2(-4, -snap - 3), 1.8, Color("ff3030"))
+	draw_circle(Vector2(4, -snap - 3), 1.8, Color("ff3030"))
+
+
+## The escaped bug: a glitching beetle with a split shell, six scurrying legs and red eyes.
+func _draw_bug() -> void:
+	var t := Time.get_ticks_msec() * 0.015
+	var glitch := int(Time.get_ticks_msec() / 110.0) % 7 == 0
+	var shell := PackedVector2Array()
+	for i in 18:
+		var a := float(i) / 18.0 * TAU
+		shell.append(Vector2(cos(a) * 12.0, sin(a) * 9.0 + 1.0))
+	for k in 3:
+		var sy := -5.0 + float(k) * 6.0
+		var off := 3.0 if glitch and k == 1 else 0.0
+		draw_line(Vector2(-10 + off, sy + 9.0), Vector2(-12.0 + off, sy + 12.0 + sin(t + float(k)) * 2.0), Color("203020"), 2.0)
+		draw_line(Vector2(10 + off, sy + 9.0), Vector2(12.0 + off, sy + 12.0 - sin(t + float(k)) * 2.0), Color("203020"), 2.0)
+	draw_colored_polygon(shell, Color("2a7a50"))
+	draw_polyline(shell + PackedVector2Array([shell[0]]), Color("0a2a1a"), 1.5)
+	draw_line(Vector2(0, -8), Vector2(0, 10), Color("0a2a1a"), 1.5)
+	draw_circle(Vector2(-5, -1), 2.2, Color(1, 1, 1, 0.25))
+	draw_circle(Vector2(5, 3), 2.2, Color(1, 1, 1, 0.25))
+	draw_circle(Vector2(0, -11), 5.0, Color("1a5a38"))
+	draw_circle(Vector2(-2, -12), 1.5, Color("ff2020"))
+	draw_circle(Vector2(2, -12), 1.5, Color("ff2020"))
+	draw_line(Vector2(-2, -15), Vector2(-6, -21 + sin(t) * 2.0), Color("0a2a1a"), 1.5)
+	draw_line(Vector2(2, -15), Vector2(6, -21 - sin(t) * 2.0), Color("0a2a1a"), 1.5)
+	if glitch:
+		draw_rect(Rect2(-14, -2, 28, 2), Color(0.2, 1.0, 0.8, 0.7))
+		draw_rect(Rect2(-12, 5, 24, 1.5), Color(1.0, 0.2, 0.6, 0.7))
+
+
+## Souls and sparkles instead of just vanishing; the colour follows the profession.
+func _death_burst() -> void:
+	var tint := Color.from_hsv(float(line) / float(LINES.size()), 0.45, 1.0)
+	if secret >= 0:
+		tint = [Color("5ac040"), Color("a050e0"), Color("ffd040")][secret]
+	Juice.death(get_parent(), global_position + Vector2(0, -4.0 * body_scale), body_scale, tint)
+	if body_scale >= 1.6 or mimic or rival or bug:
+		Juice.punch(get_parent(), 0.03)
+		Juice.hitstop(get_tree(), 0.06)

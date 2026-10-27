@@ -1143,6 +1143,18 @@
    "kind": "idle"
   },
   {
+   "name": "icon_magnet",
+   "label": "EXP Magnet",
+   "section": "icon",
+   "file": "icon_magnet.png",
+   "frame_w": 24,
+   "frame_h": 24,
+   "frames": 1,
+   "fps": 0,
+   "loop": false,
+   "kind": "static"
+  },
+  {
    "name": "icon_fs_z_grip",
    "label": "Rotting Grip",
    "section": "icon",

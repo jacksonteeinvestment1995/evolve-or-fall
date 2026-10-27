@@ -43,7 +43,7 @@ for n in ['burn', 'chill', 'poison', 'bleed', 'curse', 'root', 'stun', 'freeze']
 for n in ['burn', 'poison', 'bleed', 'chill', 'curse']:
     M['fx_proc_' + n] = S('effect', [(16, 16)], 3, 3)
 for n in ['tough_hide', 'sharp_fangs', 'swift_paws', 'quick_jaws', 'soul_drain', 'bone_collector', 'bone_nova', 'spirit_bolt', 'shadow_step', 'roar',
-          'build_tower', 'build_wall', 'build_remove', 'heart', 'bone', 'exp_orb']:
+          'build_tower', 'build_wall', 'build_remove', 'heart', 'bone', 'exp_orb', 'magnet']:
     M['icon_' + n] = S('icon', [(16, 16), (24, 24)], 1, 2)
 for n in ['z_grip', 'z_plague', 'z_chill', 'z_feast', 'z_undying', 'z_crimson', 's_plating', 's_spear', 's_marrow', 's_storm', 's_gaze', 's_pact',
           'w_drift', 'w_touch', 'w_wail', 'w_haunt', 'w_veil', 'w_harvest', 'l_gel', 'l_goo', 'l_splash', 'l_bounce', 'l_absorb', 'l_armor',
