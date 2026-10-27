@@ -65,6 +65,7 @@ var wind_cd := 0.0             ## Second Wind cooldown
 var ab_cd := {}                ## signature ability cooldowns
 var still_time := 0.0          ## seconds spent standing still (Rooted, Nature regeneration)
 var trait_t := 0.0
+var regen_acc := 0.0       ## fractions of HP from form-skill regeneration
 var nature_t := 0.0
 var trail_t := 0.0
 var mist_t := 0.0
@@ -167,7 +168,7 @@ func rank(id: String) -> int:
 
 func _apply_stage(heal: bool) -> void:
 	var s: Dictionary = stages[stage]
-	max_hp = roundi(int(s["hp"]) * (1.0 + 0.2 * rank("hide")) * (1.5 if specials.has("ironwill") else 1.0))
+	max_hp = roundi(int(s["hp"]) * (1.0 + 0.2 * rank("hide") + form_mod("hp")) * (1.5 if specials.has("ironwill") else 1.0))
 	body_radius = 8.0 * s["scale"]
 	circle.radius = body_radius
 	if heal:
@@ -217,13 +218,13 @@ func choose_line(i: int) -> void:
 
 ## Learn a skill or raise its rank.
 func learn(id: String) -> void:
-	if not SkillsData.SKILLS.has(id):
+	if SkillsData.info(id).is_empty():
 		return
 	var old_max := max_hp
-	skills[id] = mini(rank(id) + 1, int(SkillsData.SKILLS[id]["max"]))
-	if SkillsData.SKILLS[id].get("auto", false) and not skill_cd.has(id):
+	skills[id] = mini(rank(id) + 1, int(SkillsData.info(id)["max"]))
+	if SkillsData.info(id).get("auto", false) and not skill_cd.has(id):
 		skill_cd[id] = 0.0
-	if id == "hide":
+	if id == "hide" or SkillsData.info(id).get("mods", {}).has("hp"):
 		_apply_stage(false)
 		hp += max_hp - old_max
 		hp_changed.emit(hp)
@@ -238,7 +239,7 @@ func learn_special(id: String) -> void:
 		_apply_stage(true)
 	elif id == "mastery":
 		for sid in skills.keys():
-			skills[sid] = mini(int(skills[sid]) + 1, int(SkillsData.SKILLS[sid]["max"]))
+			skills[sid] = mini(int(skills[sid]) + 1, int(SkillsData.info(sid)["max"]))
 		_apply_stage(false)
 		hp_changed.emit(hp)
 
@@ -342,7 +343,7 @@ func _power() -> float:
 
 func effective_bite() -> int:
 	var overdrive := 1.4 if specials.has("overdrive") else 1.0
-	return ceili(int(stages[stage]["bite"]) * _power() * (1.0 + 0.25 * rank("fangs")) * overdrive)
+	return ceili(int(stages[stage]["bite"]) * _power() * (1.0 + 0.25 * rank("fangs") + form_mod("bite") + (form_mod("night_bite") if _night() else 0.0)) * overdrive)
 
 
 ## Mud and other terrain can slow him down; the level decides.
@@ -388,7 +389,7 @@ func _lunge_strike() -> void:
 func _auto_bite() -> void:
 	var s: Dictionary = stages[stage]
 	var target = null
-	var best: float = float(s["range"]) * (1.3 if specials.has("titan") else 1.0)
+	var best: float = float(s["range"]) * (1.3 if specials.has("titan") else 1.0) * (1.0 + form_mod("reach"))
 	for e in get_tree().get_nodes_in_group("enemies"):
 		var d: float = e.global_position.distance_to(global_position)
 		if d <= best:
@@ -396,7 +397,7 @@ func _auto_bite() -> void:
 			target = e
 	if target == null:
 		return
-	bite_cd = float(s["cd"]) * (1.0 - 0.1 * rank("jaws")) * (0.75 if specials.has("frenzy") else 1.0)
+	bite_cd = float(s["cd"]) * (1.0 - 0.1 * rank("jaws") - form_mod("jaws")) * (0.75 if specials.has("frenzy") else 1.0)
 	bite_flash = 0.12
 	bite_dir = (target.global_position - global_position).normalized()
 	Sfx.play(get_tree(), "bite", -9.0)
@@ -440,7 +441,7 @@ func trait_speed() -> float:
 			bonus += 0.40
 		if ab["id"] == "stone_skin":
 			bonus -= 0.10
-	return 1.0 + bonus
+	return 1.0 + bonus + form_mod("speed")
 
 
 ## Material shells and Stone Skin take damage off every hit (never below 1).
@@ -451,6 +452,7 @@ func reduce_damage(dmg: int) -> int:
 	var ab := ability()
 	if not ab.is_empty() and ab["id"] == "stone_skin":
 		cut += 1 + int(ab["rank"])  # 2, 3, 4
+	cut += roundi(form_mod("cut"))
 	return maxi(1, dmg - cut)
 
 
@@ -493,6 +495,7 @@ func _spawn_helper(kind: String, life: float, dmg: int) -> void:
 
 ## Called after every bite: lifesteal, bleeding bites and the Dragon spark.
 func on_bite_landed(target, dmg: int) -> void:
+	_form_on_bite(target, dmg)
 	if specials.has("cleave"):
 		var extra := 0
 		for e in _enemies_within(float(stages[stage]["range"]) * (1.3 if specials.has("titan") else 1.0)):
@@ -589,6 +592,8 @@ func _update_ability(delta: float) -> void:
 	if specials.has("gravity"):
 		for e in _enemies_within(160.0):
 			e.global_position = e.global_position.move_toward(global_position, 35.0 * delta)
+
+	_form_regen(delta)
 
 	# family traits, from form 1
 	var fam := family()
@@ -693,6 +698,7 @@ func _update_skills(delta: float) -> void:
 		var desperate := hp <= max_hp * 0.3 and not _enemies_within(150.0).is_empty()
 		if surrounded or desperate:
 			cast("roar")
+	_update_form_autos()
 	if skill_cd.get("doom", 1.0) == 0.0:
 		if _enemies_within(320.0).size() >= 6 or (hp <= max_hp * 0.3 and _enemies_within(250.0).size() >= 2):
 			cast("doom")
@@ -707,9 +713,13 @@ func _add_to_level(node: Node2D) -> void:
 func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 	if rank(id) == 0 or float(skill_cd.get(id, 0.0)) > 0.0:
 		return false
+	if SkillsData.form_skills().has(id):
+		return _cast_form(id)
 	var direction := aim if aim != Vector2.ZERO else facing
 	var r := rank(id)
 	var power := 1.0 + 0.3 * (r - 1)
+	if SkillsData.form_skills().has(id):
+		return _cast_form(id)
 	match id:
 		"nova":
 			var z = ZoneScript.new()
@@ -874,3 +884,72 @@ func _draw() -> void:
 		draw_arc(to_local(move_target), 6.0, 0.0, TAU, 20, Color(1, 1, 1, 0.8), 1.5)
 	if bite_flash > 0.0:
 		draw_arc(bite_dir * 16.0 * sc, 12.0 * sc, bite_dir.angle() - 1.0, bite_dir.angle() + 1.0, 12, Color.WHITE, 2.5 * sc)
+
+
+# --- form skills (skills.gd FORM_LIST): unlocked by the line and the form, picked at level-ups ---
+
+## Sum of one modifier over every form skill owned, times its rank.
+func form_mod(key: String) -> float:
+	var total := 0.0
+	var all := SkillsData.form_skills()
+	for id in skills:
+		if all.has(id) and all[id].get("mods", {}).has(key):
+			total += float(all[id]["mods"][key]) * int(skills[id])
+	return total
+
+
+## On-bite statuses and healing from form skills.
+func _form_on_bite(target, dmg: int) -> void:
+	var all := SkillsData.form_skills()
+	var drain := form_mod("drain")
+	if drain > 0.0:
+		var healed := maxi(1, roundi(dmg * drain))
+		hp = mini(max_hp, hp + healed)
+		hp_changed.emit(hp)
+	for id in skills:
+		if not all.has(id) or not all[id].has("onbite") or not is_instance_valid(target):
+			continue
+		var ob: Dictionary = all[id]["onbite"]
+		if randf() < float(ob["chance"]) * int(skills[id]):
+			target.apply_status(ob["status"], float(ob["secs"]))
+
+
+func _form_regen(delta: float) -> void:
+	var per_sec := form_mod("regen")
+	if per_sec <= 0.0 or hp >= max_hp:
+		return
+	regen_acc += per_sec * delta
+	if regen_acc >= 1.0:
+		var whole := int(regen_acc)
+		regen_acc -= whole
+		hp = mini(max_hp, hp + whole)
+		hp_changed.emit(hp)
+
+
+## Automatic form skills fire when a villager comes inside their blast radius.
+func _update_form_autos() -> void:
+	var all := SkillsData.form_skills()
+	for id in skills:
+		if all.has(id) and all[id].has("auto") and float(skill_cd.get(id, 0.0)) == 0.0:
+			if not _enemies_within(float(all[id]["auto"]["radius"]) * 0.9).is_empty():
+				cast(id)
+
+
+func _cast_form(id: String) -> bool:
+	var a: Dictionary = SkillsData.form_skills()[id]["auto"]
+	var r := rank(id)
+	var z = ZoneScript.new()
+	z.position = global_position
+	z.radius = float(a["radius"]) * (1.0 + 0.1 * (r - 1))
+	z.delay = 0.0
+	z.damage = ceili(effective_bite() * float(a["mult"]) * (1.0 + 0.3 * (r - 1)))
+	z.team = "player"
+	z.color = Color(str(a["color"]))
+	z.stun = float(a.get("stun", 0.0))
+	z.status = str(a.get("status", ""))
+	z.status_time = float(a.get("secs", 0.0))
+	z.source = self
+	_add_to_level(z)
+	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	Sfx.play(get_tree(), "nova")
+	return true

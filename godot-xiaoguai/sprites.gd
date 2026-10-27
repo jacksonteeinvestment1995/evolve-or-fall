@@ -28,6 +28,25 @@ static func tex(name: String) -> Texture2D:
 	return t
 
 
+## The same strip mirrored left to right, frame by frame (frame order is kept).
+static func tex_flipped(name: String) -> Texture2D:
+	var key := name + "#flip"
+	if _cache.has(key):
+		return _cache[key]
+	var t := tex(name)
+	var out: Texture2D = null
+	if t != null:
+		var img := t.get_image()
+		var fh := img.get_height()
+		for i in img.get_width() / fh:
+			var frame := img.get_region(Rect2i(i * fh, 0, fh, fh))
+			frame.flip_x()
+			img.blit_rect(frame, Rect2i(0, 0, fh, fh), Vector2i(i * fh, 0))
+		out = ImageTexture.create_from_image(img)
+	_cache[key] = out
+	return out
+
+
 ## First plain (non attack / walk / night) file that starts with the prefix, e.g. "farmer_2_".
 static func find(prefix: String) -> String:
 	for n in _all_names():
@@ -69,7 +88,7 @@ static func hero(forms: Array, form: int) -> String:
 
 ## Draw frame `frame` of a strip centred on the origin, `size` pixels wide on screen.
 static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bool = false, modulate: Color = Color.WHITE) -> bool:
-	var t := tex(name)
+	var t := tex_flipped(name) if flip else tex(name)
 	if t == null:
 		return false
 	var fh := t.get_height()
@@ -77,8 +96,5 @@ static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bo
 	var src := Rect2((frame % frames) * fh, 0, fh, fh)
 	size *= sqrt(fh / 16.0)  # bigger frames are bigger forms, softened because the body also grows
 	var dst := Rect2(-size * 0.5, -size * 0.6, size, size)
-	if flip:
-		dst.position.x += size
-		dst.size.x = -size
 	ci.draw_texture_rect_region(t, dst, src, modulate)
 	return true

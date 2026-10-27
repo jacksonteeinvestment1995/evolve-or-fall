@@ -1492,5 +1492,95 @@ func _init() -> void:
 	main._update_music()
 	check("the music changes back and the credit follows", main.music.current == "battle1" and main.credit.text.contains("Wolfgang_"))
 
+	# =========================== form skills: each line and form has its own picks ===========================
+	await fresh()
+	p = main.player
+	var SkillsD = main.SkillsData
+	var fk_fs: Dictionary = SkillsD.form_skills()
+	var fk_released_lines := [0, 1, 2, 6, 10, 14, 17, 20, 22]
+	var fk_per_line := {}
+	var fk_forms_ok := true
+	for id in fk_fs:
+		fk_per_line[fk_fs[id]["line"]] = int(fk_per_line.get(fk_fs[id]["line"], 0)) + 1
+		fk_forms_ok = fk_forms_ok and int(fk_fs[id]["form"]) >= 2 and int(fk_fs[id]["form"]) <= 10 and main.LinesData.released(int(fk_fs[id]["line"]))
+	check("form skills: 6 for each of the 9 released lines", fk_fs.size() == 54 and fk_released_lines.all(func(l): return fk_per_line.get(l, 0) == 6), str(fk_per_line))
+	check("form skills: unlock forms are 2 to 10 and only on released lines", fk_forms_ok)
+	p.choose_line(10)
+	p.stage = 3
+	var fk_pool: Array = SkillsD.form_pool(10, 3)
+	check("form 3 Dragon: offered Scale Hide, not Ember Bite (form 4)", fk_pool.has("d_scale") and not fk_pool.has("d_ember"), str(fk_pool))
+	p.stage = 10
+	fk_pool = SkillsD.form_pool(10, 10)
+	check("form 10 Dragon: all 6 Dragon skills, none from other lines", fk_pool.size() == 6 and fk_pool.all(func(i): return i.begins_with("d_")), str(fk_pool))
+	var frng := RandomNumberGenerator.new()
+	frng.seed = 7
+	var fk_seen := {}
+	for k in 60:
+		for id in SkillsD.roll({}, frng, 3, 10, 4):
+			fk_seen[id] = true
+	check("level-up menu offers form skills up to the current form only", fk_seen.has("d_scale") and fk_seen.has("d_ember") and not fk_seen.has("d_gust") and not fk_seen.has("z_grip"), str(fk_seen.keys()))
+	check("general skills are still offered", fk_seen.has("hide") or fk_seen.has("fangs"))
+	var fk_none_seen := {}
+	for k in 40:
+		for id in SkillsD.roll({}, frng, 3, -1, 0):
+			fk_none_seen[id] = true
+	check("before choosing a line only general skills appear", fk_none_seen.keys().all(func(i): return SkillsD.SKILLS.has(i)))
+
+	p.stage = 7
+	var fk_bite0: int = p.effective_bite()
+	p.learn("d_heart")
+	check("Dragon Heart: stronger bite", p.effective_bite() > fk_bite0, "%d -> %d" % [fk_bite0, p.effective_bite()])
+	var fk_hp0: int = p.max_hp
+	p.learn("d_scale")
+	check("Scale Hide: more max HP", p.max_hp > fk_hp0, "%d -> %d" % [fk_hp0, p.max_hp])
+	var fk_jaws_cd: float = p.bite_cd
+	check("learning a form skill raises its rank and caps it", p.rank("d_heart") == 1 and (func():
+		p.learn("d_heart"); p.learn("d_heart"); p.learn("d_heart"); return p.rank("d_heart") == 3).call())
+
+	p.choose_line(2)
+	p.stage = 8
+	var fk_cut0: int = p.reduce_damage(6)
+	p.learn("w_veil")
+	check("Spectral Veil: take less damage", p.reduce_damage(6) == fk_cut0 - 1, "%d -> %d" % [fk_cut0, p.reduce_damage(6)])
+	var fk_spd0: float = p.trait_speed()
+	p.learn("w_drift")
+	check("Ghost Drift: faster", p.trait_speed() > fk_spd0)
+
+	await clear_enemies()
+	p.choose_line(10)
+	p.stage = 5
+	p.learn("d_ember")
+	p.learn("d_ember")
+	p.learn("d_ember")  # 90% per bite
+	var fk_victim = mk(p.global_position + Vector2(30, 0), 0, 0)
+	for k in 12:
+		p.on_bite_landed(fk_victim, 1)
+	check("Ember Bite: bites set villagers on fire", fk_victim.has_status("burn"))
+
+	p.hp = 1
+	p.learn("z_crimson")
+	p.stage = 10
+	p.choose_line(0)
+	p.stage = 10
+	p.hp = 1
+	p.learn("z_crimson")
+	p.on_bite_landed(fk_victim, 20)
+	check("Crimson Feast: bites heal", p.hp > 1, str(p.hp))
+	p.hp = 1
+	p.learn("z_undying")
+	p.learn("z_undying")
+	p.learn("z_undying")
+	await frames(70)
+	check("Undying: regenerates HP over time", p.hp > 2, str(p.hp))
+
+	await clear_enemies()
+	p.stage = 5
+	p.learn("z_chill")
+	var fk_chilled = mk(p.global_position + Vector2(40, 0), 0, 0)
+	var fk_zones_before := zones().size()
+	check("Grave Chill: casts when a villager is near", p.cast("z_chill") and zones().size() >= fk_zones_before)
+	check("auto form skill goes on cooldown", float(p.skill_cd["z_chill"]) > 0.0 and not p.cast("z_chill"))
+	check("unlearned form skill cannot be cast", not p.cast("z_plague"))
+
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

@@ -690,7 +690,7 @@ func _update_hud() -> void:
 	var alive := get_tree().get_nodes_in_group("enemies").size()
 	var skill_bits: Array[String] = []
 	for id in player.skills:
-		var info: Dictionary = SkillsData.SKILLS[id]
+		var info: Dictionary = SkillsData.info(id)
 		if info.get("auto", false):
 			var cd: float = player.skill_cd.get(id, 0.0)
 			skill_bits.append("%s r%d %s" % [info["name"], player.skills[id], "ready" if cd <= 0.0 else "%.1fs" % cd])
@@ -785,13 +785,13 @@ func _next_menu() -> void:
 			special_entries.append("%d. %s\n    %s" % [special_entries.size() + 1, info["name"], info["desc"]])
 		_open_menu("LEVEL %d: choose a SPECIAL skill" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620)
 	else:
-		var options := SkillsData.roll(player.skills, rng, 3)
+		var options := SkillsData.roll(player.skills, rng, 3, player.line, player.stage)
 		if options.is_empty():
 			_next_menu()
 			return
 		var entries: Array[String] = []
 		for id in options:
-			var info: Dictionary = SkillsData.SKILLS[id]
+			var info: Dictionary = SkillsData.info(id)
 			var r: int = player.rank(id)
 			var key_text := "  [auto]" if info.get("auto", false) else ""
 			entries.append("%d. %s   rank %d → %d%s\n    %s" % [entries.size() + 1, info["name"], r, r + 1, key_text, info["desc"]])

@@ -64,6 +64,21 @@ for pre, a, b in [('slime', 'slime', 'gel_paladin'), ('dragon', 'hatchling', 'el
 for n, sz in [('dragon_02_dragonling', 16), ('dragon_03_wyvern', 24), ('dragon_04_fire_wyvern', 24), ('dragon_05_drake', 24), ('dragon_06_fire_drake', 32),
               ('dragon_07_flame_dragon', 32), ('dragon_08_inferno_dragon', 32), ('dragon_09_ancient_dragon', 40)]:
     M[n] = S('hero', [(sz, sz)], 2, 2)
+for n, sz in [('beast_02_wolf', 16), ('beast_03_dire_wolf', 24), ('beast_04_wild_alpha', 24), ('beast_05_wolfman', 24),
+              ('beast_06_werewolf', 32), ('beast_07_moon_wolf', 32), ('beast_08_blood_moon_wolf', 32), ('beast_09_fenrir_spawn', 40)]:
+    M[n] = S('hero', [(sz, sz)], 2, 2)
+for n, sz in [('nature_02_sprout', 16), ('nature_03_sapling', 24), ('nature_04_thornling', 24), ('nature_05_man_eater', 24),
+              ('nature_06_great_man_eater', 32), ('nature_07_ent', 32), ('nature_08_treant', 32), ('nature_09_elder_treant', 40)]:
+    M[n] = S('hero', [(sz, sz)], 2, 2)
+for n, sz in [('slime_02_big_slime', 16), ('slime_03_fire_slime', 24), ('slime_04_magma_slime', 24), ('slime_05_molten_slime', 24),
+              ('slime_06_gold_slime', 32), ('slime_07_platinum_slime', 32), ('slime_08_slime_squire', 32), ('slime_09_slime_cavalier', 40)]:
+    M[n] = S('hero', [(sz, sz)], 2, 2)
+for n, sz in [('material_02_clay_golem', 16), ('material_03_mud_golem', 24), ('material_04_stone_golem', 24), ('material_05_rock_golem', 24),
+              ('material_06_granite_golem', 32), ('material_07_iron_golem', 32), ('material_08_steel_colossus', 32), ('material_09_adamant_golem', 40)]:
+    M[n] = S('hero', [(sz, sz)], 2, 2)
+for n, sz in [('demon_02_fire_imp', 16), ('demon_03_mischief_imp', 24), ('demon_04_fiend', 24), ('demon_05_minor_demon', 24),
+              ('demon_06_demon', 32), ('demon_07_greater_demon', 32), ('demon_08_archdemon', 32), ('demon_09_demon_prince', 40)]:
+    M[n] = S('hero', [(sz, sz)], 2, 2)
 # walk (4 frames) / attack (3 frames): same size as the idle sprite
 WA = {'xiaoguai_base': (16, 'hero'), 'undead_01_zombie': (16, 'hero'), 'undead_10_vampire_lord': (48, 'hero')}
 for p_, a, b in VIL:
