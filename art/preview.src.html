@@ -369,7 +369,7 @@ const PROPS = [
 const LINEUP = (() => {
   const boss = ['undead_10_vampire_lord', 'skeleton_10_lich', 'wisp_10_wraith_king', 'slime_10_gel_paladin', 'dragon_10_elder_dragon', 'beast_10_fenrir', 'nature_10_world_tree', 'material_10_titan', 'demon_10_demon_lord'].filter(has);
   const small = ['xiaoguai_base', 'undead_01_zombie', 'skeleton_01_skeleton', 'wisp_01_wisp', 'slime_01_slime', 'dragon_01_hatchling', 'beast_01_wolf_pup', 'nature_01_seed', 'material_01_clay_lump', 'demon_01_imp'].filter(has);
-  return boss.map((n, i) => ({ name: n, x: 30 + i * 52, y: 178 })).concat(small.map((n, i) => ({ name: n, x: 26 + i * 47, y: 240 })));
+  return boss.map((n, i) => ({ name: n, x: 30 + i * 52, y: 150 })).concat(small.map((n, i) => ({ name: n, x: 26 + i * 47, y: 196 })));
 })();
 const HERO = { x: 232, y: 156 };
 
@@ -456,7 +456,8 @@ function frame(tms) {
   drawables = []; lights = [];
   const lineup = state.scene === 'lineup', activeStructs = lineup ? [] : structs;
   bx.clearRect(0, 0, PW, PH); fx.clearRect(0, 0, PW, PH);
-  trees.forEach(tr => drawables.push({ y: tr.y, draw: () => drawTree(bx, t, tr) }));
+  const shownTrees = lineup ? trees.filter(tr => tr.y < 80 || tr.y > 250) : trees;
+  shownTrees.forEach(tr => drawables.push({ y: tr.y, draw: () => drawTree(bx, t, tr) }));
   activeStructs.forEach(o => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, Math.floor(t * 3 + o.x) % SPRITES[o.name].frames.length) }));
   PROPS.forEach(o => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, Math.floor(t * 1.5 + o.x) % SPRITES[o.name].frames.length) }));
   if (lineup) LINEUP.forEach((o, i) => drawables.push({ y: o.y, draw: () => spriteBottom(bx, o.name, o.x, o.y, idle + i) }));
@@ -492,7 +493,7 @@ function frame(tms) {
     sctx.drawImage(work, 0, 0); return;
   }
   // soft cast shadows (light from top-left, so they fall bottom-right)
-  trees.forEach(tr => { softShadow(tr.x + 11, tr.y - 1, 26, 8, .5); softShadow(tr.x + 18, tr.y - 8, 20, 9, .22); });
+  shownTrees.forEach(tr => { softShadow(tr.x + 11, tr.y - 1, 26, 8, .5); softShadow(tr.x + 18, tr.y - 8, 20, 9, .22); });
   activeStructs.forEach(o => { const w = SPRITES[o.name].w; softShadow(o.x + 8, o.y - 1, w * .72, 7, .5); });
   PROPS.forEach(o => softShadow(o.x + 3, o.y - 1, Math.max(7, SPRITES[o.name].w * (o.name === 'prop_fence' || o.name === 'prop_fence_corner' ? .5 : .38)), 3.5, .4));
   if (lineup) LINEUP.forEach(o => softShadow(o.x + 2, o.y - 1, Math.max(8, SPRITES[o.name].w * .4), SPRITES[o.name].w > 30 ? 5 : 3.6, .55));
