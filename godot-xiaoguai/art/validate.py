@@ -51,6 +51,7 @@ for n in ['z_grip', 'z_plague', 'z_chill', 'z_feast', 'z_undying', 'z_crimson', 
           'n_bark', 'n_thorn', 'n_photo', 'n_venom', 'n_tangle', 'n_bloom', 'm_shell', 'm_fists', 'm_quake', 'm_resolve', 'm_core', 'm_titan',
           'e_claws', 'e_brand', 'e_pact', 'e_spark', 'e_curse', 'e_might']:
     M['icon_fs_' + n] = S('icon', [(16, 16)], 1, 1)
+    M['skill_' + n] = S('icon', [(16, 16)], 1, 1)   # art/src/skill_icons.spr
 
 # ---- batch 2 manifest ----
 VIL2 = {'farmer': [('farmer', 'Farmer'), ('harvester', 'Harvester'), ('scythe_master', 'Scythe Master')],
