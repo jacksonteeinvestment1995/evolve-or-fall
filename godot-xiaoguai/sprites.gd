@@ -47,6 +47,69 @@ static func tex_flipped(name: String) -> Texture2D:
 	return out
 
 
+## The strip with every frame's pupils moved one pixel (two on big sprites) toward look
+## (each part -1, 0 or 1; look is in screen terms, flip mirrors the whole sprite afterwards).
+## Pupils are dark pixels touching an eye white (near-white); a sprite without eyes comes back unchanged.
+static func tex_look(name: String, look: Vector2i, flip: bool) -> Texture2D:
+	if look == Vector2i.ZERO:
+		return tex_flipped(name) if flip else tex(name)
+	var key := "%s#look%d,%d,%s" % [name, look.x, look.y, flip]
+	if _cache.has(key):
+		return _cache[key]
+	var t := tex(name)
+	var out: Texture2D = null
+	if t != null:
+		var img := t.get_image()
+		var fh := img.get_height()
+		var step := 2 if fh >= 32 else 1
+		var d := Vector2i(-look.x if flip else look.x, look.y) * step
+		for i in img.get_width() / fh:
+			_shift_pupils(img, Rect2i(i * fh, 0, fh, fh), d)
+			if flip:
+				var frame := img.get_region(Rect2i(i * fh, 0, fh, fh))
+				frame.flip_x()
+				img.blit_rect(frame, Rect2i(0, 0, fh, fh), Vector2i(i * fh, 0))
+		out = ImageTexture.create_from_image(img)
+	_cache[key] = out
+	return out
+
+
+static func _is_white(c: Color) -> bool:
+	return c.a > 0.5 and c.r > 0.82 and c.g > 0.82 and c.b > 0.82
+
+
+static func _shift_pupils(img: Image, area: Rect2i, d: Vector2i) -> void:
+	var pupils: Array[Vector2i] = []
+	var whites := {}
+	var white_col := Color.WHITE
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			if _is_white(img.get_pixel(x, y)):
+				whites[Vector2i(x, y)] = true
+				white_col = img.get_pixel(x, y)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var c := img.get_pixel(x, y)
+			if c.a > 0.5 and c.r < 0.35 and c.g < 0.35 and c.b < 0.35:
+				for n in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					if whites.has(Vector2i(x, y) + n):
+						pupils.append(Vector2i(x, y))
+						break
+	if pupils.is_empty():
+		return
+	var cols := {}
+	for q in pupils:
+		cols[q] = img.get_pixel(q.x, q.y)
+	for q in pupils:
+		img.set_pixel(q.x, q.y, white_col)
+	for q in pupils:
+		var to: Vector2i = q + d
+		if whites.has(to) or cols.has(to):
+			img.set_pixel(to.x, to.y, cols[q])
+		else:
+			img.set_pixel(q.x, q.y, cols[q])  # no room to move: stay put
+
+
 ## First plain (non attack / walk / night) file that starts with the prefix, e.g. "farmer_2_".
 static func find(prefix: String) -> String:
 	for n in _all_names():
@@ -87,8 +150,8 @@ static func hero(forms: Array, form: int) -> String:
 
 
 ## Draw frame `frame` of a strip centred on the origin, `size` pixels wide on screen.
-static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bool = false, modulate: Color = Color.WHITE) -> bool:
-	var t := tex_flipped(name) if flip else tex(name)
+static func draw(ci: CanvasItem, name: String, frame: int, size: float, flip: bool = false, modulate: Color = Color.WHITE, look: Vector2i = Vector2i.ZERO) -> bool:
+	var t := tex_look(name, look, flip)
 	if t == null:
 		return false
 	var fh := t.get_height()
