@@ -1,0 +1,251 @@
+<title>小怪 Pixel Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Press+Start+2P&display=swap">
+<style>
+  /* Layout: a sprite-sheet document. Sections of labelled specimens on checkerboard cards, then composed scenes. */
+  :root {
+    --bg: #fbfaf8; --fg: #23211f; --muted: #7a746d; --line: #e4e0da; --card: #f1eee9;
+    --chk1: #e9e5df; --chk2: #f4f1ec;
+    --pixel: "Press Start 2P", "Courier New", monospace;
+    --font: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17161c; --fg: #ece8e2; --muted: #9a938a; --line: #34313d; --card: #1f1d27;
+      --chk1: #262431; --chk2: #2d2a39; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17161c; --fg: #ece8e2; --muted: #9a938a; --line: #34313d; --card: #1f1d27;
+    --chk1: #262431; --chk2: #2d2a39; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.6;
+    padding-block: 32px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+  h1 { font-family: var(--pixel); font-size: 20px; line-height: 1.5; margin: 0 0 8px; font-weight: 400; text-wrap: balance; }
+  h2 { font-family: var(--pixel); font-size: 12px; line-height: 1.6; margin: 0 0 6px; font-weight: 400; }
+  p { margin: 0; max-width: 62ch; }
+  .sub { color: var(--muted); }
+  section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px;
+    display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  }
+  .stage {
+    display: flex; align-items: flex-end; justify-content: center; padding: 10px; min-height: 120px;
+    background-color: var(--chk1);
+    background-image: linear-gradient(45deg, var(--chk2) 25%, transparent 25%, transparent 75%, var(--chk2) 75%),
+                      linear-gradient(45deg, var(--chk2) 25%, transparent 25%, transparent 75%, var(--chk2) 75%);
+    background-size: 16px 16px; background-position: 0 0, 8px 8px; border-radius: 3px;
+  }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; max-width: 100%; height: auto; }
+  .name { font-weight: 700; font-size: 14px; }
+  .note { font-size: 12px; color: var(--muted); max-width: 26ch; }
+  .tag { font-family: var(--pixel); font-size: 9px; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+  .sw { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .sw i { width: 20px; height: 20px; border: 1px solid var(--line); flex: none; }
+  .sw code { font-family: var(--pixel); font-size: 9px; }
+  ul.rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>小怪 Pixel Sheet</h1>
+    <p class="sub">All art for the game in 2D pixel art: five evolution forms, enemies, items, tiles and three sample scenes. Every sprite is a character grid on a 16-colour palette, so new ones are easy to add.</p>
+  </header>
+
+  <section>
+    <div><h2>Evolution line</h2><p class="sub">Same eyes and horns in every form. The canvas grows with each stage, so size is part of the story.</p></div>
+    <div class="row" id="evo"></div>
+  </section>
+
+  <section>
+    <div><h2>Enemies and items</h2><p class="sub">The heroes and villagers the player starts out afraid of.</p></div>
+    <div class="row" id="misc"></div>
+  </section>
+
+  <section>
+    <div><h2>Tiles</h2><p class="sub">16 × 16, built to repeat without visible seams.</p></div>
+    <div class="row" id="tiles"></div>
+  </section>
+
+  <section>
+    <div><h2>Scenes</h2><p class="sub">Three moments from the game, assembled from the pieces above.</p></div>
+    <div class="row" id="scenes" style="flex-direction:column"></div>
+  </section>
+
+  <section>
+    <div><h2>Palette and rules</h2></div>
+    <div class="swatches" id="pal"></div>
+    <ul class="rules">
+      <li>Canvas sizes: 16 (stage 1–2), 24 (stage 3), 32 (stage 4–5). Export at 1x, scale in the engine with nearest-neighbour filtering.</li>
+      <li>Every sprite has a 1 px dark outline in the same colour (K). Light comes from the top left, so highlights sit top left and shade sits bottom right.</li>
+      <li>Never rotate or scale by a non-integer amount. Keep one pixel size across the whole game.</li>
+      <li>Animate with 2–4 frames per action (idle, walk, attack) by editing the grid rows, not by stretching.</li>
+    </ul>
+  </section>
+</div>
+
+<script id="data">
+  const PAL = {
+    K:'#1c1230', g:'#6fcf6a', G:'#3a9a4a', l:'#bdf5a6', W:'#ffffff', w:'#f4fbff', y:'#ffd84a', o:'#ff9a3c',
+    r:'#e8454f', R:'#9c2a45', p:'#a463d8', P:'#5b2c8c', v:'#cf9cf2', b:'#d9d3e6', B:'#8f88a3',
+    s:'#f2c9a0', S:'#c98f6a', n:'#8a5a34', N:'#54331c', c:'#5ac8f0', d:'#3d4466', m:'#c4cbe0', M:'#8d95b3'
+  };
+
+  /* rows are the LEFT half of the sprite; the right half is mirrored. pad adds empty outer columns. */
+  const SPRITES = {
+    s1: { name:'Stage 1 · 小怪', note:'Tiny slime imp. Dodge and bite.', rows:[
+      '........','........','........','........','..K.....','..KyK...','...KKKKK','..Kgllgg',
+      '.Kgllggg','.KgWWWgg','.KgWKWgg','.KgWKWgg','.KgggggK','.KGgggGG','..KGGGGG','...KKKKK'] },
+    s2: { name:'Stage 2 · Beast', note:'Angry eyes, claws, fangs. Dash and claw combo.', rows:[
+      '..K.....','..KyK...','..KyyK..','...KyKKK','..KgglgG','.KgglggG','.KgKKKgg','.KgyKygg',
+      '.KgggggG','.KgKKKKK','.KgWgggg','.KKgggGG','KgGGgGGG','KbKGGGGG','..KGKKKK','..KKK...'] },
+    s3: { name:'Stage 3 · Demon', note:'Purple skin, bat wings. Fire and dark magic.', rows:[
+      '............','............','...K........','...KoK......','...KoKKKKKKK','....Kpvvpppp','....Kppppppp','....KpKKKppp',
+      '....KpyKyppp','....Kppppppp','....KpKKKKKK','K...KpWppWpp','KK...KPppppp','KRRK.KKKKKKK','KRRRKKpvPPPP','.KRRKpppPPPP',
+      '.KRKKpvvPPPP','..KKKpvvPPPP','....KpppPPPP','....KooyyyyK','....KpPPPPPP','....KpPPPK..','....KpPPPK..','...KKKKKKK..'] },
+    s4: { name:'Stage 4 · Monster Lord', note:'Iron armour, glowing visor, tall horns. Area attacks, minions.', pad:4,
+      top:['...K............','...KK...........','...KoK..........','....KoK.........','....KooK........','.....KoK........','.....KooK.......','......KoK.......'],
+      rows:['..K.........','..KoK.......','..KooK......','...KoKK.....','...KmmmmKKKK','...Kmddddddd','...Kdddddddd','...KdKKKKKKK',
+      '...KdKRRRRRR','...KdKKKKKKK','...Kdddddddd','K..KKKKKKKKK','KRKKmmddddMd','KRRKmddRRRdd','KRRKmddRyRdd','KRKKmddRRRdd',
+      '.KbK.Kdddddd','.KKK.KKKKKKK','....KdddRRRR','....KdmddRRd','....KddddddK','....KddddK..','....KddddK..','...KKKKKKK..'] },
+    s5: { name:'Stage 5 · Evil Boss', note:'Flame crown, black robes, red core. Final form.', pad:4,
+      top:['...............y','..............yo','..............oR','...K...........R','...KK..........R','...KoK..........','....KoK.........','....KoK.........'],
+      rows:['K..........K','KK....K...KK','KoK..KyK.KyK','KooK.KyyKKyK','KooKKKyyyyyK','.KooKPPpPPPP','..KKKPPPPPPP','....KPKKKPPP',
+      '....KPrWrPPP','....KPPPPPPP','....KPKKKKKK','....KPWPPWPP','....KKPPPPPP','K..KKKKKKKKK','KRRKPPPpPPPP','KRRKPPPPrryy',
+      'KRKKPPPPrrry','.KKKPPPPPrrr','....KPPPPPPP','..KKKPPPPPPP','..KRKPPPPPPP','.KRRKPPPK...','.KRRKPPPK...','KKKKKKKKK...'] },
+    villager: { name:'Villager', note:'Straw hat and pitchfork. Gets scared easily.', rows:[
+      '........','....KKKK','...Kyyyo','..Kyyyyo','.KKKKKKK','...Kssss','...KsKss','...Kssss',
+      '...KsKKK','..KnnnnN','.KnnnnNN','.KsKnnNN','..KNNNNN','...KnnnN','...KnnK.','..KKKKK.'],
+      extra:[[11,0,'b.b.b'],[11,1,'bbbbb'],[13,2,'n'],[13,3,'n'],[13,4,'n'],[13,5,'n'],[13,6,'n'],[13,7,'n'],[13,8,'n'],[13,9,'n'],[13,10,'n'],[13,11,'n'],[13,12,'n'],[13,13,'n']] },
+    hero: { name:'Hero Knight', note:'Red plume and a long sword. The first real threat.', rows:[
+      '......KR','...KKKRR','..KmmmmR','..KmmmmM','..KddddK','..KdccdK','..KmmmmM','...KKKKK',
+      '.KKmmmmM','KmmKmmRR','KmmKmmRy','.KKKmmRR','...KddyK','...KmmRR','...KmmK.','..KKKKK.'],
+      extra:[[15,0,'M'],[15,1,'m'],[15,2,'m'],[15,3,'m'],[15,4,'m'],[15,5,'m'],[15,6,'m'],[15,7,'m'],[15,8,'m'],[15,9,'m'],[13,10,'yyy'],[15,11,'n'],[15,12,'n']] },
+    heart: { name:'Heart', note:'Health. 10 × 8.', rows:['.KK..','KrrK.','Krwrr','Krrrr','.Krrr','..Krr','...Kr','....K'] },
+    gem: { name:'Evolution Crystal', note:'Drops from mini-bosses. 12 × 11.', rows:['.....K','....Kw','...Kwc','..Kwcc','.Kwccc','Kccccd','.Kcccd','..Kccd','...Kcd','....Kd','.....K'] },
+    fire: { name:'Fireball', note:'Stage 3 ranged attack. 12 × 7.', rows:['..KKKK','.Krooy','Krooyy','Kooyyy','Kooyyy','Krooyy','.Krooy','..KKKK'] }
+  };
+
+  function expand(def) {
+    const pad = '.'.repeat(def.pad || 0);
+    const half = (def.top || []).concat(def.rows.map(r => pad + r));
+    const hw = half[0].length;
+    const grid = half.map(r => { if (r.length !== hw) throw new Error(def.name + ' row length ' + r.length + ' != ' + hw + ': ' + r); return r + [...r].reverse().join(''); });
+    (def.extra || []).forEach(([x, y, str]) => {
+      const row = [...grid[y]]; [...str].forEach((ch, i) => { if (ch !== '.') row[x + i] = ch; }); grid[y] = row.join('');
+    });
+    return grid;
+  }
+</script>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  function paint(ctx, grid, ox, oy) {
+    grid.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return;
+      ctx.fillStyle = PAL[ch]; ctx.fillRect(ox + x, oy + y, 1, 1);
+    }));
+  }
+  function makeCanvas(w, h, scale) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.style.width = w * scale + 'px'; return c;
+  }
+  function spriteCanvas(key, scale) {
+    const g = expand(SPRITES[key]); const c = makeCanvas(g[0].length, g.length, scale);
+    paint(c.getContext('2d'), g, 0, 0); return { c, w: g[0].length, h: g.length };
+  }
+  function card(key, scale, parent) {
+    const { c, w, h } = spriteCanvas(key, scale);
+    const el = document.createElement('div'); el.className = 'card';
+    const st = document.createElement('div'); st.className = 'stage'; st.appendChild(c);
+    el.appendChild(st);
+    el.insertAdjacentHTML('beforeend', `<div><div class="name">${SPRITES[key].name}</div><div class="tag">${w} × ${h}</div></div><div class="note">${SPRITES[key].note}</div>`);
+    parent.appendChild(el);
+  }
+
+  ['s1','s2','s3','s4','s5'].forEach(k => card(k, 5, $('evo')));
+  ['villager','hero'].forEach(k => card(k, 8, $('misc')));
+  ['heart','gem','fire'].forEach(k => card(k, 10, $('misc')));
+
+  /* ---- tiles: seeded noise so they are stable between loads ---- */
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function tile(kind) {
+    const c = makeCanvas(16, 16, 1), x = c.getContext('2d'), r = rng(kind.length * 977 + kind.charCodeAt(0));
+    const px = (i, j, col) => { x.fillStyle = col; x.fillRect(i, j, 1, 1); };
+    for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) {
+      const n = r();
+      if (kind === 'Grass') px(i, j, n < .16 ? '#4ea04c' : n < .21 ? '#86d070' : '#5fb85a');
+      if (kind === 'Dirt path') px(i, j, n < .15 ? '#9a6c42' : n < .23 ? '#cfa070' : '#b58455');
+      if (kind === 'Brick wall') {
+        const row = j >> 2, off = row % 2 ? 4 : 0, mortar = j % 4 === 3 || (i + off) % 8 === 7;
+        const top = j % 4 === 0;
+        px(i, j, mortar ? '#2b2a40' : top ? '#8a8fb0' : n < .3 ? '#5f6383' : n < .6 ? '#767b9c' : '#6b6f8f');
+      }
+      if (kind === 'Dungeon floor') {
+        const edge = i % 8 === 7 || j % 8 === 7, alt = ((i >> 3) + (j >> 3)) % 2;
+        px(i, j, edge ? '#2b2a40' : n < .12 ? '#2f2e48' : alt ? '#44435f' : '#3b3a55');
+      }
+      if (kind === 'Lava') px(i, j, n < .08 ? '#ffd84a' : n < .3 ? '#ff9a3c' : n < .4 ? '#b02a40' : '#e8454f');
+    }
+    return c;
+  }
+  const TILES = {};
+  ['Grass','Dirt path','Brick wall','Dungeon floor','Lava'].forEach(k => {
+    TILES[k] = tile(k);
+    const big = makeCanvas(32, 32, 4); const bx = big.getContext('2d');
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) bx.drawImage(TILES[k], i * 16, j * 16);
+    const el = document.createElement('div'); el.className = 'card';
+    const st = document.createElement('div'); st.className = 'stage'; st.appendChild(big); el.appendChild(st);
+    el.insertAdjacentHTML('beforeend', `<div><div class="name">${k}</div><div class="tag">16 × 16, shown 2 × 2</div></div>`);
+    $('tiles').appendChild(el);
+  });
+
+  /* ---- scenes ---- */
+  function scene(title, note, build) {
+    const W = 12 * 16, H = 7 * 16, c = makeCanvas(W, H, 3), x = c.getContext('2d');
+    build(x);
+    const el = document.createElement('div'); el.className = 'card';
+    el.insertAdjacentHTML('beforeend', `<div><div class="name">${title}</div><div class="note" style="max-width:none">${note}</div></div>`);
+    const sc = document.createElement('div'); sc.className = 'scroll'; sc.appendChild(c); el.appendChild(sc);
+    $('scenes').appendChild(el);
+  }
+  const put = (x, key, px, py) => paint(x, expand(SPRITES[key]), px, py);
+  const fill = (x, tl, row0, rows, cols = 12, col0 = 0) => { for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) x.drawImage(TILES[tl], (col0 + i) * 16, (row0 + j) * 16); };
+  const hud = (x, hearts, stage) => {
+    for (let i = 0; i < hearts; i++) put(x, 'heart', 4 + i * 12, 4);
+    for (let i = 0; i < 5; i++) { x.fillStyle = i < stage ? PAL.y : PAL.d; x.fillRect(120 + i * 8, 5, 6, 6); x.fillStyle = PAL.K; x.fillRect(120 + i * 8, 11, 6, 1); }
+    put(x, 'gem', 176 - 14, 3);
+  };
+
+  scene('Stage 1 · The village edge', 'A villager with a pitchfork blocks the road. 小怪 can only dodge and bite.', x => {
+    x.fillStyle = '#8fd3ff'; x.fillRect(0, 0, 192, 48);
+    x.fillStyle = '#fff'; [[24,12,22,5],[30,9,12,4],[120,20,26,5],[128,17,14,4]].forEach(a => x.fillRect(...a));
+    fill(x, 'Grass', 3, 4); fill(x, 'Dirt path', 4, 2, 12, 0);
+    put(x, 's1', 44, 72); put(x, 'villager', 124, 68); hud(x, 3, 1);
+  });
+  scene('Stage 3 · The hero keep', 'A knight guards the dungeon. The demon form has a fireball.', x => {
+    fill(x, 'Brick wall', 0, 3); fill(x, 'Dungeon floor', 3, 4);
+    x.fillStyle = PAL.K; x.fillRect(86, 12, 4, 14); x.fillStyle = PAL.o; x.fillRect(85, 4, 6, 8); x.fillStyle = PAL.y; x.fillRect(87, 6, 2, 5);
+    put(x, 's3', 36, 60); put(x, 'fire', 84, 74); put(x, 'hero', 130, 68); hud(x, 4, 3);
+  });
+  scene('Stage 5 · The throne', 'The Evil Boss over a lava floor. The old enemies are small now.', x => {
+    fill(x, 'Brick wall', 0, 3); fill(x, 'Lava', 3, 4); fill(x, 'Dungeon floor', 3, 4, 4, 4);
+    [[28,10],[150,10]].forEach(([tx, ty]) => { x.fillStyle = PAL.K; x.fillRect(tx + 1, ty + 8, 4, 14); x.fillStyle = PAL.o; x.fillRect(tx, ty, 6, 8); x.fillStyle = PAL.y; x.fillRect(tx + 2, ty + 2, 2, 5); });
+    put(x, 's5', 80, 52); put(x, 'villager', 20, 68); put(x, 'hero', 152, 68); put(x, 'gem', 30, 86); put(x, 'gem', 150, 86); hud(x, 5, 5);
+  });
+
+  /* ---- palette ---- */
+  Object.entries(PAL).forEach(([k, v]) => {
+    $('pal').insertAdjacentHTML('beforeend', `<div class="sw"><i style="background:${v}"></i><code>${k}</code><span class="sub">${v}</span></div>`);
+  });
+</script>

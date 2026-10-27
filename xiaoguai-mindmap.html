@@ -1,0 +1,451 @@
+﻿<title>小怪 Mind Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+  /* Layout: one root in the middle, branches alternate right and left, drawn as a static tree. */
+  :root {
+    --bg: #fbfaf8;
+    --fg: #23211f;
+    --muted: #7a746d;
+    --line: #e4e0da;
+    --panel: #f3f0ec;
+    --bl: 42%;           /* lightness of branch colours */
+    --font: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "DM Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1918; --fg: #ece8e2; --muted: #9a938a; --line: #3a3733; --panel: #232120; --bl: 68%;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1918; --fg: #ece8e2; --muted: #9a938a; --line: #3a3733; --panel: #232120; --bl: 68%;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.5;
+    padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; text-wrap: balance; }
+  .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  #map { position: relative; margin: 0 auto; }
+  #lines { position: absolute; inset: 0; pointer-events: none; }
+  .node {
+    position: absolute; display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 10px;
+    border-radius: 6px; white-space: nowrap; font-size: 13px;
+    border: 1px solid color-mix(in srgb, var(--c) 45%, var(--bg));
+    background: color-mix(in srgb, var(--c) 10%, var(--bg));
+  }
+  .node::before {
+    content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--c);
+  }
+  .node.r::before { background: color-mix(in srgb, var(--c) 40%, transparent); }
+  .node.d::before { background: var(--c); }
+  .node.q { border-style: dashed; }
+  .node.q::before { border-radius: 2px; transform: rotate(45deg); }
+  .node.b {
+    font-weight: 700; background: color-mix(in srgb, var(--c) 22%, var(--bg)); border-color: var(--c);
+  }
+  .node.b::before { display: none; }
+  .node.root {
+    justify-content: center; height: 60px; font-size: 17px; font-weight: 700; padding: 0 16px;
+    background: var(--fg); color: var(--bg); border-color: var(--fg); border-radius: 30px;
+  }
+  .node.root::before { display: none; }
+  .log { display: grid; gap: 6px; padding: 0; margin: 0; list-style: none; max-width: 760px; }
+  .log li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; }
+  .log time { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+  h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>小怪 → Evil Boss</h1>
+    <div class="meta">Mind map · updated 2026-10-27</div>
+  </header>
+
+  <div class="legend">
+    <span><i class="node" style="--c:var(--muted);position:static;height:auto;padding:0;border:0;background:none"></i> Idea</span>
+    <span><i class="node r" style="--c:var(--muted);position:static;height:auto;padding:0;border:0;background:none"></i> Recommended</span>
+    <span><i class="node d" style="--c:var(--muted);position:static;height:auto;padding:0;border:0;background:none"></i> Decided</span>
+    <span><i class="node q" style="--c:var(--muted);position:static;height:auto;padding:0;border:0;background:none"></i> Open question</span>
+  </div>
+
+  <div class="scroll"><div id="map"><svg id="lines"></svg></div></div>
+
+  <section>
+    <h2>Change log</h2>
+    <ul class="log" id="log">
+      <!-- LOG: newest first -->
+      <li><time>2026-10-27</time><span>Correction: the Godot prototype had used an invented 5-form path (Beast, Demon...). Replaced with the decided Undead line 1, all 10 stages Zombie → Vampire Lord, in 4 tiers. The old 5-form list is kept under Evolution as an early idea.</span></li>
+      <li><time>2026-10-27</time><span>Checked the game against the YouTube Playables certification requirements (assuming that is what "YouTube game" means). Gaps are listed under the new YouTube Playables branch.</span></li>
+      <li><time>2026-10-27</time><span>The game now has sound: music that follows evolution (nights have their own track) and 26 generated sound effects, with the music credit shown on screen. The project is 7.3 MB.</span></li>
+      <li><time>2026-10-27</time><span>Stage 1 update 5: a gentle start (30 villagers; no ranged attacks or day bonus for 3 minutes, no skills for 6, no hidden enemies for 10; they notice 小怪 only when close at first). Levelling is quick early and steep in the middle (Lv 50 needs 20625 EXP), and the final form earns the strongest skill, Final Calamity. The village grows with every evolution (+22 each, cap 360). Enemies get 17 attack types spread across their professions. Specific skill sets and numbers are my draft.</span></li>
+      <li><time>2026-10-27</time><span>Stage 1 update 4: levelling is slower (max level 50) and a new form comes every 5 levels, so the first evolution is at Lv 5; he grows a little with each level. The bone wall is now selected by default with a build bar at the bottom ([1] tower, [2] wall, [X] remove). X removes a tower or wall and refunds half the bones, so nothing can trap 小怪.</span></li>
+      <li><time>2026-10-27</time><span>Decided: the triggers for the four automatic skills (Bone Nova, Spirit Bolt, Roar, Shadow Step dodge).</span></li>
+      <li><time>2026-10-27</time><span>Changed: the four active skills (Bone Nova, Spirit Bolt, Shadow Step, Roar) are now passive and trigger by themselves, so no skill keys remain. Shadow Step became a dodge chance. How each one triggers is my interpretation.</span></li>
+      <li><time>2026-10-27</time><span>Decided: the 小怪 skill list (6 passives, 4 actives) and the enemy ranged attacks and skills.</span></li>
+      <li><time>2026-10-27</time><span>Stage 1 update 3: villagers walk around trees and walls; ranged attacks and skills for enemies; 小怪 levels to 30 with a skill choice every level and a new form every 3 levels, picking any of the 26 lines at Lv 3; towers and bone walls placed anywhere (never sealing every route); the village grows slowly then fastest near 20 minutes; dawn and dusk can spawn hidden enemies. The skill list and enemy skill assignments are my draft.</span></li>
+      <li><time>2026-10-27</time><span>Decided: the 10 villager lines, their names and the three hidden-form triggers (Parasite Hero, Dark Hero, GOD).</span></li>
+      <li><time>2026-10-27</time><span>Stage 1 update: map 180×100 (5× again), thinner trees with open paths, sprint cooldown 15 s, 5 tower pads (build towers yourself with E, none at the start), villagers chase from anywhere and respawn stronger, villager evolution = 10 lines × 5 forms + 3 hidden forms (replaces the 20-level idea), day and night. Names of the 10 lines are placeholders.</span></li>
+      <li><time>2026-10-27</time><span>Godot Stage 1 prototype built: mouse movement, auto attack, sprint, dodge roll, lunge, mud, 80×45 map (5×), 40 villagers (10×), EXP evolution instead of the orb. New Gameplay branch added.</span></li>
+      <li><time>2026-10-27</time><span>Decided tone: both funny/cute and dark/tragic. Added under Story; removed from Open Questions.</span></li>
+      <li><time>2026-10-27</time><span>Decided: first game, no coding experience. Claude writes and explains the Godot code; added a tiny practice game before the prototype.</span></li>
+      <li><time>2026-10-27</time><span>Decided: solo developer. Added a Plan note to keep scope small and reuse free assets. Hobby or commercial is still open.</span></li>
+      <li><time>2026-10-27</time><span>Decided: PC action game. Platform and genre question closed; top-down 2D stays the recommended style.</span></li>
+      <li><time>2026-10-27</time><span>Decided: all art is 2D pixel art. Sprite sheet drawn for the five 小怪 forms, villager, hero, items, tiles and three scenes (xiaoguai-pixel-art.html).</span></li>
+      <li><time>2026-10-27</time><span>Decided: build the whole game in Godot 4 (GDScript).</span></li>
+      <li><time>2026-10-27</time><span>Free symphonic tracks proposed, one per boss stage, mostly CC0 from OpenGameArt. Not yet listened to; to audition.</span></li>
+      <li><time>2026-10-27</time><span>Added 26 monster evolution lines (10 stages each, Dragon Quest Monsters style) under Evolution. Full lists saved in evolution-lines.md.</span></li>
+      <li><time>2026-10-27</time><span>Music decided: 交响乐 for boss battles, dark fast tracks for normal battles. One-theme-per-stage kept as an option.</span></li>
+      <li><time>2026-10-27</time><span>First version, built from the initial design advice (concept, genre, evolution, story, levels, art, tech, plan, release).</span></li>
+    </ul>
+  </section>
+</div>
+
+<script>
+  /* MAP: ['text', status, ...children]. status: '' idea, 'r' recommended, 'd' decided, 'q' question.
+     Add a new idea by adding an array under the branch it belongs to. */
+  const ROOT = '小怪 → Evil Boss';
+  const BRANCHES = [
+    { hue: 12, t: 'Concept', c: [
+      ['Pitch: a nobody mob becomes the Dark Lord', ''],
+      ['Ending tone', '',
+        ['Power fantasy (easiest)', ''],
+        ['Tragic arc (loses friends)', ''],
+        ['Twist: final fight played as the boss', 'r']],
+      ['Theme: flip the hero story', ''],
+      ['Chinese 妖怪 / 修仙 flavour', ''],
+    ]},
+    { hue: 38, t: 'Genre', c: [
+      ['Action game', 'd', ['Top-down 2D (recommended)', 'r']],
+      ['Action roguelite', ''],
+      ['Platformer / metroidvania', ''],
+      ['Monster-raising / idle', ''],
+    ]},
+    { hue: 150, t: 'Evolution', c: [
+      ['小怪 levels up and evolves', 'd',
+        ['Level from EXP: 1 per bite, plus EXP for each villager', 'd'],
+        ['Fast start: Lv 5 needs only 57 EXP', 'd'],
+        ['Steep middle game: Lv 20 needs 2240 EXP; Lv 50 needs 20625', 'd'],
+        ['Final form (Lv 50) earns the strongest skill: Final Calamity', 'd'],
+        ['Max level 50; a new form every 5 levels (was every 3)', 'd'],
+        ['Levels 1–4: base form Xiao Guai', ''],
+        ['First evolution (Lv 5): choose any of the 26 lines', 'd'],
+        ['Then follow that line: 10 forms, the last at Lv 50', 'd'],
+        ['He grows 4% bigger with every level, plus a ring on level-up', 'r'],
+        ['Families bias stats: Slime tanky, Dragon hard-hitting, Beast fast', 'r'],
+        ['Tiers: forms 1–2, 3–5, 6–8, 9–10', ''],
+        ['Each form: more HP, bite damage, reach, speed, size', '']],
+      ['Village (enemy) evolution', 'd',
+        ['10 lines × 5 forms (not 20 levels)', 'd',
+          ['Farmer · Woodsman · Hunter · Militia · Knight', ''],
+          ['Priest · Mage · Smith · Thief · Noble', ''],
+          ['Line names and forms confirmed', 'd']],
+        ['Each line has its own bias: HP, damage, speed', ''],
+        ['They evolve while alive (45 s per form)', ''],
+        ['Respawns are born at the current village level 1–5', 'd'],
+        ['3 hidden forms, from a last form at night', 'd',
+          ['Parasite Hero (hero + demon parasite)', 'd'],
+          ['Dark Hero', 'd'],
+          ['GOD (needs village level 5)', 'd'],
+          ['Triggers confirmed: last form + night, 30% per 40 s; then 60 s; then 90 s and village Lv5', 'd'],
+          ['Each dawn and dusk may also spawn one directly', 'd']]],
+      ['Early 5-form idea (superseded by the lines below)', '',
+        ['Stage 1: 小怪, tiny', '', ['Dodge, bite', '']],
+        ['Stage 2: Beast', '', ['Dash, claw combo', '']],
+        ['Stage 3: Demon', '', ['Ranged fire / dark magic', '']],
+        ['Stage 4: Monster lord', '', ['Area attacks, minions', '']],
+        ['Stage 5: Evil boss', '', ['Ultimate attack', '']]],
+      ['Each form changes silhouette, hitbox, speed, camera', ''],
+      ['Branching paths (fire, dark, poison)', ''],
+      ['Trade-offs, e.g. agility for power', ''],
+      ['Evolution cutscene as payoff', ''],
+      ['Monster lines: 26 × 10 stages (full list in evolution-lines.md)', '',
+        ['Undead', '',
+          ['Zombie → … → Vampire Lord', ''],
+          ['Skeleton → … → Lich', ''],
+          ['Wisp → … → Wraith King', ''],
+          ['Scarab Husk → … → Sand Tyrant', ''],
+          ['Bone Pup → … → Cerberus', ''],
+          ['Rusty Helm → … → Death Lord', '']],
+        ['Slime', '',
+          ['Slime → … → Gel Paladin', ''],
+          ['Slime → … → Slime Emperor', ''],
+          ['Slime → … → Platinum Sovereign', ''],
+          ['Slime → … → Glacier Sovereign', '']],
+        ['Dragon', '',
+          ['Hatchling → … → Elder Dragon', ''],
+          ['Spark Newt → … → Thunder Emperor', ''],
+          ['Frost Whelp → … → Glacier Dragon', ''],
+          ['Lizardling → … → Dragon Lord', '']],
+        ['Beast', '',
+          ['Wolf Pup → … → Fenrir', ''],
+          ['Cub → … → Manticore', ''],
+          ['Bat → … → Moon Lord', '']],
+        ['Nature', '',
+          ['Seed → … → World Tree', ''],
+          ['Spore → … → Mycelium King', ''],
+          ['Bud → … → Forest Queen', '']],
+        ['Material', '',
+          ['Clay Lump → … → Titan', ''],
+          ['Wooden Box → … → Treasure Demon', '']],
+        ['Demon', '',
+          ['Imp → … → Demon Lord', ''],
+          ['Stone Imp → … → Archfiend', ''],
+          ['Apprentice → … → Dark Archmage', ''],
+          ['Jester → … → Pandemonium Jester', '']]],
+      ['Final form depends on the family 小怪 devoured most', 'r'],
+    ]},
+    { hue: 275, t: 'Story', c: [
+      ['Tone: both cute and dark', 'd',
+        ['Early: funny, cute, 小怪 gets stepped on', ''],
+        ['Late: dark, tragic cost of power', '']],
+      ['Humble, funny start', ''],
+      ['Motivation', '', ['Revenge', ''], ['Protect family', ''], ['Earn respect', '']],
+      ['Enemies escalate from villagers to elite heroes', ''],
+      ['Final scene mirrors the first', ''],
+    ]},
+    { hue: 195, t: 'Levels', c: [
+      ['Stage 1 map (Godot)', 'd',
+        ['180×100 tiles: 5× the 80×45 map, 25× the first', 'd'],
+        ['Thin trees with open paths (was blocking the way)', 'd'],
+        ['30 villagers at the start, all in their 1st form (gentle start)', 'd'],
+        ['Population: the clock slowly adds up to 120 by 20 min, fastest near the end', 'd'],
+        ['Every evolution adds 22 more villagers (up to a cap of 360)', 'd'],
+        ['Respawn speed rises with time and stage', ''],
+        ['Dawn and dusk may spawn a hidden enemy', 'd'],
+        ['Evolve from EXP, no orb', 'd'],
+        ['Stage 1 clear: reach Vampire Lord, then keep defending', '']],
+      ['Tutorial arena', ''],
+      ['Forest and village', ''],
+      ['Dungeon and castle', '', ['Mini-bosses drop evolution items', '']],
+      ['Hero stronghold', ''],
+      ['Finale: boss fight', ''],
+      ['Evolve about every 15–20% of the game', ''],
+    ]},
+    { hue: 330, t: 'Art & Audio', c: [
+      ['2D pixel art, all assets', 'd', ['Sprite sheet made (5 forms, enemies, tiles)', ''], ['Canvas 16 / 24 / 32 px, 1 px outline', '']],
+      ['One trait kept in every form', '', ['Horn / stripe / big eyes', '']],
+      ['Music', '',
+        ['Boss battle: 交响乐 symphonic', 'd',
+          ['Boss 1: battle theme 0 (CC0)', ''],
+          ['Boss 2: Boss Battle Music, SubspaceAudio (CC0)', ''],
+          ['Boss 3: The Promise, Indieteur (CC0)', ''],
+          ['Boss 4: Boss Battle #2 Symphonic Metal, nene (CC0)', ''],
+          ['Final: Colossal Boss Battle Theme (CC-BY, credit)', '']],
+        ['Free sources: OpenGameArt, incompetech, Musopen', ''],
+        ['Normal battle: dark, fast', 'd'],
+        ['One theme re-arranged per stage', '']],
+      ['Sound in the game (Godot)', 'd',
+        ['Music follows evolution: Battle Theme 0, Epic Boss Battle, Boss Battle #2 (intro then loop), Blackmoor Colossus', 'r'],
+        ['Nights play The Promise; the final forms keep the final theme', 'r'],
+        ['Crossfade between tracks; music keeps playing under the level-up menu', ''],
+        ['26 sound effects generated by code: 0 MB, no audio files', 'd'],
+        ['Track and composer credit shown bottom right (needed for the CC-BY track)', 'd'],
+        ['Music files: 7.2 MB as .ogg, from 151 MB', 'd']],
+      ['Juice: screen shake, particles, SFX', ''],
+    ]},
+    { hue: 222, t: 'Tech', c: [
+      ['Godot 4 + GDScript', 'd', ['Claude writes and explains the code', '']],
+      ['Unity (C#)', ''],
+      ['Free assets', '', ['itch.io', ''], ['Kenney', ''], ['OpenGameArt', '']],
+      ['Platform: PC', 'd'],
+    ]},
+    { hue: 60, t: 'Gameplay', c: [
+      ['Mouse control', 'd',
+        ['Hold left-click: move toward the cursor, any angle', 'd'],
+        ['WASD still works', '']],
+      ['Auto attack: bites the nearest enemy in reach', 'd'],
+      ['Sprint (Shift): 10 s, then 15 s cooldown (was 60 s)', 'd'],
+      ['小怪 skills: pick 1 of 3 at every level', 'd',
+        ['All passive, no keys to press', 'd'],
+        ['Stat: Tough Hide, Sharp Fangs, Swift Paws, Quick Jaws, Soul Drain, Bone Collector', 'd'],
+        ['Automatic: Bone Nova (villagers close), Spirit Bolt (nearest villager)', 'd'],
+        ['Automatic: Roar (surrounded or low HP), Shadow Step (10% dodge per rank)', 'd'],
+        ['Picking a skill again raises its rank (max 5)', 'd'],
+        ['Skill list confirmed', 'd']],
+      ['Building (E): towers and bone walls', 'd',
+        ['Place anywhere you point, within reach (replaces the fixed pads)', 'd'],
+        ['No towers at the start: build them yourself', 'd'],
+        ['Bone wall: 5 bones, 20 HP, blocks movement; cheaper than a tower', 'd'],
+        ['Build bar at the bottom: [1] Tower  [2] Bone Wall  [X] Remove', 'd'],
+        ['X removes a tower or wall under the cursor and refunds half', 'd'],
+        ['Never seal every way in: at least one route stays open', 'd'],
+        ['Bone wall is selected at the start; B also switches; green or red preview', 'r'],
+        ['Tower: 15 / 25 / 40 bones for Lv 1–3', ''],
+        ['Tower kills give bones but no EXP', ''],
+        ['Villagers attack walls and towers in their way', '']],
+      ['Villagers always chase 小怪, from anywhere', 'd'],
+      ['Villagers walk around trees and walls (pathfinding)', 'd'],
+      ['Gentle start for beginners', 'd',
+        ['Villagers are slower and notice 小怪 only when close (450 px)', 'd'],
+        ['No ranged attacks and no day bonus for the first 3 minutes', 'd'],
+        ['No villager skills for the first 6 minutes', 'd'],
+        ['No hidden enemies for the first 10 minutes', 'd'],
+        ['By 10 minutes they chase from anywhere', ''],
+        ['Notices on screen when each one switches on', '']],
+      ['Enemy attacks depend on their profession', 'd',
+        ['Ranged basics: Farmer, Hunter, Priest, Mage, Thief', 'd'],
+        ['17 attack types, 3 to 4 per profession, unlocking as they evolve', 'd',
+          ['Farmer: mud, pitchfork toss, slam', ''],
+          ['Woodsman: axe throw, slam, rage', ''],
+          ['Hunter: net, volley, piercing arrow', ''],
+          ['Militia: shield, rally, charge', ''],
+          ['Knight: shield, charge, slam', ''],
+          ['Priest: heal, smite, holy nova', ''],
+          ['Mage: fireball, smite, volley, nova', ''],
+          ['Smith: slam, bomb, shield, hammer throw', ''],
+          ['Thief: charge, blink, daggers, rage', ''],
+          ['Noble: rally, summon helpers, shield, smite', '']],
+        ['Big blasts show a warning ring: dodge or roll', 'd'],
+        ['Hidden forms have their own sets (GOD uses five)', 'd']],
+      ['Day and night (120 s cycle)', 'd',
+        ['Day: villagers stronger (damage ×1.5, faster)', 'd'],
+        ['Night: 小怪 stronger (bite ×1.5, faster)', 'd'],
+        ['Hidden forms evolve only at night; dawn and dusk can spawn one', '']],
+      ['Dodge roll (Space): short, brief invincibility', 'd'],
+      ['Lunge (right-click): double bite damage, 3 s cooldown', 'd'],
+      ['Mud slows to half speed; roll and lunge ignore it', 'd'],
+      ['Slides along trees instead of sticking', ''],
+      ['Not built yet: minimap, devour-family trigger, elements', 'q'],
+    ]},
+    { hue: 85, t: 'Plan', c: [
+      ['Stage 1 prototype playable in Godot (godot-xiaoguai folder)', 'd'],
+      ['Practice: finish a tiny game first', ''],
+      ['Prototype: one room, 1–2 weeks', ''],
+      ['Vertical slice: 1 evolution, 1 level, 1 boss', ''],
+      ['Production', ''],
+      ['Polish and balance', ''],
+      ['Release', ''],
+      ['Solo: keep scope small, reuse free assets', 'r'],
+    ]},
+    { hue: 0, t: 'Pitfalls', c: [
+      ['Scope creep: cut to two great forms first', ''],
+      ['Story before gameplay', ''],
+      ['Final boss feels like a normal enemy', ''],
+      ['Players bored once powerful', ''],
+    ]},
+    { hue: 175, t: 'Release', c: [
+      ['Steam and itch.io', ''],
+      ['Evolution GIFs for social media', ''],
+      ['Early playtests with friends', ''],
+    ]},
+    { hue: 250, t: 'YouTube Playables', c: [
+      ['Assumed target: a Playable in the YouTube app; one stage is allowed', 'r'],
+      ['Meets already', 'd',
+        ['No ads, purchases, links, sharing, login or quit button', 'd'],
+        ['The game makes no outside network calls', 'd'],
+        ['English only, no browser language detection', 'd'],
+        ['No saving needed: a run restarts each time', 'd'],
+        ['Music rights: five CC0 tracks and one CC-BY with credit on screen', 'd'],
+        ['Sound effects add no file size', 'd'],
+        ['File count and file names are fine', 'd']],
+      ['Gaps to fix before upload', 'q',
+        ['Web export (Godot 4.3+ single-thread) not done yet', 'q'],
+        ['YouTube SDK: load first, firstFrameReady, gameReady, pause/resume', 'q'],
+        ['Audio must follow YouTube mute; no in-game mute button', 'q'],
+        ['Touch controls for every action: build, remove, roll, sprint, lunge', 'q'],
+        ['Work in every aspect ratio including portrait; bigger phone UI', 'q'],
+        ['Say clearly when Stage 1 is complete and there is no more content', 'q'],
+        ['Engine file must stay under 30 MiB; check after export', 'q'],
+        ['Phone speed: lower the 360-villager cap on mobile', 'q'],
+        ['Rename Dragon Quest names: Gel Paladin, Quicksilver Slime, Mender Slime, Platinum Sovereign...', 'q'],
+        ['Thumbnail, title and description with no branding or logos', 'q'],
+        ['Esc closes menus (recommended, not required)', 'q'],
+        ['Publishing goes through a Partner Manager; no public upload page found', 'q']],
+    ]},
+    { hue: 300, t: 'Open Questions', c: [
+      ['Platform and genre: PC action game', 'd'],
+      ['Experience: first game, no coding', 'd'],
+      ['Team size', 'd', ['Solo developer', 'd']],
+      ['Hobby or commercial?', 'q'],
+      ['Draw art or use assets?', 'q'],
+    ]},
+  ];
+
+  const H = 32, VG = 8, BG = 18, GAP = 40, PAD = 24, ROOT_W = 170, ROOT_H = 60;
+  const textW = s => [...s].reduce((w, ch) => w + (ch.charCodeAt(0) > 255 ? 13.5 : 7.4), 0) + 40;
+  const parse = a => ({ t: a[0], s: a[1], c: a.slice(2).map(parse) });
+
+  const sides = [[], []];
+  BRANCHES.forEach((b, i) => sides[i % 2].push({ t: b.t, s: 'b', hue: b.hue, c: b.c.map(parse) }));
+
+  const colW = [];
+  (function measure(list, d) {
+    list.forEach(n => { colW[d] = Math.max(colW[d] || 0, textW(n.t)); measure(n.c, d + 1); });
+  })([...sides[0], ...sides[1]], 1);
+  const D = colW.length - 1;
+  const sideW = colW.slice(1).reduce((a, w) => a + w + GAP, 0);
+  const rootX = PAD + sideW;
+
+  function layout(list) {
+    let y = 0;
+    list.forEach(b => {
+      (function place(n) {
+        if (!n.c.length) { n.y = y; y += H + VG; return; }
+        n.c.forEach(place);
+        n.y = (n.c[0].y + n.c[n.c.length - 1].y) / 2;
+      })(b);
+      y += BG;
+    });
+    return y - BG - VG + H;
+  }
+  const heights = sides.map(layout);
+  const totalH = Math.max(...heights) + PAD * 2;
+  const offY = sides.map((_, i) => PAD + (Math.max(...heights) - heights[i]) / 2);
+
+  const map = document.getElementById('map');
+  const svg = document.getElementById('lines');
+  map.style.width = (rootX * 2 + ROOT_W) + 'px';
+  map.style.height = totalH + 'px';
+  svg.setAttribute('width', rootX * 2 + ROOT_W);
+  svg.setAttribute('height', totalH);
+
+  const cy = totalH / 2;
+  const root = document.createElement('div');
+  root.className = 'node root';
+  root.style.cssText = `left:${rootX}px;top:${cy - ROOT_H / 2}px;width:${ROOT_W}px;--c:var(--fg)`;
+  root.textContent = ROOT;
+  map.appendChild(root);
+
+  function draw(n, d, dir, side, parent, hue) {
+    const w = textW(n.t);
+    const before = colW.slice(1, d).reduce((a, cw) => a + cw + GAP, 0);
+    const left = dir > 0 ? rootX + ROOT_W + GAP + before : rootX - GAP - before - w;
+    const top = n.y + offY[side];
+    const el = document.createElement('div');
+    el.className = 'node ' + (n.s || '');
+    el.style.cssText = `left:${left}px;top:${top}px;width:${w}px;--c:hsl(${hue} 55% var(--bl))`;
+    el.textContent = n.t;
+    map.appendChild(el);
+
+    const x2 = dir > 0 ? left : left + w;
+    const y2 = top + H / 2;
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const xm = (parent.x + x2) / 2;
+    p.setAttribute('d', `M${parent.x} ${parent.y} C${xm} ${parent.y} ${xm} ${y2} ${x2} ${y2}`);
+    p.setAttribute('fill', 'none');
+    p.style.stroke = `hsl(${hue} 55% var(--bl))`;
+    p.setAttribute('stroke-width', d === 1 ? 2.2 : 1.4);
+    p.setAttribute('stroke-opacity', d === 1 ? 0.9 : 0.6);
+    svg.appendChild(p);
+
+    const out = { x: dir > 0 ? left + w : left, y: y2 };
+    n.c.forEach(ch => draw(ch, d + 1, dir, side, out, hue));
+  }
+
+  sides.forEach((list, side) => {
+    const dir = side === 0 ? 1 : -1;
+    const start = { x: dir > 0 ? rootX + ROOT_W : rootX, y: cy };
+    list.forEach(b => draw(b, 1, dir, side, start, b.hue));
+  });
+</script>

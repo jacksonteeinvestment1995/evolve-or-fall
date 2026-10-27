@@ -1,0 +1,634 @@
+﻿extends CharacterBody2D
+## The village. Humans come in 10 lines of 5 forms each, and 3 hidden forms beyond them.
+## They evolve while they live; every villager that respawns is born at the current
+## village level. They chase 小怪 from anywhere, walk around trees and walls, shoot from
+## range (some lines) and use a skill every few seconds.
+##
+## Hidden forms (reachable from a line's last form at night, or by a day/night change):
+##   Parasite Hero (hero + demon parasite) -> Dark Hero -> GOD
+
+signal defeated(xp: int, bones: int, by_tower: bool)
+
+const BoltScript := preload("res://bolt.gd")
+const ZoneScript := preload("res://zone.gd")
+const Sfx := preload("res://sfx.gd")
+
+const MAX_STAGE := 4          ## each line has 5 forms: stage 0 to 4
+const EVOLVE_AFTER := 45.0    ## seconds alive before a villager moves to its next form
+const HIDDEN_CHECK := 40.0    ## a last-form villager rolls for the hidden form this often...
+const HIDDEN_CHANCE := 0.3    ## ...with this chance, but only at night
+const PARASITE_TO_DARK := 60.0
+const DARK_TO_GOD := 90.0     ## also needs village level 5
+const HIT_COOLDOWN := 1.0
+const SHOOT_COOLDOWN := 1.6
+const CHARGE_TIME := 0.35
+const STRUCTURE_AGGRO := 55.0 ## a tower or wall this close (and nearer than 小怪) draws their attack
+const LOS_RANGE := 900.0      ## beyond this they just walk straight; closer, they steer around obstacles
+
+## Base stats for forms 1 to 5; each line then scales them with hp / dmg / spd.
+const HP := [2, 6, 12, 20, 32]
+const DMG := [1, 1, 2, 3, 4]
+const SPEED := [55.0, 62.0, 70.0, 78.0, 86.0]
+const XP := [4, 8, 13, 19, 26]
+const BONES := [1, 2, 3, 5, 8]
+const SIZE := [1.0, 1.1, 1.2, 1.35, 1.5]
+
+## Placeholder names; edit freely. Each line leans a different way.
+const LINES := [
+	{"name": "Farmer", "forms": ["Villager", "Farmer", "Harvester", "Scythe Master", "Harvest Lord"], "hp": 1.3, "dmg": 0.8, "spd": 0.9},
+	{"name": "Woodsman", "forms": ["Woodcutter", "Lumberjack", "Axeman", "Berserker", "Forest Warden"], "hp": 1.0, "dmg": 1.4, "spd": 0.9},
+	{"name": "Hunter", "forms": ["Hunter", "Archer", "Ranger", "Marksman", "Sniper"], "hp": 0.7, "dmg": 1.0, "spd": 1.3},
+	{"name": "Militia", "forms": ["Militia", "Footman", "Soldier", "Veteran", "Captain"], "hp": 1.0, "dmg": 1.0, "spd": 1.0},
+	{"name": "Knight", "forms": ["Squire", "Knight", "Paladin", "Crusader", "Templar"], "hp": 1.5, "dmg": 1.0, "spd": 0.8},
+	{"name": "Priest", "forms": ["Acolyte", "Priest", "Cleric", "High Priest", "Saint"], "hp": 1.1, "dmg": 0.8, "spd": 1.0},
+	{"name": "Mage", "forms": ["Apprentice", "Mage", "Battlemage", "Archmage", "Grand Magus"], "hp": 0.7, "dmg": 1.5, "spd": 0.9},
+	{"name": "Smith", "forms": ["Smith", "Armorer", "Forgemaster", "Iron Smith", "Titan Smith"], "hp": 1.6, "dmg": 1.2, "spd": 0.7},
+	{"name": "Thief", "forms": ["Thief", "Rogue", "Assassin", "Shadow Blade", "Night Master"], "hp": 0.8, "dmg": 1.1, "spd": 1.4},
+	{"name": "Noble", "forms": ["Noble", "Lord", "Duke", "King", "Emperor"], "hp": 1.2, "dmg": 1.0, "spd": 1.0},
+]
+
+const HIDDEN := [
+	{"name": "Parasite Hero", "hp": 60, "dmg": 5, "spd": 95.0, "xp": 60, "bones": 15, "size": 1.7},
+	{"name": "Dark Hero", "hp": 100, "dmg": 8, "spd": 105.0, "xp": 100, "bones": 25, "size": 1.9},
+	{"name": "GOD", "hp": 200, "dmg": 12, "spd": 110.0, "xp": 250, "bones": 60, "size": 2.4},
+]
+
+## Ranged basic attacks by line (index into LINES). mult scales their damage.
+const RANGED := {
+	0: {"range": 110.0, "speed": 200.0, "mult": 0.6, "color": Color("c9a27a")},  # Farmer: thrown stones
+	2: {"range": 230.0, "speed": 330.0, "mult": 0.8, "color": Color("e8e0a0")},  # Hunter: arrows
+	5: {"range": 150.0, "speed": 200.0, "mult": 0.6, "color": Color("fff2a0")},  # Priest: holy bolts
+	6: {"range": 210.0, "speed": 240.0, "mult": 0.9, "color": Color("a060ff")},  # Mage: magic bolts
+	8: {"range": 120.0, "speed": 300.0, "mult": 0.7, "color": Color("c0c0d0")},  # Thief: daggers
+}
+const HIDDEN_RANGED := {"range": 260.0, "speed": 300.0, "mult": 1.0, "color": Color("ff4060")}
+
+## Each profession (line) learns several attacks as it evolves: [form index, skill]. The
+## skills, with their base cooldowns in SKILL_COOLDOWN:
+##   slow = mud ball that slows 小怪      net = net bolt that slows         pierce = bolt that passes through
+##   axe = heavy thrown axe               volley = three bolts at once      smite = lightning strike on 小怪
+##   fireball = delayed blast on 小怪     bomb = big slow blast on 小怪     slam = ground slam around itself
+##   nova = wide burst around itself      charge = rush at 小怪             blink = teleport next to 小怪
+##   shield = take half damage            rage = +30% damage and speed      rally = buff allies nearby
+##   heal = heal allies nearby            summon = call two helpers
+const LINE_SKILLS := [
+	[[1, "slow"], [2, "pierce"], [4, "slam"]],                      # Farmer
+	[[1, "axe"], [2, "slam"], [3, "rage"]],                         # Woodsman
+	[[1, "net"], [2, "volley"], [3, "pierce"]],                     # Hunter
+	[[1, "shield"], [2, "rally"], [3, "charge"]],                   # Militia
+	[[1, "shield"], [2, "charge"], [4, "slam"]],                    # Knight
+	[[1, "heal"], [2, "smite"], [4, "nova"]],                       # Priest
+	[[1, "fireball"], [2, "smite"], [3, "volley"], [4, "nova"]],    # Mage
+	[[1, "slam"], [2, "bomb"], [3, "shield"], [4, "pierce"]],       # Smith
+	[[1, "charge"], [2, "blink"], [3, "volley"], [4, "rage"]],      # Thief
+	[[1, "rally"], [2, "summon"], [3, "shield"], [4, "smite"]],     # Noble
+]
+const HIDDEN_SKILLS := [
+	["charge", "rage", "pierce"],                    # Parasite Hero
+	["fireball", "nova", "blink", "shield"],         # Dark Hero
+	["smite", "nova", "slam", "heal", "rally"],      # GOD
+]
+const SKILL_COOLDOWN := {
+	"slow": 6.0, "net": 7.0, "pierce": 6.0, "axe": 6.0, "volley": 7.0, "smite": 7.0,
+	"fireball": 9.0, "bomb": 10.0, "slam": 8.0, "nova": 10.0, "charge": 8.0, "blink": 9.0,
+	"shield": 12.0, "rage": 14.0, "rally": 14.0, "heal": 10.0, "summon": 22.0,
+}
+
+var line := 0
+var stage := 0
+var secret := -1             ## hidden form: -1 none, 0 Parasite Hero, 1 Dark Hero, 2 GOD
+var hp := 2
+var max_hp := 2
+var damage := 1
+var speed := 55.0
+var xp_value := 4
+var bones_value := 1
+var body_scale := 1.0
+var form_age := 0.0          ## seconds spent in the current form
+var hit_cd := 0.0
+var shoot_cd := 0.0
+var skill_cd := 3.0          ## short pause between any two skills
+var skill_timers := {}       ## skill -> seconds until it can be used again
+var shield_left := 0.0       ## shield: take half damage
+var buff_left := 0.0         ## rally or rage: +30% damage and speed
+var stun_left := 0.0
+var charge_left := 0.0
+var charge_dir := Vector2.ZERO
+var cast_flash := 0.0
+var cast_color := Color.WHITE
+var flash := 0.0
+var evolve_flash := 0.0
+var knock := Vector2.ZERO
+var los := true              ## clear straight line to the target (refreshed a few times a second)
+var path := PackedVector2Array()
+var path_i := 0
+var repath_cd := 0.0
+
+
+func _ready() -> void:
+	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 8.0
+	shape.shape = circle
+	add_child(shape)
+	add_to_group("enemies")
+	line = clampi(line, 0, LINES.size() - 1)
+	stage = clampi(stage, 0, MAX_STAGE)
+	_apply_form()
+	hp = max_hp
+	skill_cd = randf_range(2.0, 6.0)
+	repath_cd = randf() * 0.4
+
+
+func form_name() -> String:
+	if secret >= 0:
+		return HIDDEN[secret]["name"]
+	return LINES[line]["forms"][stage]
+
+
+## Early in the game villagers cannot shoot or use skills: the level switches them on.
+func _unlocked(what: String) -> bool:
+	var level_node = get_parent()
+	return not level_node.has_method(what) or level_node.call(what)
+
+
+func ranged_config() -> Dictionary:
+	if not _unlocked("ranged_unlocked"):
+		return {}
+	if secret >= 0:
+		return HIDDEN_RANGED
+	return RANGED.get(line, {})
+
+
+## Every skill this villager knows right now (none early in the game, see skills_unlocked).
+func available_skills() -> Array:
+	var out: Array = []
+	if not _unlocked("skills_unlocked"):
+		return out
+	if secret >= 0:
+		return HIDDEN_SKILLS[secret].duplicate()
+	for entry in LINE_SKILLS[line]:
+		if stage >= entry[0]:
+			out.append(entry[1])
+	return out
+
+
+## The first skill it knows, or "" if it has none yet.
+func skill_name() -> String:
+	var all := available_skills()
+	return all[0] if not all.is_empty() else ""
+
+
+## How far this villager can notice 小怪 (grows during the first minutes).
+func _chase_radius() -> float:
+	var level_node = get_parent()
+	return level_node.chase_radius() if level_node.has_method("chase_radius") else INF
+
+
+## Days make villagers stronger (the level decides how much): damage and speed.
+func _power() -> float:
+	var level_node = get_parent()
+	var p := 1.0
+	if level_node.has_method("enemy_power"):
+		p = level_node.enemy_power()
+	return p * (1.3 if buff_left > 0.0 else 1.0)
+
+
+func effective_damage() -> int:
+	return ceili(damage * _power())
+
+
+func effective_speed() -> float:
+	var level_node = get_parent()
+	var early: float = level_node.enemy_speed_mult() if level_node.has_method("enemy_speed_mult") else 1.0
+	return speed * (1.0 + (_power() - 1.0) * 0.5) * early
+
+
+func _apply_form() -> void:
+	if secret >= 0:
+		var h: Dictionary = HIDDEN[secret]
+		max_hp = h["hp"]
+		damage = h["dmg"]
+		speed = h["spd"]
+		xp_value = h["xp"]
+		bones_value = h["bones"]
+		body_scale = h["size"]
+		return
+	var l: Dictionary = LINES[line]
+	max_hp = maxi(1, roundi(HP[stage] * l["hp"]))
+	damage = maxi(1, roundi(DMG[stage] * l["dmg"]))
+	speed = SPEED[stage] * l["spd"]
+	xp_value = XP[stage]
+	bones_value = BONES[stage]
+	body_scale = SIZE[stage]
+
+
+## Move to another form, keeping the health gained and showing a flash.
+func change_form(new_stage: int, new_secret: int) -> void:
+	var old_max := max_hp
+	stage = new_stage
+	secret = new_secret
+	_apply_form()
+	hp += max_hp - old_max
+	form_age = 0.0
+	evolve_flash = 0.6
+
+
+func apply_stun(seconds: float) -> void:
+	stun_left = maxf(stun_left, seconds)
+
+
+func _is_night() -> bool:
+	var level_node = get_parent()
+	return level_node.has_method("is_night") and level_node.is_night()
+
+
+func _village_level() -> int:
+	var level_node = get_parent()
+	var v = level_node.get("village_level")
+	return v if v != null else 1
+
+
+func _grow(delta: float) -> void:
+	form_age += delta
+	if secret < 0:
+		if stage < MAX_STAGE:
+			if form_age >= EVOLVE_AFTER:
+				change_form(stage + 1, -1)
+		elif form_age >= HIDDEN_CHECK:
+			form_age = 0.0
+			if _is_night() and randf() < HIDDEN_CHANCE:
+				change_form(stage, 0)
+	elif secret == 0 and form_age >= PARASITE_TO_DARK:
+		change_form(stage, 1)
+	elif secret == 1 and form_age >= DARK_TO_GOD and _village_level() >= 5:
+		change_form(stage, 2)
+
+
+# --- steering: walk straight when the way is clear, otherwise follow an A* path ---
+
+func _nav_update(target_pos: Vector2, delta: float) -> void:
+	repath_cd -= delta
+	if repath_cd > 0.0:
+		return
+	var nav = get_parent()
+	if not nav.has_method("has_clear_line"):
+		los = true
+		return
+	var dist := global_position.distance_to(target_pos)
+	repath_cd = (0.8 if dist > 600.0 else 0.4) + randf() * 0.2
+	if dist > LOS_RANGE:
+		los = true
+		path = PackedVector2Array()
+		return
+	los = nav.has_clear_line(global_position, target_pos)
+	if los:
+		path = PackedVector2Array()
+		path_i = 0
+	else:
+		path = nav.find_path(global_position, target_pos)
+		path_i = 1
+
+
+func _steer(target_pos: Vector2) -> Vector2:
+	if los or path.is_empty():
+		return (target_pos - global_position).normalized()
+	while path_i < path.size() and global_position.distance_to(path[path_i]) < 14.0:
+		path_i += 1
+	if path_i < path.size():
+		return (path[path_i] - global_position).normalized()
+	return (target_pos - global_position).normalized()
+
+
+# --- attacks and skills ---
+
+func _add_to_level(node: Node2D) -> void:
+	get_parent().add_child.call_deferred(node)
+
+
+func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: String = "", pierce: bool = false, life: float = 2.0) -> void:
+	var b = BoltScript.new()
+	b.position = global_position
+	b.dir = dir
+	b.speed = spd
+	b.damage = dmg
+	b.color = color
+	b.effect = effect
+	b.pierce = pierce
+	b.life = life
+	b.team = "enemy"
+	Sfx.play_at(get_tree(), "shoot", global_position, -9.0)
+	_add_to_level(b)
+
+
+func _spawn_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color) -> void:
+	var z = ZoneScript.new()
+	z.position = pos
+	z.radius = rad
+	z.delay = delay
+	z.damage = dmg
+	z.color = color
+	z.team = "enemy"
+	_add_to_level(z)
+
+
+func _shoot(target, cfg: Dictionary) -> void:
+	shoot_cd = SHOOT_COOLDOWN
+	var dir: Vector2 = (target.global_position - global_position).normalized()
+	_spawn_bolt(dir, cfg["speed"], maxi(1, roundi(effective_damage() * cfg["mult"])), cfg["color"])
+
+
+## A short pause between any two skills (each skill also has its own cooldown).
+func skill_cooldown() -> float:
+	return 1.2 if secret >= 0 else maxf(1.5, 3.0 - stage * 0.3)
+
+
+func _allies_near(radius: float) -> Array:
+	var out: Array = []
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e.global_position.distance_to(global_position) <= radius:
+			out.append(e)
+	return out
+
+
+func _bolt_color() -> Color:
+	var cfg: Dictionary = RANGED.get(line, {})
+	return cfg.get("color", Color("e8e0a0"))
+
+
+## Pick any skill that is off cooldown and makes sense now, and use it. True if one fired.
+func use_skill(target, dist: float) -> bool:
+	var options := available_skills()
+	options.shuffle()
+	for id in options:
+		if float(skill_timers.get(id, 0.0)) > 0.0:
+			continue
+		if use_skill_id(id, target, dist):
+			return true
+	return false
+
+
+## Use one specific skill if its conditions are met (range, line of sight, allies...).
+## On success it starts that skill's own cooldown and returns true.
+func use_skill_id(id: String, target, dist: float) -> bool:
+	var to: Vector2 = target.global_position - global_position
+	var aim := to.normalized()
+	var dmg := effective_damage()
+	var fired := false
+	match id:
+		"slow":
+			if dist < 200.0 and los:
+				_spawn_bolt(aim, 180.0, 1, Color("7d5e38"), "slow")
+				cast_color = Color("7d5e38")
+				fired = true
+		"net":
+			if dist < 260.0 and los:
+				_spawn_bolt(aim, 260.0, 1, Color("e8e8f0"), "slow")
+				cast_color = Color("e8e8f0")
+				fired = true
+		"pierce":
+			if dist < 300.0 and los:
+				_spawn_bolt(aim, 300.0, maxi(1, roundi(dmg * 0.9)), _bolt_color(), "", true, 1.4)
+				cast_color = _bolt_color()
+				fired = true
+		"axe":
+			if dist < 190.0 and los:
+				_spawn_bolt(aim, 230.0, maxi(1, roundi(dmg * 1.8)), Color("b0a090"))
+				cast_color = Color("b0a090")
+				fired = true
+		"volley":
+			if dist < 260.0 and los:
+				for a in [-0.25, 0.0, 0.25]:
+					_spawn_bolt(aim.rotated(a), 330.0, maxi(1, roundi(dmg * 0.7)), _bolt_color())
+				cast_color = _bolt_color()
+				fired = true
+		"smite":
+			if dist < 320.0:
+				_spawn_zone(target.global_position, 36.0, 0.5, maxi(1, roundi(dmg * 1.6)), Color("fff2a0"))
+				cast_color = Color("fff2a0")
+				fired = true
+		"fireball":
+			if dist < 280.0:
+				_spawn_zone(target.global_position, 50.0, 0.9, maxi(1, roundi(dmg * 2.0)), Color(1.0, 0.45, 0.2))
+				cast_color = Color(1.0, 0.45, 0.2)
+				fired = true
+		"bomb":
+			if dist < 260.0:
+				_spawn_zone(target.global_position, 62.0, 1.2, maxi(1, roundi(dmg * 2.2)), Color("e08a3a"))
+				cast_color = Color("e08a3a")
+				fired = true
+		"slam":
+			if dist < 70.0:
+				_spawn_zone(global_position, 55.0, 0.6, maxi(1, roundi(dmg * 1.5)), Color(0.95, 0.8, 0.3))
+				cast_color = Color(0.95, 0.8, 0.3)
+				fired = true
+		"nova":
+			if dist < 110.0:
+				_spawn_zone(global_position, 75.0, 0.7, maxi(1, roundi(dmg * 1.4)), Color("ffe680"))
+				cast_color = Color("ffe680")
+				fired = true
+		"charge":
+			if dist > 60.0 and dist < 220.0 and los:
+				charge_dir = aim
+				charge_left = CHARGE_TIME
+				hit_cd = 0.0
+				cast_color = Color(1, 1, 1)
+				fired = true
+		"blink":
+			if dist > 100.0 and dist < 420.0:
+				var spot: Vector2 = target.global_position - aim * 40.0
+				var level_node = get_parent()
+				if not (level_node.has_method("is_solid_at") and level_node.is_solid_at(spot)):
+					global_position = spot
+					hit_cd = 0.0
+					cast_color = Color("b070ff")
+					fired = true
+		"shield":
+			if shield_left <= 0.0 and dist < 260.0:
+				shield_left = 4.0
+				cast_color = Color("70d0ff")
+				fired = true
+		"rage":
+			if buff_left <= 0.0 and dist < 260.0:
+				buff_left = 5.0
+				cast_color = Color("ff5030")
+				fired = true
+		"heal":
+			for a in _allies_near(120.0):
+				if a.hp < a.max_hp * 0.7:
+					a.hp = mini(a.max_hp, a.hp + maxi(1, roundi(a.max_hp * 0.35)))
+					a.evolve_flash = 0.4
+					fired = true
+			cast_color = Color("5ae07a")
+		"rally":
+			if dist < 450.0:
+				var group := _allies_near(150.0)
+				if group.size() >= 3:
+					for a in group:
+						a.buff_left = 6.0
+					cast_color = Color("ffb040")
+					fired = true
+		"summon":
+			var level_node = get_parent()
+			if dist < 400.0 and level_node.has_method("target_population") \
+					and get_tree().get_nodes_in_group("enemies").size() < level_node.target_population() + 15:
+				for k in 2:
+					level_node.call_deferred("_spawn_villager", global_position + Vector2(-20 + 40 * k, 14), 0, line)
+				cast_color = Color("ffd040")
+				fired = true
+	if fired:
+		var base := float(SKILL_COOLDOWN.get(id, 8.0))
+		skill_timers[id] = base * (0.7 if secret >= 0 else 1.0)
+		cast_flash = 0.4
+	return fired
+
+
+func _physics_process(delta: float) -> void:
+	hit_cd = maxf(hit_cd - delta, 0.0)
+	shoot_cd = maxf(shoot_cd - delta, 0.0)
+	skill_cd = maxf(skill_cd - delta, 0.0)
+	flash = maxf(flash - delta, 0.0)
+	evolve_flash = maxf(evolve_flash - delta, 0.0)
+	cast_flash = maxf(cast_flash - delta, 0.0)
+	buff_left = maxf(buff_left - delta, 0.0)
+	shield_left = maxf(shield_left - delta, 0.0)
+	for id in skill_timers:
+		skill_timers[id] = maxf(float(skill_timers[id]) - delta, 0.0)
+	knock = knock.move_toward(Vector2.ZERO, 800.0 * delta)
+	_grow(delta)
+
+	if stun_left > 0.0:
+		stun_left -= delta
+		velocity = knock
+		move_and_slide()
+		queue_redraw()
+		return
+
+	# Always chase 小怪, from anywhere on the map. A tower or wall that is close enough to
+	# be in the way (and nearer than 小怪) gets attacked instead.
+	var target = null
+	var reach := 0.0
+	var best := INF
+	var player = get_tree().get_first_node_in_group("player")
+	if player != null and player.hp > 0:
+		var seen: float = player.global_position.distance_to(global_position)
+		if seen <= _chase_radius():
+			best = seen
+			target = player
+			reach = 10.0 + player.body_radius
+	var struct_best := minf(STRUCTURE_AGGRO, best)
+	for t in get_tree().get_nodes_in_group("structures"):
+		var d: float = t.global_position.distance_to(global_position)
+		if d < struct_best:
+			struct_best = d
+			target = t
+			reach = 30.0  # a tower or wall is 28 to 30 px wide, and hits knock them back a little
+
+	var dir := Vector2.ZERO
+	var move_speed := effective_speed()
+	if charge_left > 0.0:
+		charge_left -= delta
+		dir = charge_dir
+		move_speed *= 3.5
+		if target != null and hit_cd == 0.0 and target.global_position.distance_to(global_position) < reach:
+			hit_cd = HIT_COOLDOWN
+			target.take_hit(effective_damage(), dir)
+	elif target != null:
+		var to: Vector2 = target.global_position - global_position
+		var dist := to.length()
+		_nav_update(target.global_position, delta)
+		var cfg := ranged_config()
+		var standing := false
+		if not cfg.is_empty() and dist <= cfg["range"] and los:
+			standing = true  # stand and shoot
+			if dist < cfg["range"] * 0.45:
+				dir = -to.normalized() * 0.6  # back off a little
+			if shoot_cd == 0.0:
+				_shoot(target, cfg)
+		if not standing:
+			dir = _steer(target.global_position)
+		if dist < reach and hit_cd == 0.0:
+			hit_cd = HIT_COOLDOWN
+			target.take_hit(effective_damage(), to.normalized())
+		if skill_cd == 0.0:
+			if use_skill(target, dist):
+				skill_cd = skill_cooldown()
+			else:
+				skill_cd = 0.5  # nothing to use it on yet; look again shortly
+	velocity = dir * move_speed + knock
+	move_and_slide()
+	queue_redraw()
+
+
+func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
+	hp -= ceili(dmg * 0.5) if shield_left > 0.0 else dmg
+	flash = 0.15
+	knock = dir * 260.0
+	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
+	if hp <= 0:
+		defeated.emit(xp_value, bones_value, by_tower)
+		queue_free()
+
+
+func _draw() -> void:
+	var sc := body_scale
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(sc, sc))
+	draw_circle(Vector2(0, 8), 7.0, Color(0, 0, 0, 0.25))
+
+	var shirt := Color.from_hsv(float(line) / LINES.size(), 0.5, 0.7)
+	if secret == 0:
+		shirt = Color("5a2a5a")
+		draw_circle(Vector2(0, -2), 15.0, Color(0.9, 0.2, 0.3, 0.2))
+	elif secret == 1:
+		shirt = Color("1a1020")
+		draw_circle(Vector2(0, -2), 15.0, Color(0.5, 0.2, 0.8, 0.25))
+	elif secret == 2:
+		shirt = Color("fff2c0")
+		draw_circle(Vector2(0, -2), 16.0, Color(1, 0.9, 0.4, 0.3))
+	if buff_left > 0.0:
+		draw_circle(Vector2(0, -2), 13.0, Color(1.0, 0.7, 0.2, 0.25))
+	if shield_left > 0.0:
+		draw_arc(Vector2(0, -2), 14.0, 0.0, TAU, 20, Color("70d0ff"), 2.0)
+	var hat := shirt.lightened(0.35)
+	var skin := Color("c9a27a")
+	if flash > 0.0:
+		shirt = Color.WHITE
+		skin = Color.WHITE
+
+	draw_rect(Rect2(-6, -2, 12, 12), shirt)
+	draw_circle(Vector2(0, -6), 5.0, skin)
+	draw_rect(Rect2(-8, -10, 16, 3), hat)
+	draw_rect(Rect2(-4, -14, 8, 5), hat)
+
+	if secret < 0:
+		if stage >= 2:
+			draw_line(Vector2(9, 8), Vector2(9, -12), Color("7a7a82"), 1.5)  # weapon
+			draw_line(Vector2(6, -12), Vector2(12, -12), Color("7a7a82"), 1.5)
+		if stage >= 3:
+			draw_circle(Vector2(-8, 3), 4.0, Color("a0a0aa"))  # shield
+		if stage >= 4:
+			draw_rect(Rect2(-1, -19, 2, 5), Color("d03030"))  # plume
+	else:
+		# demon horns on every hidden form
+		draw_colored_polygon(PackedVector2Array([Vector2(-5, -12), Vector2(-2, -12), Vector2(-6, -19)]), Color("c02030"))
+		draw_colored_polygon(PackedVector2Array([Vector2(5, -12), Vector2(2, -12), Vector2(6, -19)]), Color("c02030"))
+		if secret == 0:
+			draw_line(Vector2(-6, 2), Vector2(-11, 8), Color("5ac040"), 1.5)  # parasite tendrils
+			draw_line(Vector2(6, 2), Vector2(11, 8), Color("5ac040"), 1.5)
+		elif secret == 1:
+			draw_colored_polygon(PackedVector2Array([Vector2(-8, -2), Vector2(8, -2), Vector2(12, 14), Vector2(-12, 14)]), Color(0.1, 0.05, 0.15, 0.7))
+		else:
+			draw_arc(Vector2(0, -20), 6.0, 0.0, TAU, 20, Color("ffe680"), 2.0)  # halo
+			draw_colored_polygon(PackedVector2Array([Vector2(-6, 0), Vector2(-18, -8), Vector2(-16, 6)]), Color(1, 1, 1, 0.8))
+			draw_colored_polygon(PackedVector2Array([Vector2(6, 0), Vector2(18, -8), Vector2(16, 6)]), Color(1, 1, 1, 0.8))
+
+	if evolve_flash > 0.0:
+		draw_arc(Vector2(0, -2), 12.0 + (0.6 - evolve_flash) * 20.0, 0.0, TAU, 24, Color(1, 1, 1, evolve_flash), 2.0)
+	if cast_flash > 0.0:
+		draw_arc(Vector2(0, -2), 16.0, 0.0, TAU, 24, Color(cast_color, cast_flash * 2.0), 3.0)
+	if stun_left > 0.0:
+		draw_arc(Vector2(0, -20), 6.0, 0.0, TAU, 12, Color("ffe680"), 2.0)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var label_color := Color(1, 0.85, 0.4) if secret >= 0 else Color(1, 1, 1, 0.9)
+	draw_string(ThemeDB.fallback_font, Vector2(-30, -22 - 8 * sc), form_name(), HORIZONTAL_ALIGNMENT_CENTER, 60, 8, label_color)
