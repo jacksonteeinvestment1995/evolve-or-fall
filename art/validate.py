@@ -40,6 +40,40 @@ for n in ['tough_hide', 'sharp_fangs', 'swift_paws', 'quick_jaws', 'soul_drain',
           'build_tower', 'build_wall', 'build_remove', 'heart', 'bone', 'exp_orb']:
     M['icon_' + n] = S('icon', [(16, 16), (24, 24)], 1, 2)
 
+# ---- batch 2 manifest ----
+VIL2 = {'farmer': [('farmer', 'Farmer'), ('harvester', 'Harvester'), ('scythe_master', 'Scythe Master')],
+        'woodsman': [('lumberjack', 0), ('axeman', 0), ('berserker', 0)], 'hunter': [('archer', 0), ('ranger', 0), ('marksman', 0)],
+        'militia': [('footman', 0), ('soldier', 0), ('veteran', 0)], 'knight': [('knight', 0), ('paladin', 0), ('crusader', 0)],
+        'priest': [('priest', 0), ('cleric', 0), ('high_priest', 0)], 'mage': [('mage', 0), ('battlemage', 0), ('archmage', 0)],
+        'smith': [('armorer', 0), ('forgemaster', 0), ('iron_smith', 0)], 'thief': [('rogue', 0), ('assassin', 0), ('shadow_blade', 0)],
+        'noble': [('lord', 0), ('duke', 0), ('king', 0)]}
+for p_, forms in VIL2.items():
+    for i, (slug, _) in enumerate(forms):
+        M[f'{p_}_{i + 2}_{slug}'] = S('villager', [(16, 16)] if i == 0 else [(20, 20)], 2, 2)
+HERO_SIZES = [16, 16, 24, 24, 24, 32, 32, 32, 40, 40]
+def line(prefix, slugs, boss48=True):
+    for i, sl in enumerate(slugs):
+        sz = HERO_SIZES[i]
+        M[f'{prefix}_{i + 1:02d}_{sl}'] = S('hero', [(sz, sz)] if i < 9 else [(40, 40), (48, 48)], 2, 2)
+line('skeleton', ['skeleton', 'bone_soldier', 'grave_guard', 'skeleton_knight', 'bone_captain', 'skull_mage', 'bone_sorcerer', 'necromancer', 'dread_mage', 'lich'])
+line('wisp', ['wisp', 'ghost', 'poltergeist', 'phantom', 'specter', 'banshee', 'wailing_queen', 'spirit_lord', 'reaper_shade', 'wraith_king'])
+for pre, a, b in [('slime', 'slime', 'gel_paladin'), ('dragon', 'hatchling', 'elder_dragon'), ('beast', 'wolf_pup', 'fenrir'),
+                  ('nature', 'seed', 'world_tree'), ('material', 'clay_lump', 'titan'), ('demon', 'imp', 'demon_lord')]:
+    M[f'{pre}_01_{a}'] = S('hero', [(16, 16)], 2, 2)
+    M[f'{pre}_10_{b}'] = S('hero', [(40, 40), (48, 48)], 2, 2)
+# walk (4 frames) / attack (3 frames): same size as the idle sprite
+WA = {'xiaoguai_base': (16, 'hero'), 'undead_01_zombie': (16, 'hero'), 'undead_10_vampire_lord': (48, 'hero')}
+for p_, a, b in VIL:
+    WA[f'{p_}_1_{a}'] = (16, 'villager')
+for n, (sz, sec) in WA.items():
+    M[n + '_walk'] = S(sec, [(sz, sz)], 4, 4)
+    M[n + '_attack'] = S(sec, [(sz, sz)], 3, 3)
+# props
+PROP_SIZES = [(16, 16), (32, 32), (32, 48), (48, 32)]
+M['tile_water'] = S('tile', [(32, 32)], 2, 3)
+for n in ['prop_fence', 'prop_fence_corner', 'prop_rocks_1', 'prop_rocks_2', 'prop_bush', 'prop_flowers_1', 'prop_flowers_2', 'prop_gravestone']:
+    M[n] = S('tile', PROP_SIZES, 1, 2)
+
 def check_palette(pal, errs, notes):
     if not pal: errs.append('palette is empty'); return
     if len(pal) > 48: errs.append(f'palette has {len(pal)} colours (max 48)')
@@ -52,6 +86,11 @@ def check_palette(pal, errs, notes):
     dup = {v for v in vals if vals.count(v) > 1}
     if dup: errs.append(f'duplicate colours in palette: {sorted(dup)}')
     notes.append(f'palette: {len(pal)} colours')
+    try:
+        nj = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'palette_night.json'), encoding='utf-8'))
+        bad = [k for k in pal if k not in nj['map']] + [f'{k}->{v}' for k, v in nj['map'].items() if k not in pal or v not in pal]
+        if bad: errs.append(f'palette_night.json does not cover/target palette keys: {bad}')
+    except Exception as e: errs.append(f'palette_night.json: {e}')
 
 def check_sprites(sprites, pal, errs, warns, require_all):
     used = set()

@@ -29,7 +29,9 @@ tpl = os.path.join(HERE, 'preview.src.html')
 if os.path.exists(tpl):
     t = open(tpl, encoding='utf-8').read()
     pal = open(os.path.join(HERE, 'palette.js'), encoding='utf-8').read()
-    t = t.replace('/*@@PALETTE@@*/', pal).replace('/*@@SPRITES@@*/', js)
+    night = json.load(open(os.path.join(HERE, 'palette_night.json'), encoding='utf-8'))
+    nj = 'const NIGHT = ' + json.dumps({'map': night['map'], 'sprites': night['night_sprites']}) + ';'
+    t = t.replace('/*@@PALETTE@@*/', pal).replace('/*@@SPRITES@@*/', js).replace('/*@@NIGHT@@*/', nj)
     open(os.path.join(HERE, 'preview.html'), 'w', encoding='utf-8').write(t)
     print('wrote preview.html', len(t), 'bytes')
 sys.exit(1 if errs else 0)

@@ -1,4 +1,4 @@
-# 小怪 (Xiao Guai) HD-2D Art Style Guide, batch 1
+# 小怪 (Xiao Guai) HD-2D Art Style Guide, batches 1 and 2
 
 Sprites are crisp low-res pixel art (nearest-neighbour only). The "HD-2D" look comes from the world around them:
 soft coloured lights with bloom, soft cast shadows, tilt-shift blur on the top and bottom screen bands, a vignette,
@@ -73,3 +73,20 @@ Sections: `hero villager hidden structure tile effect icon`.
 Tools (Python 3 stdlib only): `python3 art/build.py` merges `src/*.spr` into `sprites.js` and bakes `preview.html` from `preview.src.html`;
 `python3 art/validate.py` checks palette, row/frame sizes, palette keys, idle frames, size table and batch coverage;
 `python3 art/tools/sheet.py out.png 8 art/src/x.spr` renders a PNG contact sheet.
+
+## Batch 2 additions
+- **Palette unchanged**: still 44 of 48 colours (4 slots left). Batch 2 drew every new family, prop and tile with the batch-1 palette.
+- **Villager ladders**: forms 1 and 2 are 16x16, forms 3 to 5 are 20x20. Each step adds armour, a bigger weapon, a cape, a plume or a glow; form 5 stays the peak.
+- **Other monster families** (Slime, Dragon, Beast, Nature, Material, Demon): form 1 is 16x16, form 10 is 40x40 to 48x48. Horns and eyes stay on every form; the body material and colour ramp follow the family.
+  Names: `<family>_<nn>_<slug>`, for example `slime_10_gel_paladin`. Undead lines 2 and 3 are `skeleton_nn_*` and `wisp_nn_*`.
+- **Walk and attack**: `<sprite>_walk` has 4 frames (front view, feet alternate, 1 px bob), `<sprite>_attack` has 3 frames (wind-up, strike, recover). Same size and colours as the idle sprite.
+  Suggested speeds: walk 8 fps looping, attack 12 fps played once.
+- **Props** (`prop_*`) have transparent backgrounds; `tile_water` is a full-bleed 32x32 tile with 3 frames that tiles on all four edges.
+- **Night palette swap**: `palette_night.json` maps every palette key to another palette key (one step down its ramp, a little cooler). Night = `night[key]` applied per pixel,
+  so no extra colours and nothing to repaint. In Godot either use the pre-swapped `export/<name>_night.png` (grass_1-3, mud, stone_path, tile_water) or feed the same table to a palette-swap shader
+  (index the sprite by palette key, look the key up in the night table). The preview scene does exactly this in `frameCanvas(name, frame, night)`.
+
+## Export for Godot
+`python3 art/tools/export_png.py` writes `art/export/<sprite>.png` (horizontal strip of frames, RGBA, transparent, 1x, no padding) and `art/export/atlas.json`
+(name, label, section, file, frame_w, frame_h, frames, fps, loop, kind). `python3 art/tools/check_png.py` re-reads every PNG (signature, CRCs, size, pixels vs. the sprite data).
+In Godot: import with Filter = Nearest, then `AnimatedSprite2D` frames from `Rect2(i * frame_w, 0, frame_w, frame_h)` of the strip (or `Sprite2D` with `hframes = frames`), speed from `fps`.
