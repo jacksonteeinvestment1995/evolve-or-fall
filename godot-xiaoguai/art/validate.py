@@ -36,9 +36,21 @@ for n in ['tree_1', 'tree_2']: M[n] = S('tile', [(32, 48)], 1, 2)
 FX = [(16, 16), (24, 24), (16, 24), (24, 16)]
 for n in ['bite_slash', 'spirit_bolt', 'enemy_arrow', 'fireball_explosion', 'bone_nova', 'roar_wave', 'heal_sparkle', 'level_up_ring']:
     M['fx_' + n] = S('effect', FX, 3, 5)
+for n in ['frost', 'bone', 'scream', 'magma', 'gust', 'fire', 'roar', 'thorn', 'roots', 'stomp', 'curse', 'spark']:
+    M['fx_skill_' + n] = S('effect', [(48, 48)], 4, 4)
+for n in ['burn', 'chill', 'poison', 'bleed', 'curse', 'root', 'stun', 'freeze']:
+    M['status_' + n] = S('effect', [(8, 8)], 1, 1)
+for n in ['burn', 'poison', 'bleed', 'chill', 'curse']:
+    M['fx_proc_' + n] = S('effect', [(16, 16)], 3, 3)
 for n in ['tough_hide', 'sharp_fangs', 'swift_paws', 'quick_jaws', 'soul_drain', 'bone_collector', 'bone_nova', 'spirit_bolt', 'shadow_step', 'roar',
           'build_tower', 'build_wall', 'build_remove', 'heart', 'bone', 'exp_orb']:
     M['icon_' + n] = S('icon', [(16, 16), (24, 24)], 1, 2)
+for n in ['z_grip', 'z_plague', 'z_chill', 'z_feast', 'z_undying', 'z_crimson', 's_plating', 's_spear', 's_marrow', 's_storm', 's_gaze', 's_pact',
+          'w_drift', 'w_touch', 'w_wail', 'w_haunt', 'w_veil', 'w_harvest', 'l_gel', 'l_goo', 'l_splash', 'l_bounce', 'l_absorb', 'l_armor',
+          'd_scale', 'd_ember', 'd_gust', 'd_heart', 'd_inferno', 'd_might', 'b_fangs', 'b_rake', 'b_sense', 'b_rush', 'b_roar', 'b_alpha',
+          'n_bark', 'n_thorn', 'n_photo', 'n_venom', 'n_tangle', 'n_bloom', 'm_shell', 'm_fists', 'm_quake', 'm_resolve', 'm_core', 'm_titan',
+          'e_claws', 'e_brand', 'e_pact', 'e_spark', 'e_curse', 'e_might']:
+    M['icon_fs_' + n] = S('icon', [(16, 16)], 1, 1)
 
 # ---- batch 2 manifest ----
 VIL2 = {'farmer': [('farmer', 'Farmer'), ('harvester', 'Harvester'), ('scythe_master', 'Scythe Master')],
@@ -89,6 +101,9 @@ for n, (sz, sec) in WA.items():
 # props
 PROP_SIZES = [(16, 16), (32, 32), (32, 48), (48, 32)]
 M['tile_water'] = S('tile', [(32, 32)], 2, 3)
+for d_ in ['edge_n', 'edge_e', 'edge_s', 'edge_w', 'corner_ne', 'corner_se', 'corner_sw', 'corner_nw', 'inner_ne', 'inner_se', 'inner_sw', 'inner_nw']:
+    M['shore_' + d_] = S('tile', [(32, 32)], 1, 3)      # frames follow tile_water
+    M['pathedge_' + d_] = S('tile', [(32, 32)], 1, 1)
 for n in ['prop_fence', 'prop_fence_corner', 'prop_rocks_1', 'prop_rocks_2', 'prop_bush', 'prop_flowers_1', 'prop_flowers_2', 'prop_gravestone']:
     M[n] = S('tile', PROP_SIZES, 1, 2)
 

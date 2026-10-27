@@ -19,6 +19,7 @@ const ELITE_STAGE := 2
 ## A gentle start: for the first minutes villagers are slower, notice 小怪 only when close,
 ## and cannot shoot or use skills. Each of these switches on as the game goes on.
 const GRACE_SECONDS := 180.0    # until then: no day bonus, no ranged attacks, slower walking
+const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swift_paws", "jaws": "quick_jaws", "drain": "soul_drain", "greed": "bone_collector", "nova": "bone_nova", "bolt": "spirit_bolt", "step": "shadow_step"}
 const SKILLS_AT := 360.0        # villager skills switch on
 const HIDDEN_FROM := 600.0      # hidden enemies can appear from here
 const CHASE_START := 450.0      # villagers notice 小怪 only this close at first...
@@ -795,10 +796,13 @@ func _next_menu() -> void:
 			var r: int = player.rank(id)
 			var key_text := "  [auto]" if info.get("auto", false) else ""
 			entries.append("%d. %s   rank %d → %d%s\n    %s" % [entries.size() + 1, info["name"], r, r + 1, key_text, info["desc"]])
-		_open_menu("LEVEL %d: choose a skill" % player.level, entries, func(i): pick_skill(options[i]), 1, 620)
+		var icons: Array = []
+		for id in options:
+			icons.append(Sprites.icon("icon_fs_" + id if SkillsData.form_skills().has(id) else "icon_" + str(SKILL_ICONS.get(id, id))))
+		_open_menu("LEVEL %d: choose a skill" % player.level, entries, func(i): pick_skill(options[i]), 1, 620, icons)
 
 
-func _open_menu(title: String, entries: Array[String], on_pick: Callable, columns: int, width: int) -> void:
+func _open_menu(title: String, entries: Array[String], on_pick: Callable, columns: int, width: int, icons: Array = []) -> void:
 	Sfx.play(get_tree(), "menu")
 	menu_open = true
 	get_tree().paused = pause_on_menu
@@ -830,6 +834,8 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 		b.text = entries[i]
 		b.custom_minimum_size = Vector2(width, 44 if columns > 1 else 70)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		if i < icons.size() and icons[i] != null:
+			b.icon = icons[i]
 		b.pressed.connect(func(): on_pick.call(i))
 		if i < 9:
 			var ev := InputEventKey.new()
@@ -1022,20 +1028,36 @@ func _update_ghost(_delta: float) -> void:
 
 
 func _draw() -> void:
+	var grass := [Sprites.tex("grass_1"), Sprites.tex("grass_2"), Sprites.tex("grass_3")]
+	var mud_tex := Sprites.tex("mud")
+	var tree_tex := [Sprites.tex("tree_1"), Sprites.tex("tree_2")]
+	var art := grass[0] != null
 	draw_rect(Rect2(0, 0, COLS * TILE, ROWS * TILE), Color("5b8a3c"))
 	for y in ROWS:
 		for x in COLS:
-			if (x + y) % 2 == 0:
+			if art:
+				# a stable pseudo-random pick, so the meadow does not flicker or repeat in rows
+				var pick := ((x * 73856093) ^ (y * 19349663)) & 0x7fffffff
+				draw_texture_rect(grass[pick % 3 if pick % 7 < 2 else 0], Rect2(x * TILE, y * TILE, TILE, TILE), false)
+			elif (x + y) % 2 == 0:
 				draw_rect(Rect2(x * TILE, y * TILE, TILE, TILE), Color(1, 1, 1, 0.04))
 
 	for m in mud:
 		var r := Rect2(m.x * TILE, m.y * TILE, TILE, TILE)
+		if mud_tex != null:
+			draw_texture_rect(mud_tex, r, false)
+			continue
 		draw_rect(r, Color("6b4f2f"))
 		draw_circle(r.position + Vector2(9, 11), 4.0, Color("55401f"))
 		draw_circle(r.position + Vector2(22, 20), 5.0, Color("7d5e38"))
 
 	for t in trees:
 		var c := Vector2(t.x + 0.5, t.y + 0.5) * TILE
+		var tt: Texture2D = tree_tex[(t.x + t.y) % 2]
+		if tt != null:
+			# the 32x48 tree stands on its tile: trunk foot at the tile's lower middle
+			draw_texture_rect(tt, Rect2(t.x * TILE, (t.y + 1) * TILE - tt.get_height(), TILE, tt.get_height()), false)
+			continue
 		draw_circle(c + Vector2(0, 8), 13.0, Color(0, 0, 0, 0.25))
 		draw_rect(Rect2(c.x - 3, c.y, 6, 12), Color("5a3b22"))
 		draw_circle(c + Vector2(0, -4), 14.0, Color("2f6b2f"))

@@ -15,6 +15,7 @@ var stun := 0.0            ## player zones: seconds villagers are frozen
 var source = null          ## the player, for team "player": hits earn EXP
 var status := ""           ## player zones: a status put on every villager hit (burn, chill...)
 var status_time := 0.0
+var fx := ""                ## sprite strip in art/export drawn when the blast goes off (4 frames)
 var age := 0.0
 var detonated := false
 var warned := false
@@ -67,5 +68,12 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.85), 2.0)
 	else:
 		var a := clampf(1.0 - (age - delay) / 0.25, 0.0, 1.0)
+		var t: Texture2D = Sprites.tex(fx) if fx != "" else null
+		if t != null:
+			var fh := t.get_height()
+			var frame := clampi(int((1.0 - a) * 4.0), 0, t.get_width() / fh - 1)
+			draw_circle(Vector2.ZERO, radius, Color(color, 0.15 * a))
+			draw_texture_rect_region(t, Rect2(-radius, -radius, radius * 2.0, radius * 2.0), Rect2(frame * fh, 0, fh, fh), Color(1, 1, 1, minf(1.0, a * 1.6)))
+			return
 		draw_circle(Vector2.ZERO, radius, Color(color, 0.55 * a))
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(1, 1, 1, a), 3.0)

@@ -28,6 +28,21 @@ static func tex(name: String) -> Texture2D:
 	return t
 
 
+## A small icon scaled up with hard edges (for menu buttons), or null.
+static func icon(name: String, factor: int = 2) -> Texture2D:
+	var key := "%s#icon%d" % [name, factor]
+	if _cache.has(key):
+		return _cache[key]
+	var t := tex(name)
+	var out: Texture2D = null
+	if t != null:
+		var img := t.get_image()
+		img.resize(img.get_width() * factor, img.get_height() * factor, Image.INTERPOLATE_NEAREST)
+		out = ImageTexture.create_from_image(img)
+	_cache[key] = out
+	return out
+
+
 ## The same strip mirrored left to right, frame by frame (frame order is kept).
 static func tex_flipped(name: String) -> Texture2D:
 	var key := name + "#flip"

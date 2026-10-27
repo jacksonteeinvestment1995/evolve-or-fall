@@ -912,6 +912,7 @@ func _form_on_bite(target, dmg: int) -> void:
 		var ob: Dictionary = all[id]["onbite"]
 		if randf() < float(ob["chance"]) * int(skills[id]):
 			target.apply_status(ob["status"], float(ob["secs"]))
+			FxMark.spawn(get_parent(), target.global_position + Vector2(0, -10), "fx_proc_" + str(ob["status"]))
 
 
 func _form_regen(delta: float) -> void:
@@ -948,6 +949,7 @@ func _cast_form(id: String) -> bool:
 	z.stun = float(a.get("stun", 0.0))
 	z.status = str(a.get("status", ""))
 	z.status_time = float(a.get("secs", 0.0))
+	z.fx = str(a.get("fx", ""))
 	z.source = self
 	_add_to_level(z)
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
