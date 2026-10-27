@@ -9,9 +9,9 @@ LEFT = [
     ".wxb....",
     "..wxreee",
     "...Rrrre",
-    "...RrKrr",
-    "...RrKrr",
-    "...Rrrrr",
+    "...RrKKr",
+    "...RrKKr",
+    "...RrKKr",
     "....Rrrr",
     ".....Rrr",
     "...RRrrr",
@@ -30,6 +30,9 @@ def frame_a():
         # mirror, but keep the shading: the right edge is the darker side
         rows.append(list(l + right))
     g = [r[:] for r in rows]
+    # a bright glint in the top-left corner of each eye makes them glossy
+    g[5][5] = "W"
+    g[5][9] = "W"
     # light from the top left: the right cheek and arm are in shade
     for y in (4, 5, 6, 7, 8):
         g[y][11] = "R"
