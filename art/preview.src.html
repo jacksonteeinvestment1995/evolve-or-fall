@@ -231,15 +231,25 @@ function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let
 /* ---- ground (static) ---- */
 function drawGround() {
   const cols = Math.ceil(PW / 32), rows = Math.ceil(PH / 32);
+  const mudC = mk(PW, PH), mx = mudC.getContext('2d'), mask = mk(PW, PH), kx = mask.getContext('2d');
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-    let n = 'grass_' + (1 + Math.floor(hash(i, j) * 3));
-    const dm = Math.hypot((i - 7.4) * 1.0, (j - 4.3) * 1.5);
-    if (dm < 1.9 && hash(i + 9, j + 4) > 0.15) n = 'mud';
-    if (j === 7 && i < 11) n = 'stone_path';
-    if (i === 10 && j >= 3 && j <= 7) n = 'stone_path';
-    if (j === 3 && i >= 10 && i <= 11) n = 'stone_path';
+    const n = 'grass_' + (1 + Math.floor(hash(i, j) * 3));
     if (has(n)) gx.drawImage(frameCanvas(n, 0), i * 32, j * 32);
+    if (has('mud')) mx.drawImage(frameCanvas('mud', 0), i * 32, j * 32);
+    let p = null;
+    if (j === 7 && i < 11) p = 'stone_path';
+    if (i === 10 && j >= 4 && j <= 7) p = 'stone_path';
+    if (p && has(p)) gx.drawImage(frameCanvas(p, 0), i * 32, j * 32);
   }
+  // irregular mud puddle with a stepped, noisy edge (pixel-space mask)
+  const id = kx.createImageData(PW, PH);
+  for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+    const dx = (x - 232) / 82, dy = (y - 140) / 46, nz = (hash(x >> 2, y >> 2) - .5) * .5;
+    if (dx * dx + dy * dy + nz < 1) id.data[(y * PW + x) * 4 + 3] = 255;
+  }
+  kx.putImageData(id, 0, 0);
+  mx.globalCompositeOperation = 'destination-in'; mx.drawImage(mask, 0, 0);
+  gx.drawImage(mudC, 0, 0);
 }
 
 /* ---- scene objects ---- */
@@ -381,7 +391,7 @@ function frame(tms) {
     const w = windowLight(o.name), flick = 0.85 + 0.15 * Math.sin(t * 9 + o.x) * Math.sin(t * 3.1 + o.x);
     lights.push({ x: (o.x - SPRITES[o.name].w / 2 + w.x + .5) * 2, y: (o.y - SPRITES[o.name].h + w.y + .5) * 2, r: night ? 150 : 52, col: [255, 170, 80], a: .85 * k * flick, core: night ? 28 : 14 });
   });
-  act.forEach(([e, st]) => { if (e.light) lights.push({ x: st.x * 2, y: st.y * 2, r: (e.n === 'fx_fireball_explosion' ? 190 : 90) * (night ? 1 : .7), col: e.light, a: (e.n === 'fx_fireball_explosion' ? Math.sin(Math.PI * Math.min(1, st.k + .1)) : .8) * (night ? 1 : .6), core: 20 }); });
+  act.forEach(([e, st]) => { if (e.light) lights.push({ x: st.x * 2, y: st.y * 2, r: (e.n === 'fx_fireball_explosion' ? 190 : 90) * (night ? 1 : .7), col: e.light, a: (e.n === 'fx_fireball_explosion' ? Math.sin(Math.PI * Math.min(1, st.k + .1)) : .45) * (night ? 1 : .6), core: e.n === 'fx_fireball_explosion' ? 20 : 6 }); });
   const ep = eyePoints(state.hero);
 
   // grade
@@ -403,7 +413,7 @@ function frame(tms) {
   lights.forEach(l => { glow(wx, l.x, l.y, l.r, l.col, l.a * (night ? .7 : .5)); glow(wx, l.x, l.y, l.core, [255, 235, 190], l.a * .55); });
   if (night) ep.pts.forEach(p => {
     const s = SPRITES[state.hero], ex = (HERO.x - s.w / 2 + p.x) * 2, ey = (HERO.y - s.h + p.y) * 2, c = ep.red ? [255, 70, 70] : [170, 150, 255];
-    glow(wx, ex, ey, 20, c, .9); glow(wx, ex, ey, 7, [255, 245, 220], .9);
+    glow(wx, ex, ey, 15, c, .7); glow(wx, ex, ey, 4, [255, 245, 220], .8);
   });
   // bloom: blurred copy of the frame, screen-blended
   if (hasFilter) {
