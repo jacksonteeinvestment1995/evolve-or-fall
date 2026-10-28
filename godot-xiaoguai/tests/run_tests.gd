@@ -1979,6 +1979,16 @@ func _init() -> void:
 	check("after a minute the next track starts", mu.current == "dk_heavy_battle_1" and mu.track_time == 0.0, mu.current)
 	mu.play_single("danger")
 	check("a single situational track leaves the pool", mu.pool_name == "")
+	mu.stop()
+	mu.play_single("danger")
+	await frames(20)
+	mu.play_single("hidden")
+	await frames(20)
+	mu.play_single("peace")
+	await frames(150)
+	check("switching tracks quickly never leaves the music silent", mu._front.playing and mu._front.volume_db > -20.0, "playing %s db %.1f" % [str(mu._front.playing), mu._front.volume_db])
+	check("music sits at the one steady volume", absf(mu._front.volume_db - mu.volume_db) < 0.5)
+
 
 	# =========================== EXP Magnet ===========================
 	await fresh()

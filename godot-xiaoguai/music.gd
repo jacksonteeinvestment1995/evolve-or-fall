@@ -42,7 +42,8 @@ const POOLS := {
 	"night": ["night", "dk_heavy_boss_2", "dk_nene9"],
 }
 
-var volume_db := -18.0
+## Every track is normalized to the same loudness (art/tools/normalize_music.py), so one volume fits them all.
+var volume_db := -11.0
 var current := ""
 var pool_name := ""      ## the pool being played ("" for a single situational track)
 var pool_index := 0
@@ -113,24 +114,48 @@ func play_track(id: String) -> bool:
 	var old := _front
 	_front = _back
 	_back = old
+	var player := _front   # (kept, so a later swap cannot make the intro handler act on the wrong player)
+	_kill_fade(player)     # a fade left over from this player's last turn must not touch the new track
+	for c in player.finished.get_connections():
+		player.finished.disconnect(c["callable"])
 	var first: AudioStream = loop_stream
 	if info.has("intro"):
 		var intro := _load(info["intro"], false)
 		if intro != null:
 			first = intro
-			_front.finished.connect(func():
-				if current == id:
-					_front.stream = loop_stream
-					_front.play(), CONNECT_ONE_SHOT)
-	_front.stream = first
-	_front.volume_db = -60.0
-	_front.play()
-	create_tween().tween_property(_front, "volume_db", volume_db, FADE_SECONDS)
+			player.finished.connect(func():
+				if current == id and player == _front:
+					player.stream = loop_stream
+					player.play(), CONNECT_ONE_SHOT)
+	player.stream = first
+	player.volume_db = -60.0
+	player.play()
+	_fade(player, volume_db, false)
 	if _back.playing:
-		var fade := create_tween()
-		fade.tween_property(_back, "volume_db", -60.0, FADE_SECONDS)
-		fade.tween_callback(_back.stop)
+		_fade(_back, -60.0, true)
 	return true
+
+
+var _fades := {}   ## player -> its running fade tween
+
+
+func _kill_fade(p: AudioStreamPlayer) -> void:
+	var t = _fades.get(p)
+	if t != null and is_instance_valid(t):
+		t.kill()
+	_fades.erase(p)
+
+
+## Fade one player to a volume; the old track is stopped when its fade-out ends (only if it was not reused meanwhile).
+func _fade(p: AudioStreamPlayer, to_db: float, then_stop: bool) -> void:
+	_kill_fade(p)
+	var tw := create_tween()
+	_fades[p] = tw
+	tw.tween_property(p, "volume_db", to_db, FADE_SECONDS)
+	if then_stop:
+		tw.tween_callback(func():
+			if p != _front:
+				p.stop())
 
 
 func _load(path: String, loop: bool) -> AudioStream:
@@ -175,5 +200,7 @@ func _process(delta: float) -> void:
 
 func stop() -> void:
 	current = ""
+	_kill_fade(_front)
+	_kill_fade(_back)
 	_front.stop()
 	_back.stop()
