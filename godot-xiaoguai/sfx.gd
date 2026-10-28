@@ -10,7 +10,7 @@ const HEARD_WITHIN := 900.0   ## farther than this from 小怪 and a positional 
 ## name -> [recipe, minimum seconds between two plays]. A recipe is a list of parts:
 ## [wave, from_hz, to_hz, seconds, volume, start_seconds]. wave: sine square saw tri noise.
 const SOUNDS := {
-	"bite": [[["noise", 0, 0, 0.05, 0.5, 0.0], ["square", 240, 110, 0.07, 0.35, 0.0]], 0.07],
+	"bite": [[["noise", 0, 0, 0.05, 0.5, 0.0], ["square", 240, 110, 0.07, 0.35, 0.0]], 0.12],
 	"hit": [[["noise", 0, 0, 0.05, 0.45, 0.0], ["sine", 320, 140, 0.08, 0.5, 0.0]], 0.05],
 	"kill": [[["square", 420, 90, 0.16, 0.4, 0.0], ["noise", 0, 0, 0.08, 0.3, 0.0]], 0.05],
 	"hurt": [[["saw", 200, 60, 0.22, 0.55, 0.0], ["noise", 0, 0, 0.1, 0.4, 0.0]], 0.15],
@@ -18,7 +18,7 @@ const SOUNDS := {
 	"roll": [[["noise", 0, 0, 0.16, 0.3, 0.0], ["sine", 500, 250, 0.12, 0.2, 0.0]], 0.2],
 	"lunge": [[["sine", 180, 700, 0.16, 0.5, 0.0], ["noise", 0, 0, 0.1, 0.25, 0.0]], 0.2],
 	"dodge": [[["sine", 1000, 300, 0.11, 0.5, 0.0]], 0.2],
-	"levelup": [[["square", 523, 523, 0.08, 0.35, 0.0], ["square", 659, 659, 0.08, 0.35, 0.08], ["square", 784, 784, 0.14, 0.35, 0.16]], 0.2],
+	"levelup": [[["square", 523, 523, 0.09, 0.4, 0.0], ["square", 659, 659, 0.09, 0.4, 0.09], ["square", 784, 784, 0.09, 0.4, 0.18], ["square", 1047, 1047, 0.24, 0.4, 0.27], ["sine", 2093, 2093, 0.3, 0.2, 0.3]], 0.2],
 	"evolve": [[["sine", 220, 1100, 0.7, 0.5, 0.0], ["square", 330, 1320, 0.7, 0.2, 0.05], ["sine", 1320, 1320, 0.3, 0.4, 0.7]], 0.5],
 	"win": [[["square", 523, 523, 0.12, 0.35, 0.0], ["square", 659, 659, 0.12, 0.35, 0.12], ["square", 784, 784, 0.12, 0.35, 0.24], ["square", 1046, 1046, 0.4, 0.4, 0.36]], 0.5],
 	"nova": [[["sine", 140, 30, 0.35, 0.7, 0.0], ["noise", 0, 0, 0.25, 0.4, 0.0]], 0.1],
@@ -35,6 +35,18 @@ const SOUNDS := {
 	"chime": [[["sine", 660, 880, 0.35, 0.4, 0.0], ["sine", 990, 990, 0.3, 0.2, 0.1]], 0.4],
 	"menu": [[["tri", 600, 800, 0.1, 0.4, 0.0]], 0.1],
 	"pick": [[["square", 900, 900, 0.06, 0.35, 0.0], ["square", 1200, 1200, 0.08, 0.35, 0.06]], 0.1],
+	# the moments that must never go unheard (they can take over a busy channel, see PRIORITY)
+	"select": [[["sine", 880, 1320, 0.12, 0.5, 0.0], ["sine", 1320, 1760, 0.18, 0.45, 0.08], ["noise", 0, 0, 0.05, 0.15, 0.0]], 0.05],
+	"rebirth": [[["noise", 0, 0, 0.55, 0.3, 0.0], ["sine", 180, 1300, 1.0, 0.5, 0.0], ["square", 660, 990, 0.3, 0.3, 0.8], ["sine", 1320, 1760, 0.4, 0.4, 0.95], ["sine", 2093, 2093, 0.4, 0.25, 1.0]], 0.5],
+	"die_player": [[["saw", 440, 50, 1.2, 0.6, 0.0], ["noise", 0, 0, 0.5, 0.4, 0.0], ["sine", 110, 40, 1.0, 0.55, 0.2]], 0.5],
+	"die_enemy": [[["square", 500, 100, 0.18, 0.4, 0.0], ["noise", 0, 0, 0.1, 0.35, 0.0], ["sine", 260, 60, 0.22, 0.45, 0.04]], 0.04],
+	# what an enemy attack sounds like when it lands on 小怪
+	"hit_pierce": [[["noise", 0, 0, 0.04, 0.4, 0.0], ["sine", 900, 300, 0.1, 0.5, 0.0]], 0.06],
+	"hit_magic": [[["sine", 800, 300, 0.2, 0.5, 0.0], ["square", 1200, 400, 0.1, 0.25, 0.0]], 0.08],
+	"hit_axe": [[["square", 300, 200, 0.12, 0.5, 0.0], ["noise", 0, 0, 0.06, 0.4, 0.0], ["sine", 1500, 1500, 0.08, 0.2, 0.0]], 0.08],
+	"hit_goo": [[["sine", 250, 90, 0.18, 0.5, 0.0], ["noise", 0, 0, 0.08, 0.3, 0.0]], 0.08],
+	"hit_blast": [[["noise", 0, 0, 0.3, 0.5, 0.0], ["sine", 160, 40, 0.3, 0.6, 0.0]], 0.1],
+	"hit_slash": [[["noise", 0, 0, 0.07, 0.5, 0.0], ["saw", 600, 200, 0.1, 0.35, 0.0]], 0.08],
 	# the skill sounds (see skill_sounds.gd): each is a base that individual skills retune
 	"s_fire": [[["noise", 0, 0, 0.35, 0.45, 0.0], ["saw", 320, 110, 0.3, 0.35, 0.0], ["sine", 90, 60, 0.3, 0.3, 0.0]], 0.08],
 	"s_ice": [[["sine", 1800, 1200, 0.25, 0.4, 0.0], ["sine", 2400, 2000, 0.2, 0.3, 0.05], ["noise", 0, 0, 0.05, 0.2, 0.0]], 0.08],
@@ -66,6 +78,9 @@ static var master_db := -4.0
 static var _streams := {}
 static var _last_play := {}
 static var _pool: Array[AudioStreamPlayer] = []
+static var _started := {}      ## player -> when its current sound began (ms)
+## These can take over the busiest channel when every one is playing, so a level-up or a death is never lost.
+const PRIORITY := ["levelup", "evolve", "win", "die_player", "rebirth", "select", "die_enemy", "pick"]
 static var _holder: Node = null
 
 
@@ -149,15 +164,27 @@ static func play(tree: SceneTree, sound: String, volume_db: float = 0.0, pitch: 
 	var now := Time.get_ticks_msec()
 	if now - int(_last_play.get(sound, -100000)) < int(float(SOUNDS[sound][1]) * 1000.0):
 		return false
+	var chosen: AudioStreamPlayer = null
 	for p in _pool:
 		if not p.playing:
-			_last_play[sound] = now
-			p.stream = stream_for(sound)
-			p.volume_db = master_db + volume_db
-			p.pitch_scale = pitch
-			p.play()
-			return true
-	return false
+			chosen = p
+			break
+	if chosen == null and PRIORITY.has(sound):
+		var oldest := INF
+		for p in _pool:
+			var t: float = float(_started.get(p, 0))
+			if t < oldest:
+				oldest = t
+				chosen = p
+	if chosen == null:
+		return false
+	_last_play[sound] = now
+	_started[chosen] = now
+	chosen.stream = stream_for(sound)
+	chosen.volume_db = master_db + volume_db + (2.0 if PRIORITY.has(sound) else 0.0)
+	chosen.pitch_scale = pitch
+	chosen.play()
+	return true
 
 
 ## A sound at a place: quieter with distance from 小怪, and skipped when far away.

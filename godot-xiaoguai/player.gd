@@ -66,6 +66,8 @@ var slow_left := 0.0           ## hit by a mud ball
 var level_flash := 0.0         ## a ring that pops out on every level-up
 var specials := {}             ## special skills picked every 12 levels: id -> true
 var phoenix_used := false
+const PHOENIX_DELAY := 2.0   ## seconds between the fatal blow and the rebirth
+var reviving := 0.0
 ## Combo: every bite or lunge that lands adds one; the chain breaks after COMBO_WINDOW seconds without a hit. Each
 ## step adds 2% damage up to 20 steps, and 5, 10, 20 and 40 pay out bones.
 ## Bites come 3.3x as often as the form's table says, and every skill recharges twice as fast.
@@ -301,6 +303,13 @@ func on_kill() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if reviving > 0.0:
+		reviving -= delta
+		velocity = Vector2.ZERO
+		if reviving <= 0.0:
+			_rebirth()
+		queue_redraw()
+		return
 	if hp <= 0:
 		return
 	bite_cd = maxf(bite_cd - delta, 0.0)
@@ -859,7 +868,7 @@ func _update_range_autos() -> void:
 
 
 ## A bolt of 小怪's own, for the long-range skills.
-func _player_bolt(dir: Vector2, spd: float, dmg: int, color: Color, style: String, rad: float, life: float, pierce: bool, status: String = "", status_secs: float = 0.0) -> void:
+func _player_bolt(dir: Vector2, spd: float, dmg: int, color: Color, style: String, rad: float, life: float, pierce: bool, status: String = "", status_secs: float = 0.0, hit_id: String = "") -> void:
 	var b = BoltScript.new()
 	b.position = global_position
 	b.dir = dir
@@ -873,6 +882,7 @@ func _player_bolt(dir: Vector2, spd: float, dmg: int, color: Color, style: Strin
 	b.radius = rad
 	b.status = status
 	b.status_time = status_secs
+	b.hit_sound = hit_id
 	b.source = self
 	_add_to_level(b)
 
@@ -924,6 +934,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.style = "nova"
 			z.dur = 0.6
 			z.stun = 0.5
+			z.hit_sound = "nova"
 			z.source = self
 			_add_to_level(z)
 		"bolt":
@@ -938,11 +949,12 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			b.pierce = true
 			b.life = 1.2
 			b.radius = 7.0
+			b.hit_sound = "bolt"
 			b.source = self
 			_add_to_level(b)
 		"frost_shards":
 			for a in [-0.28, 0.0, 0.28]:
-				_player_bolt(direction.rotated(a), 340.0, ceili(effective_bite() * 1.6 * power), Color("8fd8ff"), "orb", 6.0, 1.1, false, "chill", 3.0)
+				_player_bolt(direction.rotated(a), 340.0, ceili(effective_bite() * 1.6 * power), Color("8fd8ff"), "orb", 6.0, 1.1, false, "chill", 3.0, "frost_shards")
 		"meteor_call":
 			var tgt = _nearest_enemy_to(440.0)
 			var spot: Vector2 = tgt.global_position if tgt != null else global_position + direction * 200.0
@@ -957,6 +969,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.dur = 0.7
 			z.status = "burn"
 			z.status_time = 3.0
+			z.hit_sound = "meteor_call"
 			z.source = self
 			_add_to_level(z)
 		"chain_zap":
@@ -970,6 +983,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 				_zap_line(from, cur.global_position)
 				SkillFx.spawn_fx(get_parent(), cur.global_position, "spark", Color("bfe8ff"), Vector2.RIGHT, 1.0)
 				cur.take_hit(ceili(effective_bite() * 2.0 * power), (cur.global_position - from).normalized())
+				SkillSounds.play_at(get_tree(), "chain_zap", cur.global_position, -4.0)
 				add_xp(1)
 				from = cur.global_position
 				var nxt = null
@@ -984,9 +998,9 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 				cur = nxt
 		"thorn_ring":
 			for i in 10:
-				_player_bolt(Vector2.from_angle(float(i) / 10.0 * TAU), 260.0, ceili(effective_bite() * 1.4 * power), Color("7ad060"), "seed", 5.0, 0.95, false)
+				_player_bolt(Vector2.from_angle(float(i) / 10.0 * TAU), 260.0, ceili(effective_bite() * 1.4 * power), Color("7ad060"), "seed", 5.0, 0.95, false, "", 0.0, "thorn_ring")
 		"spirit_lance":
-			_player_bolt(direction, 620.0, ceili(effective_bite() * 5.0 * power), Color("ffe680"), "spear", 9.0, 1.0, true)
+			_player_bolt(direction, 620.0, ceili(effective_bite() * 5.0 * power), Color("ffe680"), "spear", 9.0, 1.0, true, "", 0.0, "spirit_lance")
 		"step":
 			blink(direction)
 		"roar":
@@ -997,6 +1011,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.damage = 0
 			z.team = "player"
 			z.color = Color("ff8040")
+			z.hit_sound = "roar"
 			z.style = "roar"
 			z.dur = 0.55
 			z.knock = 450.0
@@ -1011,6 +1026,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			z.damage = ceili(effective_bite() * 10.0)
 			z.team = "player"
 			z.color = Color("ff2040")
+			z.hit_sound = "doom"
 			z.style = "doom"
 			z.dur = 0.8
 			z.knock = 500.0
@@ -1069,17 +1085,16 @@ func take_hit(dmg: int, dir: Vector2) -> void:
 	knock = dir * 220.0
 	hp_changed.emit(hp)
 	if hp <= 0 and specials.has("phoenix") and not phoenix_used:
-		phoenix_used = true  # Phoenix: one comeback per run
-		hp = roundi(max_hp * 0.4)
-		invuln = 2.0
+		phoenix_used = true  # Phoenix: one comeback per run, after a short wait in the ashes
+		reviving = PHOENIX_DELAY
+		hp = 0
+		invuln = PHOENIX_DELAY + 2.5
 		hp_changed.emit(hp)
-		_player_zone(global_position, 160.0, 0.0, ceili(effective_bite() * 5.0), Color("ff8a30"), 1.5)
-		Popups.text(get_tree(), global_position + Vector2(0, -26.0), "Phoenix!", Popups.BIG, 20)
-		SkillFx.spawn_fx(self, Vector2.ZERO, "phoenix")
-		SkillSounds.play(get_tree(), "phoenix", -1.0)
-		Sfx.play(get_tree(), "evolve")
+		Popups.text(get_tree(), global_position + Vector2(0, -26.0), "Phoenix... rising", Popups.BIG, 16)
+		Sfx.play(get_tree(), "die_player", -4.0)
+		SkillSounds.play(get_tree(), "phoenix", -2.0)
 		return
-	Sfx.play(get_tree(), "death" if hp <= 0 else "hurt")
+	Sfx.play(get_tree(), "die_player" if hp <= 0 else "hurt")
 	if hp > 0 and family() == "Slime":
 		_slime_blob(dmg)
 	if hp <= 0:
@@ -1087,7 +1102,29 @@ func take_hit(dmg: int, dir: Vector2) -> void:
 		queue_redraw()
 
 
+## The phoenix rises: it comes back with 40% HP and a burst of fire around it.
+func _rebirth() -> void:
+	hp = roundi(max_hp * 0.4)
+	invuln = 2.0
+	hp_changed.emit(hp)
+	_player_zone(global_position, 160.0, 0.0, ceili(effective_bite() * 5.0), Color("ff8a30"), 1.5)
+	Popups.text(get_tree(), global_position + Vector2(0, -26.0), "Phoenix!", Popups.BIG, 22)
+	SkillFx.spawn_fx(self, Vector2.ZERO, "phoenix")
+	SkillSounds.play(get_tree(), "phoenix", -1.0)
+	Sfx.play(get_tree(), "rebirth")
+	Juice.cast_burst(get_parent(), global_position, Color("ff8a30"))
+
+
 func _draw() -> void:
+	if reviving > 0.0:
+		# an ember egg in the ashes: it glows brighter as the rebirth nears, with a ring that fills
+		var f := 1.0 - reviving / PHOENIX_DELAY
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+		draw_circle(Vector2.ZERO, 10.0 + 8.0 * f, Color(1.0, 0.45, 0.1, 0.12 + 0.2 * f))
+		draw_circle(Vector2.ZERO, 5.0 + 2.0 * pulse, Color(1.0, 0.6 + 0.3 * f, 0.2, 0.9))
+		draw_circle(Vector2.ZERO, 2.5, Color(1, 0.95, 0.7))
+		draw_arc(Vector2.ZERO, 13.0, -PI / 2.0, -PI / 2.0 + TAU * f, 24, Color(1, 0.85, 0.4, 0.9), 2.0)
+		return
 	if hp <= 0:
 		return
 	var s: Dictionary = stages[stage]
@@ -1236,6 +1273,7 @@ func _cast_form(id: String) -> bool:
 	z.status_time = float(a.get("secs", 0.0))
 	z.fx = str(a.get("fx", ""))
 	z.source = self
+	z.hit_sound = id
 	if a.has("style"):
 		z.style = str(a["style"])
 		z.dur = 0.65
@@ -1273,6 +1311,7 @@ func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
 		b.status = str(a.get("status", ""))
 		b.status_time = float(a.get("secs", 0.0))
 		b.source = self
+		b.hit_sound = id
 		_add_to_level(b)
 	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
 	if specials.has("stormcaller"):

@@ -51,10 +51,10 @@ static func released(i: int) -> bool:
 	return RELEASED.has(LINES[i]["forms"][0]) and not (LINES[i]["forms"][0] == "Slime" and i != 6)
 
 
-## "Zombie → Vampire Lord"
+## "Zombie to Vampire Lord"
 static func title(i: int) -> String:
 	var forms: Array = LINES[i]["forms"]
-	return "%s → %s" % [forms[0], forms[forms.size() - 1]]
+	return "%s to %s" % [forms[0], forms[forms.size() - 1]]
 
 
 ## Each line in a family gets a slightly different hue.

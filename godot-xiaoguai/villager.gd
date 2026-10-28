@@ -638,6 +638,7 @@ func _physics_process(delta: float) -> void:
 		if target != null and hit_cd == 0.0 and target.global_position.distance_to(global_position) < reach:
 			hit_cd = HIT_COOLDOWN
 			target.take_hit(effective_damage(), dir)
+			Sfx.play(get_tree(), "hit_slash", -2.0)
 	elif target != null:
 		var to: Vector2 = target.global_position - global_position
 		var dist := to.length()
@@ -656,6 +657,7 @@ func _physics_process(delta: float) -> void:
 			hit_cd = HIT_COOLDOWN
 			target.take_hit(effective_damage(), to.normalized())
 			SkillFx.spawn_fx(get_parent(), target.global_position, "slash", Color(1.0, 0.3, 0.25), to.normalized(), 1.1)
+			Sfx.play(get_tree(), "hit_slash", -2.0)
 		if skill_cd == 0.0 and not has_status("charm"):
 			if use_skill(target, dist):
 				skill_cd = skill_cooldown()
@@ -733,6 +735,7 @@ func hurt(dmg: int) -> void:
 		tint = Popups.BLEED
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), dmg, tint)
 	if hp <= 0:
+		Sfx.play_at(get_tree(), "die_enemy", global_position, -5.0)
 		_boss_loot()
 		_death_burst()
 		defeated.emit(xp_value, bones_value, false)
@@ -768,7 +771,7 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 	if not by_tower:
 		knock = dir * 260.0  # towers hurt but never push villagers back
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
-	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
+	Sfx.play_at(get_tree(), "die_enemy" if hp <= 0 else "hit", global_position, -5.0 if hp <= 0 else -7.0)
 	if hp > 0 and say_left <= 0.0 and randf() < 0.1 and secret < 0:
 		say(HURT_LINES[randi() % HURT_LINES.size()], 1.6)
 	if secret >= 0 and hp > 0:

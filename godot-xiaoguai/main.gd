@@ -22,7 +22,7 @@ const ELITE_STAGE := 2
 ## A gentle start: for the first minutes villagers are slower, notice 小怪 only when close,
 ## and cannot shoot or use skills. Each of these switches on as the game goes on.
 const GRACE_SECONDS := 180.0    # until then: no day bonus, no ranged attacks, slower walking
-const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swift_paws", "jaws": "quick_jaws", "drain": "soul_drain", "greed": "bone_collector", "nova": "bone_nova", "bolt": "spirit_bolt", "step": "shadow_step", "frost_shards": "fs_z_chill", "meteor_call": "fs_d_fireball", "chain_zap": "fs_e_spark", "thorn_ring": "fs_n_thorn", "spirit_lance": "fs_w_orbs"}
+const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swift_paws", "jaws": "quick_jaws", "drain": "soul_drain", "greed": "bone_collector", "nova": "bone_nova", "bolt": "spirit_bolt", "step": "shadow_step", "frost_shards": "frost_shards", "meteor_call": "meteor_call", "chain_zap": "chain_zap", "thorn_ring": "thorn_ring", "spirit_lance": "spirit_lance"}
 const SKILLS_AT := 360.0        # villager skills switch on
 const HIDDEN_FROM := 600.0      # hidden enemies can appear from here (10 minutes in)...
 const GUARD_RELEASE := 1200.0    # ...and they wait in the big castle until 20 minutes, then go hunting
@@ -1334,7 +1334,8 @@ func _update_hotbar() -> void:
 ## special skill pick every 12th (12, 24, 36 ... 96).
 func _on_leveled(new_level: int) -> void:
 	Sfx.play(get_tree(), "levelup")
-	if new_level % player.SKILL_EVERY == 0:
+	# every 12th level offers a special skill INSTEAD of the normal skill pick
+	if new_level % player.SKILL_EVERY == 0 and new_level % player.SPECIAL_EVERY != 0:
 		menu_queue.append({"type": "skill"})
 	if new_level % player.SPECIAL_EVERY == 0:
 		menu_queue.append({"type": "special"})
@@ -1362,10 +1363,10 @@ func _next_menu() -> void:
 			if not LinesData.released(i):
 				continue
 			line_ids.append(i)
-			entries.append("%d. %s  [%s]" % [entries.size() + 1, LinesData.title(i), LinesData.LINES[i]["family"]])
+			entries.append("%d. %s  [%s family]\n%s" % [entries.size() + 1, LinesData.title(i), LinesData.LINES[i]["family"], _line_blurb(i)])
 			var art := Sprites.hero(LinesData.LINES[i]["forms"], 1)
 			line_icons.append(Sprites.first_frame_icon(art, 3) if art != "" else null)
-		_open_menu("FIRST EVOLUTION: choose your evolution line", entries, func(i): pick_line(line_ids[i]), 2, 440, line_icons)
+		_open_menu("LEVEL %d: choose your evolution line" % player.level, entries, func(i): pick_line(line_ids[i]), 1, 760, line_icons)
 	elif item["type"] == "perk":
 		var cards := PerksData.roll(player.perks, rng, 3)
 		if cards.is_empty():
@@ -1375,8 +1376,8 @@ func _next_menu() -> void:
 		for id in cards:
 			var info: Dictionary = PerksData.PERKS[id]
 			var have: int = int(player.perks.get(id, 0))
-			perk_entries.append("%d. %s   %d → %d\n    %s" % [perk_entries.size() + 1, info["name"], have, have + 1, info["desc"]])
-		_open_menu("LEVEL %d: choose an UPGRADE for this run" % player.level, perk_entries, func(i): pick_perk(cards[i]), 1, 620)
+			perk_entries.append("%d. %s   %d -> %d\n    %s" % [perk_entries.size() + 1, info["name"], have, have + 1, info["desc"]])
+		_open_menu("LEVEL %d: choose an UPGRADE for this run" % player.level, perk_entries, func(i): pick_perk(cards[i]), 1, 620, cards.map(func(pid): return Sprites.icon("icon_perk_" + pid)))
 	elif item["type"] == "special":
 		var specials := SkillsData.roll_specials(player.specials, rng, 3)
 		if specials.is_empty():
@@ -1386,7 +1387,7 @@ func _next_menu() -> void:
 		for id in specials:
 			var info: Dictionary = SkillsData.SPECIALS[id]
 			special_entries.append("%d. %s\n    %s" % [special_entries.size() + 1, info["name"], info["desc"]])
-		_open_menu("LEVEL %d: choose a SPECIAL skill" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620, specials.map(func(sid): return Sprites.icon("icon_sp_" + sid)))
+		_open_menu("LEVEL %d: choose a SPECIAL skill (instead of a normal skill)" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620, specials.map(func(sid): return Sprites.icon("icon_sp_" + sid)))
 	else:
 		var options := SkillsData.roll(player.skills, rng, 3, player.line, player.stage)
 		if options.is_empty():
@@ -1397,7 +1398,7 @@ func _next_menu() -> void:
 			var info: Dictionary = SkillsData.info(id)
 			var r: int = player.rank(id)
 			var key_text := "  [auto]" if info.get("auto", false) else ""
-			entries.append("%d. %s   rank %d → %d%s\n    %s" % [entries.size() + 1, info["name"], r, r + 1, key_text, info["desc"]])
+			entries.append("%d. %s   rank %d -> %d%s\n    %s\n    %s" % [entries.size() + 1, info["name"], r, r + 1, key_text, info["desc"], _skill_origin(id)])
 		var icons: Array = []
 		for id in options:
 			icons.append(Sprites.icon("icon_fs_" + id if SkillsData.form_skills().has(id) else "icon_" + str(SKILL_ICONS.get(id, id))))
@@ -1458,7 +1459,7 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 
 
 func _close_menu() -> void:
-	Sfx.play(get_tree(), "pick")
+	Sfx.play(get_tree(), "select")
 	if menu_root != null:
 		menu_root.queue_free()
 		menu_root = null
@@ -1473,6 +1474,34 @@ func pick_line(i: int) -> void:
 	_next_menu()
 
 
+## What sets an evolution line apart, in three short lines for the level-10 menu: the family's trait (shared by every
+## line of the family), the line's own signature ability, and the skills only this line can learn.
+func _line_blurb(i: int) -> String:
+	var fam: String = LinesData.LINES[i]["family"]
+	var text := "Family trait: %s" % player.AbilitiesData.FAMILY_TRAITS[fam]
+	if player.AbilitiesData.ABILITIES.has(i):
+		var ab: Dictionary = player.AbilitiesData.ABILITIES[i]
+		text += "\nAbility (form 3): %s - %s" % [ab["name"], ab["desc"]]
+	else:
+		text += "\nAbility: none yet"
+	var names: Array[String] = []
+	for e in SkillsData.FORM_LIST:
+		if int(e[1]) == i:
+			names.append(str(e[3]))
+	if not names.is_empty():
+		text += "\nOwn skills: %s" % ", ".join(names)
+	return text
+
+
+## Where a skill comes from: every line learns the general ones, and each line also has skills of its own.
+func _skill_origin(id: String) -> String:
+	var fs := SkillsData.form_skills()
+	if fs.has(id):
+		var l: int = int(fs[id]["line"])
+		return "[%s line skill - unlocked at form %s]" % [LinesData.LINES[l]["forms"][0], LinesData.LINES[l]["forms"][clampi(int(fs[id]["form"]) - 1, 0, 9)]]
+	return "[general skill - every line can learn it]"
+
+
 ## A level-up menu (or tests) picks a skill.
 func pick_skill(id: String) -> void:
 	_close_menu()
@@ -1485,7 +1514,6 @@ func pick_perk(id: String) -> void:
 	_close_menu()
 	player.add_perk(id)
 	Popups.text(get_tree(), player.global_position + Vector2(0, -34.0), PerksData.PERKS[id]["name"] + "!", Popups.BIG, 16)
-	Sfx.play(get_tree(), "pick")
 	_next_menu()
 
 
@@ -1522,6 +1550,17 @@ func _on_evolved(stage: int) -> void:
 		evo_timer = 6.0
 	else:
 		evo_timer = 3.0
+		var fresh_skills: Array[String] = []
+		var before := SkillsData.form_pool(player.line, stage - 1) if stage > 0 else []
+		for id in SkillsData.form_pool(player.line, stage):
+			if not before.has(id):
+				fresh_skills.append(str(SkillsData.form_skills()[id]["name"]))
+		if not fresh_skills.is_empty():
+			text += "\nNew line skills to pick: %s" % ", ".join(fresh_skills)
+			evo_timer = 5.0
+		if player.AbilitiesData.rank_for_stage(stage) > player.AbilitiesData.rank_for_stage(stage - 1) and player.ability().has("name"):
+			text += "\nAbility upgraded: %s" % player.ability()["name"]
+			evo_timer = 5.0
 	evo_banner.text = text
 	evo_banner.visible = true
 	var z: float = player.stages[stage]["zoom"]

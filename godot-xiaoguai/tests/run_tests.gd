@@ -281,8 +281,8 @@ func _init() -> void:
 	p.add_xp(PlayerScript.xp_for_level(19) - p.xp)
 	check("a level inside a form does not evolve", p.stage == 1 and p.level == 19)
 	kinds_19 = drain_menus()
-	check("up to level 19: skill picks at 12, 15 and 18, and a special at 12",
-			kinds_19.count("skill") == 3 and kinds_19.count("special") == 1, str(kinds_19))
+	check("up to level 19: skill picks at 15 and 18, and a special at 12 instead of a skill",
+			kinds_19.count("skill") == 2 and kinds_19.count("special") == 1, str(kinds_19))
 	p.add_xp(PlayerScript.xp_for_level(20) - p.xp)
 	check("the second evolution is at level 20, with no line menu", p.level == 20 and p.stage == 2
 			and p.stages[2]["name"] == "Dragonling" and not p.needs_line)
@@ -290,8 +290,8 @@ func _init() -> void:
 	p.add_xp(PlayerScript.xp_for_level(100))
 	var kinds_all: Array = drain_menus()
 	check("level 100 is the last form of the line", p.level == 100 and p.stage == 10 and p.stages[10]["name"] == "Elder Dragon")
-	var normal_picks: int = kinds_all.count("skill") + 3 + 3  # plus the 6 picked by hand so far (levels 3, 6, 9, 12, 15, 18)
-	check("a skill pick every 3 levels: 33 in a run", normal_picks == 33, "%d" % normal_picks)
+	var normal_picks: int = kinds_all.count("skill") + 3 + 2  # plus the 5 picked by hand so far (levels 3, 6, 9, 15, 18)
+	check("a skill pick every 3 levels, but a special instead at every 12th: 25 in a run", normal_picks == 25, "%d" % normal_picks)
 	check("a special pick every 12 levels: 8 in a run", p.specials.size() == 8, "%d" % p.specials.size())
 	check("the final form earns the strongest skill", p.rank("doom") == 1 and SkillsData.SKILLS["doom"]["name"] == "Final Calamity")
 	var doom_rng := RandomNumberGenerator.new()
@@ -323,7 +323,7 @@ func _init() -> void:
 	check("a special you already have is not offered again", SkillsData.roll_specials(owned_all, sp_rng, 3) == ["titan"])
 	p.add_xp(PlayerScript.xp_for_level(24))
 	var kinds_24: Array = drain_menus()
-	check("to level 24: 8 skill picks and 2 special picks", kinds_24.count("skill") == 8 and kinds_24.count("special") == 2, str(kinds_24))
+	check("to level 24: 6 skill picks and 2 special picks (levels 12 and 24 are specials)", kinds_24.count("skill") == 6 and kinds_24.count("special") == 2, str(kinds_24))
 	check("a special is a one-time pick", p.specials.size() == 2)
 
 	await fresh()
@@ -355,7 +355,11 @@ func _init() -> void:
 	p.invuln = 0.0
 	p.hp = 1
 	p.take_hit(5, Vector2.LEFT)
-	check("Phoenix: a deadly hit brings you back with 40% HP", p.hp == roundi(p.max_hp * 0.4) and p.phoenix_used)
+	check("Phoenix: a deadly hit starts a rebirth, not an instant revive", p.hp == 0 and p.reviving > 0.0 and p.phoenix_used and not main.game_over)
+	await frames(60)
+	check("Phoenix: still waiting after one second", p.hp == 0 and p.reviving > 0.0)
+	await frames(75)
+	check("Phoenix: after about 2 seconds you come back with 40% HP", p.hp == roundi(p.max_hp * 0.4) and p.reviving <= 0.0, "hp %d reviving %.2f" % [p.hp, p.reviving])
 	p.invuln = 0.0
 	p.hp = 1
 	p.take_hit(5, Vector2.LEFT)
@@ -1745,6 +1749,7 @@ func _init() -> void:
 	p.invuln = 0.0
 	p.hp = 1
 	p.take_hit(50, Vector2.RIGHT)
+	await frames(135)
 	check("Phoenix rises as a firebird", p.hp > 1 and p.get_children().any(func(n): return n is SkillFx and n.kind == "phoenix"))
 	p.learn_special("cleave")
 	p.learn_special("titan")
@@ -2376,6 +2381,40 @@ func _init() -> void:
 	gp.skill_cd["chain_zap"] = 0.0
 	check("Chain Lightning hits the nearest villager", gp.cast("chain_zap") and rs_foe.hp < rs_hp)
 	await clear_enemies()
+
+	# sounds for level-ups, picks, deaths and hits, and the icons of the new skills
+	await fresh()
+	var sp = main.player
+	Sfx._last_play.clear()
+	sp.add_xp(PlayerScript.xp_for_level(2) - sp.xp)
+	await frames(3)
+	check("a level-up plays its sound", Sfx._last_play.has("levelup"))
+	main.menu_queue.clear()
+	main.menu_queue.append({"type": "perk"})
+	main._next_menu()
+	Sfx._last_play.clear()
+	main.pick_perk("sharp_fangs")
+	check("picking a card plays the select sound", Sfx._last_play.has("select"))
+	await clear_enemies()
+	var snd_foe = mk(sp.global_position + Vector2(300, 0), 0, 3)
+	snd_foe.hp = 1
+	Sfx._last_play.clear()
+	snd_foe.take_hit(5, Vector2.RIGHT)
+	check("an enemy dying plays its death sound", Sfx._last_play.has("die_enemy"))
+	Sfx._last_play.clear()
+	sp.invuln = 0.0
+	sp.hp = 1
+	sp.take_hit(50, Vector2.LEFT)
+	check("小怪 dying plays the death sound", Sfx._last_play.has("die_player") or main.game_over)
+	for sid in ["die_player", "die_enemy", "rebirth", "select", "hit_pierce", "hit_magic", "hit_axe", "hit_goo", "hit_blast", "hit_slash"]:
+		check("sound %s exists" % sid, Sfx.SOUNDS.has(sid))
+	for sid in ["frost_shards", "meteor_call", "chain_zap", "thorn_ring", "spirit_lance"]:
+		check("the %s icon exists" % sid, Sprites.tex("icon_" + sid) != null)
+	for pid in main.PerksData.PERKS:
+		check("the %s perk icon exists" % pid, Sprites.tex("icon_perk_" + pid) != null)
+	await fresh()
+	check("the evolution line menu explains each line", main._line_blurb(0).contains("Family trait") and main._line_blurb(0).contains("Ability") and main._line_blurb(0).contains("Own skills"))
+	check("a skill says where it comes from", main._skill_origin("z_grip").contains("line skill") and main._skill_origin("fangs").contains("general"))
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

@@ -1,4 +1,6 @@
 extends Node2D
+
+const Sfx := preload("res://sfx.gd")
 ## A projectile. Villager bolts (team "enemy") hurt 小怪 and towers; 小怪's Spirit Bolt
 ## (team "player") hurts villagers. Trees stop them. A piercing bolt passes through what it
 ## hits (once each).
@@ -14,6 +16,7 @@ var pierce := false
 var effect := ""           ## "slow" makes a hit slow 小怪 for 3 seconds
 var source = null          ## the player, for team "player": hits earn EXP
 var hit_ids: Array[int] = []
+var hit_sound := ""        ## player bolts: the skill whose sound plays where it hits a villager
 
 
 func _physics_process(delta: float) -> void:
@@ -32,6 +35,7 @@ func _physics_process(delta: float) -> void:
 				and global_position.distance_to(pl.global_position) < pl.body_radius + radius:
 			hit_ids.append(pl.get_instance_id())
 			pl.take_hit(damage, dir)
+			Sfx.play(get_tree(), _enemy_hit_sound(), -3.0)
 			if effect == "slow":
 				pl.slow_left = 3.0
 			if not pierce:
@@ -52,6 +56,8 @@ func _physics_process(delta: float) -> void:
 			if global_position.distance_to(e.global_position) < 10.0 + radius:
 				hit_ids.append(id)
 				e.take_hit(damage, dir)
+				if hit_sound != "":
+					SkillSounds.play_at(get_tree(), hit_sound, e.global_position, -5.0)
 				if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
 					e.apply_status(status, status_time)
 				if source != null and is_instance_valid(source):
@@ -90,3 +96,17 @@ func _draw() -> void:
 		return
 	draw_line(-dir * radius * 2.5, Vector2.ZERO, Color(color, 0.4), radius)
 	draw_circle(Vector2.ZERO, radius, color)
+
+
+## How an enemy projectile sounds when it lands on 小怪, by what it looks like.
+func _enemy_hit_sound() -> String:
+	if sprite != "" or style == "arrow" or style == "javelin":
+		return "hit_pierce"
+	match style:
+		"axe":
+			return "hit_axe"
+		"net", "mud":
+			return "hit_goo"
+		"spore", "shadow", "divine", "magic", "holy":
+			return "hit_magic"
+	return "hit_blast" if effect == "" and radius > 8.0 else "hit_magic"

@@ -21,6 +21,7 @@ var style := ""            ## player zones: "nova", "roar" or "doom" draw their 
 var dur := 0.25            ## seconds the burst stays on screen after it goes off
 var detonated := false
 var warned := false
+var hit_sound := ""        ## player zones: the skill whose sound plays when the blast lands on villagers
 
 
 func _physics_process(delta: float) -> void:
@@ -43,6 +44,7 @@ func _detonate() -> void:
 		var pl = get_tree().get_first_node_in_group("player")
 		if pl != null and pl.hp > 0 and pl.global_position.distance_to(global_position) <= radius + pl.body_radius * 0.5:
 			pl.take_hit(damage, (pl.global_position - global_position).normalized())
+			Sfx.play(get_tree(), "hit_blast", -2.0)
 		for t in get_tree().get_nodes_in_group("structures"):
 			if t.global_position.distance_to(global_position) <= radius:
 				t.take_hit(damage, Vector2.ZERO)
@@ -51,9 +53,11 @@ func _detonate() -> void:
 	if damage > 0:
 		Juice.scorch(get_parent(), global_position, radius * 0.7, color)
 		Juice.punch(get_parent(), clampf(radius / 6000.0, 0.01, 0.03))
+	var landed := false
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if e.global_position.distance_to(global_position) > radius:
 			continue
+		landed = true
 		var away: Vector2 = (e.global_position - global_position).normalized()
 		if damage > 0:
 			e.take_hit(damage, away)
@@ -65,6 +69,8 @@ func _detonate() -> void:
 			e.knock = away * knock
 		if stun > 0.0:
 			e.stun_left = maxf(e.stun_left, stun)
+	if landed and hit_sound != "":
+		SkillSounds.play_at(get_tree(), hit_sound, global_position, -3.0)
 
 
 func _draw() -> void:
