@@ -125,6 +125,7 @@ var ghost_error := ""
 var ghost_dirty := true
 var hud: Control
 var playables: Node
+var touch_mode := false   ## the on-screen controls are showing: walk with the stick, build in front of 小怪
 var banner: Label
 var evo_banner: Label
 var notice: Label
@@ -186,13 +187,26 @@ func _ready() -> void:
 
 
 ## Phones held upright get a tall layout (720 wide) and everything else a wide one (1280 wide), so the buttons and
-## text stay a readable size; the HUD drops under the minimap when the screen is narrow.
+## text stay a readable size; the HUD stays at the top either way.
 func _fit_screen() -> void:
 	var win := get_window()
 	var portrait := win.size.y > win.size.x
 	win.content_scale_size = Vector2i(720, 1280) if portrait else Vector2i(1280, 720)
+	# the HUD hugs the very top; on a narrow screen the minimap shrinks into the corner right under it
 	if hud != null:
-		hud.position = Vector2(16, 236 if portrait else 12)
+		hud.position = Vector2(12, 6 if portrait else 12)
+	if minimap != null:
+		minimap.pivot_offset = Vector2(minimap.size.x, 0.0)
+		minimap.scale = Vector2(0.7, 0.7) if portrait else Vector2.ONE
+		minimap.offset_top = 128.0 if portrait else 10.0
+		minimap.offset_bottom = minimap.offset_top + minimap.size.y
+
+
+## Where building and removing happen: under the mouse, or a step in front of 小怪 on a touchscreen.
+func aim_point() -> Vector2:
+	if touch_mode and player != null:
+		return player.global_position + player.facing * 56.0
+	return get_global_mouse_position()
 
 
 ## True while the game itself wants the tree paused (a level-up menu), so a resume from YouTube does not undo it.
@@ -952,7 +966,7 @@ func _on_structure_destroyed(tile: Vector2i) -> void:
 
 ## E: build the selected item under the mouse (or upgrade the tower there).
 func try_build() -> bool:
-	var ok := place_at(tile_of(get_global_mouse_position()), build_item)
+	var ok := place_at(tile_of(aim_point()), build_item)
 	if not ok:
 		Sfx.play(get_tree(), "deny")
 	return ok
@@ -984,7 +998,7 @@ func demolish_at(tile: Vector2i) -> bool:
 
 
 func try_demolish() -> bool:
-	return demolish_at(tile_of(get_global_mouse_position()))
+	return demolish_at(tile_of(aim_point()))
 
 
 # --- setup ---
@@ -1256,7 +1270,7 @@ func _update_hud() -> void:
 	var relics: Array = []
 	for rid in player.relics:
 		relics.append({"n": int(player.relics[rid])})
-	var tile := tile_of(get_global_mouse_position())
+	var tile := tile_of(aim_point())
 	var refund := refund_at(tile)
 	var upgrade_text := ""
 	if refund >= 0 and build_item == "tower" and built[tile].has_method("upgrade"):
@@ -1628,7 +1642,7 @@ func _process(delta: float) -> void:
 
 
 func _update_ghost(_delta: float) -> void:
-	var tile := tile_of(get_global_mouse_position())
+	var tile := tile_of(aim_point())
 	if tile != ghost_tile or ghost_dirty:
 		ghost_tile = tile
 		ghost_dirty = false

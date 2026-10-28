@@ -298,12 +298,17 @@ func _physics_process(delta: float) -> void:
 
 	# The mouse aims in any direction. Left-click walks to that spot; hold it to follow
 	# the cursor. WASD works too and cancels a click target.
+	var touch: bool = bool(get_parent().get("touch_mode"))
 	var to_mouse := get_global_mouse_position() - global_position
-	if to_mouse.length() > 4.0:
+	if to_mouse.length() > 4.0 and not touch:
 		facing = to_mouse.normalized()
 
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if touch and dir != Vector2.ZERO:
+		facing = dir.normalized()
 	if dir != Vector2.ZERO:
+		has_target = false
+	elif touch:
 		has_target = false
 	elif Input.is_action_pressed("move_mouse") and get_viewport().gui_get_hovered_control() == null and not bool(get_parent().get("remove_armed")):
 		move_target = get_global_mouse_position()
@@ -323,6 +328,10 @@ func _physics_process(delta: float) -> void:
 		invuln = maxf(invuln, ROLL_INVULN)
 		Sfx.play(get_tree(), "roll")
 	elif Input.is_action_just_pressed("lunge") and lunge_cd == 0.0 and not busy:
+		if touch:
+			var near = _nearest_enemy_to(260.0)
+			if near != null:
+				facing = (near.global_position - global_position).normalized()
 		lunge_dir = facing
 		lunge_left = LUNGE_TIME
 		lunge_cd = LUNGE_COOLDOWN
@@ -388,6 +397,20 @@ func _terrain_mult() -> float:
 
 ## Hold Shift to sprint. 10 s of sprint, then a 15 s cooldown before it refills.
 ## Releasing early recharges slowly (the same rate: empty to full in 15 s).
+## The closest enemy within reach, for the touch controls' auto-aimed lunge.
+func _nearest_enemy_to(reach: float):
+	var best = null
+	var best_d := reach
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(e) or e.is_queued_for_deletion():
+			continue
+		var d: float = e.global_position.distance_to(global_position)
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
+
+
 func _update_sprint(delta: float, moving: bool) -> void:
 	if sprint_cd > 0.0:
 		sprint_cd = maxf(sprint_cd - delta, 0.0)
