@@ -1373,7 +1373,7 @@ func _init() -> void:
 	await clear_enemies()
 
 	main._update_hud()
-	check("the screen shows the family trait and ability", main.hud.text.contains("Family trait") and main.hud.text.contains("Hellfire Rain"))
+	check("the screen shows the ability", main.hud.info.get("ability", "") == "Hellfire Rain")
 
 	# =========================== damage numbers ===========================
 	await fresh()

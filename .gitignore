@@ -3,3 +3,6 @@ godot-xiaoguai/.godot/
 # the compressed music backup; the game keeps its own copies in godot-xiaoguai/audio
 music-small/
 # the art agent's working output stays out of the first commit
+
+# exported game builds (large, not source)
+build/

@@ -123,7 +123,7 @@ var ghost: Node2D
 var ghost_tile := Vector2i(-1, -1)
 var ghost_error := ""
 var ghost_dirty := true
-var hud: Label
+var hud: Control
 var banner: Label
 var evo_banner: Label
 var notice: Label
@@ -1069,9 +1069,8 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 2  # above the HD-2D finish
 	add_child(layer)
-	hud = Label.new()
+	hud = preload("res://hud_panel.gd").new()
 	hud.position = Vector2(16, 12)
-	hud.add_theme_font_size_override("font_size", 18)
 	layer.add_child(hud)
 
 	banner = Label.new()
@@ -1220,77 +1219,38 @@ func spawn_interval() -> float:
 
 
 func _update_hud() -> void:
-	var s: Dictionary = player.stages[player.stage]
-	var xp_text := "MAX"
-	if player.level < player.MAX_LEVEL:
-		xp_text = "%d/%d" % [player.xp, player.xp_for_level(player.level + 1)]
-	var form_text := "first evolution at Lv %d: pick a line" % player.EVOLVE_EVERY
-	if player.line >= 0:
-		var tier := 1 if player.stage <= 2 else (2 if player.stage <= 5 else (3 if player.stage <= 8 else 4))
-		form_text = "%s, form %d/10, tier %d" % [player.LinesData.LINES[player.line]["family"], maxi(player.stage, 0), tier]
-		if player.stage < player.LAST_STAGE:
-			form_text += ", next form at Lv %d" % ((player.stage + 1) * player.EVOLVE_EVERY)
 	var cycle := DAY_SECONDS + NIGHT_SECONDS
 	var phase := fposmod(clock, cycle)
-	var time_text := "DAY %d, %ds left: villagers stronger" % [int(clock / cycle) + 1, ceili(DAY_SECONDS - phase)]
-	if is_night():
-		time_text = "NIGHT %d, %ds left: you are stronger" % [int(clock / cycle) + 1, ceili(cycle - phase)]
-	var sprint := "Sprint %.1fs" % player.sprint_energy
-	if player.sprint_cd > 0.0:
-		sprint = "Sprint recharging %ds" % ceili(player.sprint_cd)
-	var roll := "Roll ready" if player.roll_cd == 0.0 else "Roll %.1fs" % player.roll_cd
-	var lunge := "Lunge ready" if player.lunge_cd == 0.0 else "Lunge %.1fs" % player.lunge_cd
-	var alive := get_tree().get_nodes_in_group("enemies").size()
-	var skill_bits: Array[String] = []
-	for id in player.skills:
-		var info: Dictionary = SkillsData.info(id)
-		if info.get("auto", false):
-			var cd: float = player.skill_cd.get(id, 0.0)
-			skill_bits.append("%s r%d %s" % [info["name"], player.skills[id], "ready" if cd <= 0.0 else "%.1fs" % cd])
-		else:
-			skill_bits.append("%s r%d" % [info["name"], player.skills[id]])
-	var buff_bits: Array[String] = []
+	var night := is_night()
+	var buffs: Array = []
 	for bid in player.buffs:
-		buff_bits.append("%s %ds" % [TreasureScript.BUFFS[bid]["name"], ceili(float(player.buffs[bid]))])
-	var relic_bits: Array[String] = []
+		buffs.append({"color": TreasureScript.BUFFS[bid]["color"], "secs": ceili(float(player.buffs[bid]))})
+	var relics: Array = []
 	for rid in player.relics:
-		relic_bits.append("%s x%d" % [TreasureScript.RELICS[rid]["name"], player.relics[rid]])
-	var treasure_text := ""
-	if not buff_bits.is_empty():
-		treasure_text += "\nBuffs: " + ", ".join(buff_bits)
-	if not relic_bits.is_empty():
-		treasure_text += "\nRelics: " + ", ".join(relic_bits)
-	var skill_text := "Skills: %s" % ("%d learned (the bar below shows them)" % skill_bits.size() if not skill_bits.is_empty() else "none yet (one every level)")
-	if not player.specials.is_empty():
-		var names: Array[String] = []
-		for sid in player.specials:
-			names.append(SkillsData.SPECIALS[sid]["name"])
-		skill_text += "\nSpecials: " + ", ".join(names)
-	if player.line >= 0:
-		var trait_text: String = player.AbilitiesData.FAMILY_TRAITS[player.family()]
-		var ab: Dictionary = player.ability()
-		skill_text += "\nFamily trait: %s" % trait_text
-		if not ab.is_empty():
-			skill_text += "    Ability: %s (rank %d)" % [ab["name"], ab["rank"]]
-		elif player.AbilitiesData.ABILITIES.has(player.line):
-			skill_text += "    Ability: unlocks at form 3"
-	hud.text = "%s  Lv %d/%d  EXP %s  (%s)  HP %d/%d    %s\nBones %d    Kills %d    Villagers %d/%d    Village Lv %d/5 (%s)\n%s    %s    %s\n%s\n%s\nClick: walk  |  Shift: sprint  |  Space: roll  |  Right-click: lunge  |  E: build  |  X: remove  |  R: restart" % [
-		s["name"], player.level, player.MAX_LEVEL, xp_text, form_text, player.hp, player.max_hp, time_text,
-		bones, kills, alive, target_population(), village_level, VILLAGE_TIERS[village_level - 1],
-		sprint, roll, lunge, skill_text + treasure_text, _build_prompt()]
-
-
-func _build_prompt() -> String:
+		relics.append({"n": int(player.relics[rid])})
 	var tile := tile_of(get_global_mouse_position())
 	var refund := refund_at(tile)
-	if refund >= 0:
-		var up := ""
-		if build_item == "tower" and built[tile].has_method("upgrade"):
-			up = "    E: upgrade (%s)" % (ghost_error if ghost_error != "" else "%d bones" % build_cost("tower", tile))
-		return "X: remove it (+%d bones)%s" % [refund, up]
-	var item := "TOWER (%d bones)" % TowerScript.COSTS[0] if build_item == "tower" else "BONE WALL (%d bones)" % WALL_COST
-	var status := "E to build" if ghost_error == "" else ghost_error
-	return "Building: %s    %s" % [item, status]
+	var upgrade_text := ""
+	if refund >= 0 and build_item == "tower" and built[tile].has_method("upgrade"):
+		upgrade_text = ghost_error if ghost_error != "" else str(build_cost("tower", tile))
+	var ab: Dictionary = player.ability() if player.line >= 0 else {}
+	hud.set_info({
+		"level": player.level, "xp": player.xp,
+		"xp_max": player.xp_for_level(player.level + 1) if player.level < player.MAX_LEVEL else 0,
+		"hp": player.hp, "max_hp": player.max_hp,
+		"night": night, "day": int(clock / cycle) + 1,
+		"phase_left": (cycle - phase) if night else (DAY_SECONDS - phase), "phase_len": NIGHT_SECONDS if night else DAY_SECONDS,
+		"bones": bones, "kills": kills, "alive": get_tree().get_nodes_in_group("enemies").size(),
+		"target_pop": target_population(), "village_level": village_level,
+		"sprint": player.sprint_energy, "sprint_max": player.SPRINT_MAX, "sprint_cd": player.sprint_cd, "sprint_cd_max": player.SPRINT_COOLDOWN,
+		"roll_cd": player.roll_cd, "roll_cd_max": player.ROLL_COOLDOWN,
+		"lunge_cd": player.lunge_cd, "lunge_cd_max": player.LUNGE_COOLDOWN,
+		"buffs": buffs, "relics": relics,
+		"remove_refund": refund, "upgrade_text": upgrade_text,
+		"build_item": build_item, "build_error": ghost_error,
+		"build_cost": TowerScript.COSTS[0] if build_item == "tower" else WALL_COST,
+		"ability": ab.get("name", ""),
+	})
 
 
 func _update_hotbar() -> void:

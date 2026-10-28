@@ -12,9 +12,15 @@ static var _names: PackedStringArray = PackedStringArray()
 
 static func _all_names() -> PackedStringArray:
 	if _names.is_empty():
+		var seen := {}
 		for f in DirAccess.get_files_at(DIR):
-			if f.ends_with(".png"):
-				_names.append(f.trim_suffix(".png"))
+			# in an exported game the folder lists "x.png.import" (or ".remap") instead of "x.png"
+			var n := f
+			if n.ends_with(".import") or n.ends_with(".remap"):
+				n = n.get_basename()
+			if n.ends_with(".png") and not seen.has(n):
+				seen[n] = true
+				_names.append(n.trim_suffix(".png"))
 	return _names
 
 

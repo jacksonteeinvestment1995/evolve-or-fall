@@ -57,6 +57,27 @@ func _ready() -> void:
 	_back = AudioStreamPlayer.new()
 	add_child(_front)
 	add_child(_back)
+	_fetch_music_pack()
+
+
+## The web build ships its streamed music as a separate pack that is downloaded once the game is running.
+const MUSIC_PACK := "music.pck"
+var pack_loaded := false
+
+
+func _fetch_music_pack() -> void:
+	if not OS.has_feature("web"):
+		return
+	var http := HTTPRequest.new()
+	http.download_file = "user://" + MUSIC_PACK
+	add_child(http)
+	http.request_completed.connect(func(result: int, code: int, _h, _b):
+		if result == HTTPRequest.RESULT_SUCCESS and code == 200 				and ProjectSettings.load_resource_pack("user://" + MUSIC_PACK):
+			pack_loaded = true
+		else:
+			push_warning("Music pack download failed (%d/%d)" % [result, code])
+		http.queue_free())
+	http.request(MUSIC_PACK)
 
 
 ## "Title, by Composer (license)" for the track playing now, or "".
@@ -105,7 +126,8 @@ func play_track(id: String) -> bool:
 
 func _load(path: String, loop: bool) -> AudioStream:
 	if not ResourceLoader.exists(path):
-		push_warning("Music file missing or not imported yet: " + path)
+		if not OS.has_feature("web") or pack_loaded:
+			push_warning("Music file missing or not imported yet: " + path)
 		return null
 	var s = load(path)
 	if s is AudioStreamOggVorbis:
