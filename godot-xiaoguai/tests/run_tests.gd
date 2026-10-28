@@ -138,6 +138,7 @@ func find_free_rect(w: int, h: int) -> Vector2i:
 
 
 func _init() -> void:
+	Engine.set_meta("deterministic_map", true)  # the real game makes a new map every launch; tests keep one
 	await fresh()
 	var p = main.player
 	var LinesData = main.LinesData
@@ -1838,7 +1839,7 @@ func _init() -> void:
 		ev.last = ""
 		ev_names[ev._pick()] = true
 	check("after 8 minutes the big events join", ev_names.keys().any(func(n): return ev.INFO[n]["tier"] == 3))
-	check("15 different events exist", ev.INFO.size() == 15)
+	check("18 different events exist", ev.INFO.size() == 18)
 	check("every event has a warning banner", ev.INFO.keys().all(func(n): return String(ev.INFO[n]["banner"]) != ""))
 	check("the first event comes after about a minute", ev.FIRST_AT == 60.0)
 
@@ -2041,6 +2042,120 @@ func _init() -> void:
 	p.velocity = Vector2(100, 0)
 	await frames(8)
 	check("sprinting leaves afterimages", p.ghosts.size() > 0 or true)
+
+	# =========================== villages and castles ===========================
+	await fresh()
+	var tw_layout: Dictionary = main.layout
+	var tw_big: Dictionary = tw_layout["big"]
+	check("there is one big castle", not tw_big.is_empty() and tw_big["rect"].size == Vector2i(16, 16))
+	check("the big castle sits in a corner away from the start", tw_big["rect"].position.x > 100 or tw_big["rect"].position.y > 60, str(tw_big["rect"]))
+	check("2 to 3 small castles", tw_layout["small"].size() >= 2 and tw_layout["small"].size() <= 3, str(tw_layout["small"].size()))
+	check("4 to 7 villages", tw_layout["villages"].size() >= 4 and tw_layout["villages"].size() <= 7, str(tw_layout["villages"].size()))
+	var tw_rects: Array[Rect2i] = [tw_big["rect"]]
+	for tw_c in tw_layout["small"]:
+		tw_rects.append(tw_c["rect"])
+	var tw_clash := false
+	for i in tw_rects.size():
+		for j in range(i + 1, tw_rects.size()):
+			if tw_rects[i].intersects(tw_rects[j]):
+				tw_clash = true
+	check("castles never overlap", not tw_clash)
+	var tw_houses := 0
+	for tw_v in tw_layout["villages"]:
+		tw_houses += tw_v["houses"].size()
+		check("a village has 3 to 6 houses", tw_v["houses"].size() >= 3 and tw_v["houses"].size() <= 6)
+		for tw_h in tw_v["houses"]:
+			for tw_r in tw_rects:
+				if tw_h["rect"].intersects(tw_r):
+					tw_clash = true
+	check("houses stay out of the castles", not tw_clash)
+	check("houses and walls are solid", main.is_solid_at(main._tile_center(tw_layout["villages"][0]["houses"][0]["rect"].position)) and main.buildings.size() > 100)
+	var tw_gate: Dictionary = tw_big
+	var tw_out: Vector2i = tw_gate["gate"].position + tw_gate["gate_dir"] * 3
+	var tw_in: Vector2i = tw_gate["gate"].position - tw_gate["gate_dir"] * 3
+	main.astar.set_point_solid(tw_in, false)
+	var tw_path: PackedVector2Array = main.find_path(main._tile_center(tw_out), main._tile_center(tw_in))
+	check("you can walk through the big castle's gate into the courtyard", tw_path.size() > 0 and not main.trees.has(tw_out), str(tw_path.size()))
+	# a different seed gives a different map
+	var tw_a := RandomNumberGenerator.new()
+	tw_a.seed = 1
+	var tw_b := RandomNumberGenerator.new()
+	tw_b.seed = 2
+	var tw_one: Dictionary = Towns.generate(main, tw_a)
+	var tw_two: Dictionary = Towns.generate(main, tw_b)
+	check("another seed puts the towns elsewhere", tw_one["big"]["rect"] != tw_two["big"]["rect"] or tw_one["small"].size() != tw_two["small"].size() or tw_one["villages"][0]["center"] != tw_two["villages"][0]["center"])
+	# people and loot
+	await fresh()
+	await clear_enemies()
+	var tw_chests0: int = main.treasure_spots.size()
+	Towns.populate(main, main.layout, main.rng)
+	await frames(2)
+	check("towns fill with villagers", enemies().size() >= 20, str(enemies().size()))
+	check("castles hold chests", main.treasure_spots.size() >= tw_chests0 + 3)
+
+	# =========================== funny things: talking villagers, picnic, chickens, UFO ===========================
+	await fresh()
+	p = main.player
+	var fn_ev = main.events
+	fn_ev.enabled = false
+	main.elapsed = 700.0
+	await clear_enemies()
+	var fn_v = mk(p.global_position + Vector2(100, 0), 1, 3)
+	fn_v.say("Hold the line!", 2.0)
+	check("a villager can say something", fn_v.say_left > 0.0 and fn_v.say_text == "Hold the line!")
+	check("every profession has its own lines", fn_v.PROFESSION_LINES.size() == 10 and fn_v.PROFESSION_LINES.all(func(a): return a.size() >= 3))
+	fn_v.say_left = 0.0
+	fn_v.say_cd = 0.0
+	fn_v._maybe_talk()
+	check("nearby villagers speak up now and then", fn_v.say_left > 0.0 and fn_v.say_text != "")
+	await clear_enemies()
+	fn_ev.start("picnic")
+	fn_ev._process(fn_ev.warn_left + 0.1)
+	check("Picnic: villagers sit and eat", fn_ev._picnickers.size() == 6 and fn_ev._picnickers.all(func(v): return v.calm))
+	var fn_pos0: Vector2 = fn_ev._picnickers[0].global_position
+	await frames(8)
+	check("a picnicker does not move", fn_ev._picnickers[0].global_position.distance_to(fn_pos0) < 1.0)
+	fn_ev._picnickers[0].take_hit(1, Vector2.RIGHT, false)
+	check("the first bite does not wake the picnic", fn_ev._picnickers.size() == 6 and fn_ev._picnickers[1].calm)
+	var fn_second = fn_ev._picnickers[1]
+	fn_second.take_hit(1, Vector2.RIGHT, false)
+	check("the second bite wakes everybody", fn_ev._picnickers.is_empty() and not fn_second.calm and fn_second.force_chase)
+	fn_ev.active_left = 0.0
+	fn_ev._process(0.1)
+	await clear_enemies()
+	fn_ev.start("chicken")
+	fn_ev._process(fn_ev.warn_left + 0.1)
+	check("Chicken rebellion: a flock appears", get_nodes_in_group("chickens").size() == 14)
+	var fn_foe = mk(p.global_position + Vector2(60, 0), 1, 0)
+	fn_foe.max_hp = 500
+	fn_foe.hp = 500
+	for c in get_nodes_in_group("chickens"):
+		c.global_position = fn_foe.global_position + Vector2(5, 0)
+	await frames(20)
+	check("the chickens peck villagers", fn_foe.hp < 500, str(fn_foe.hp))
+	p.hp = 1
+	var fn_chick = get_nodes_in_group("chickens")[0]
+	fn_chick.global_position = p.global_position
+	var fn_hp0: int = p.hp
+	await frames(3)
+	check("a hurt 小怪 can eat a chicken", p.hp > fn_hp0)
+	fn_ev.active_left = 0.0
+	fn_ev._process(0.1)
+	check("the chickens leave when the event ends", get_nodes_in_group("chickens").all(func(c): return c.retire))
+	fn_ev.start("ufo")
+	fn_ev._process(fn_ev.warn_left + 0.1)
+	check("UFO: a saucer appears", get_nodes_in_group("ufos").size() == 1)
+	await clear_enemies()
+	var fn_cow = mk(p.global_position + Vector2(300, 0), 0, 0)
+	fn_cow.max_hp = 999
+	fn_cow.hp = 999
+	var fn_ufo = get_nodes_in_group("ufos")[0]
+	var fn_before: Vector2 = fn_cow.global_position
+	fn_ufo._drop(fn_cow)
+	check("the UFO drops its catch far away", fn_cow.global_position.distance_to(fn_before) > 300.0)
+	fn_ev.active_left = 0.0
+	fn_ev._process(0.1)
+	fn_ev.enabled = true
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

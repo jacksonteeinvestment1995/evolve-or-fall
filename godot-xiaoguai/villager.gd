@@ -197,6 +197,11 @@ func skill_name() -> String:
 
 
 ## How far this villager can notice 小怪 (grows during the first minutes).
+var calm := false              ## sitting at a picnic: no walking, no fighting until woken
+var say_text := ""             ## what the speech bubble says
+var say_left := 0.0
+var say_cd := randf_range(2.0, 9.0)
+var lines_override: Array = []  ## if set, the only things this villager says
 var mimic := false             ## a chest that bit back (events)
 var rival := false             ## the rival hero (events)
 var bug := false               ## the developer's escaped bug (events)
@@ -527,6 +532,15 @@ func _physics_process(delta: float) -> void:
 	knock = knock.move_toward(Vector2.ZERO, 800.0 * delta)
 	_grow(delta)
 	_tick_statuses(delta)
+	say_left = maxf(say_left - delta, 0.0)
+	say_cd -= delta
+	if say_cd <= 0.0:
+		say_cd = randf_range(7.0, 15.0)
+		_maybe_talk()
+	if calm:
+		velocity = Vector2.ZERO
+		queue_redraw()
+		return
 	if is_queued_for_deletion():
 		return
 
@@ -684,6 +698,8 @@ func _nearest_foe(radius: float):
 func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 	if is_queued_for_deletion():
 		return
+	if calm:
+		_picnic_hit()
 	var amount := ceili(dmg * 0.5) if shield_left > 0.0 else dmg
 	if has_status("curse"):
 		amount = ceili(amount * 1.5)
@@ -693,6 +709,8 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 		knock = dir * 260.0  # towers hurt but never push villagers back
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
 	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
+	if hp > 0 and say_left <= 0.0 and randf() < 0.1:
+		say(HURT_LINES[randi() % HURT_LINES.size()], 1.6)
 	Juice.hit(get_parent(), global_position + Vector2(0, -6.0 * body_scale), dir, float(amount) / maxf(1.0, float(max_hp)) + 0.25, Color(0.7, 0.85, 1.0) if by_tower else Color(1.0, 0.92, 0.65))
 	if hp > 0 and has_status("shock") and randf() < 0.25:
 		# shocked villagers pass part of every hit on to the nearest other villager
@@ -798,6 +816,10 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var label_color := Color(1, 0.85, 0.4) if secret >= 0 else Color(1, 1, 1, 0.9)
 	draw_string(ThemeDB.fallback_font, Vector2(-30, -22 - 8 * sc), form_name(), HORIZONTAL_ALIGNMENT_CENTER, 60, 8, label_color)
+	if calm:
+		_draw_sandwich()
+	if say_left > 0.0 and say_text != "":
+		_draw_bubble(sc)
 
 
 ## Mimics, the rival hero and the bug pay out a gold chest where they fall.
@@ -871,6 +893,8 @@ func _draw_bug() -> void:
 
 ## Souls and sparkles instead of just vanishing; the colour follows the profession.
 func _death_burst() -> void:
+	if randf() < 0.3 and not (mimic or bug):
+		Popups.text(get_tree(), global_position + Vector2(0, -26.0 * body_scale), LAST_WORDS[randi() % LAST_WORDS.size()], Popups.WHITE, 11)
 	var tint := Color.from_hsv(float(line) / float(LINES.size()), 0.45, 1.0)
 	if secret >= 0:
 		tint = [Color("5ac040"), Color("a050e0"), Color("ffd040")][secret]
@@ -878,3 +902,88 @@ func _death_burst() -> void:
 	if body_scale >= 1.6 or mimic or rival or bug:
 		Juice.punch(get_parent(), 0.03)
 		Juice.hitstop(get_tree(), 0.06)
+
+
+# --- talking villagers ---
+
+const GENERAL_LINES := ["Is that a potato?", "Mom said no!", "I have a family!", "Nice teeth...", "It's just a small monster!", "Where's my sword?",
+	"I didn't sign up for this", "Is it lunch time?", "Don't bite me, I taste bad!", "Who left the gate open?", "Wait, is that legal?", "I'm on my break!"]
+const HURT_LINES := ["Ouch!", "My hat!", "That's rude!", "I felt that.", "Medic?!", "Not the face!"]
+const LAST_WORDS := ["Tell my cow...", "Worth it.", "I regret nothing.", "Rematch?", "Dang.", "Bye, cruel world!"]
+const HIDDEN_LINES := ["You cannot escape.", "Kneel.", "...", "Foolish monster.", "Come closer."]
+const PICNIC_LINES := ["Nom nom nom", "Best sandwich ever!", "Beautiful day!", "Pass the thermos", "Who brought pickles?", "Zzz... lunch..."]
+## by profession (index into LINES): Farmer, Woodsman, Hunter, Militia, Knight, Priest, Mage, Smith, Thief, Noble
+const PROFESSION_LINES := [
+	["My crops!", "The wheat!", "Not the pumpkins!"],
+	["Timber?!", "I only came for wood!", "My axe is bigger!"],
+	["I swear it was a deer", "Stay still!", "I never miss. Usually."],
+	["Hold the line!", "Left, right, left!", "Is it on the schedule?"],
+	["For honour!", "I'm not scared. My armour is.", "Charge!"],
+	["Bless this mess", "Have you tried praying?", "Be healed! ...maybe."],
+	["I read about this", "It's a spell, I promise", "Hold on, wrong scroll"],
+	["I just forged that!", "That's a fine dent", "Hammer time!"],
+	["I'm just passing by", "Nothing in my pockets!", "Ever seen a hat like this?"],
+	["Do you know who I am?", "My lawyers will hear of this", "Guards! ...hello?"],
+]
+
+
+func say(text: String, secs: float = 2.4) -> void:
+	say_text = text
+	say_left = secs
+
+
+func _talkers() -> int:
+	var n := 0
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e) and e.say_left > 0.0:
+			n += 1
+	return n
+
+
+func _maybe_talk() -> void:
+	var pl = get_tree().get_first_node_in_group("player")
+	if pl == null or stun_left > 0.0 or say_left > 0.0:
+		return
+	if global_position.distance_to(pl.global_position) > 420.0 or _talkers() >= 3:
+		return
+	var pool: Array
+	if not lines_override.is_empty():
+		pool = lines_override
+	elif calm:
+		pool = PICNIC_LINES
+	elif hp < max_hp * 0.4:
+		pool = HURT_LINES
+	elif secret >= 0:
+		pool = HIDDEN_LINES
+	elif randf() < 0.45:
+		pool = PROFESSION_LINES[line]
+	else:
+		pool = GENERAL_LINES
+	say(pool[randi() % pool.size()])
+
+
+func _draw_bubble(sc: float) -> void:
+	var font := ThemeDB.fallback_font
+	var size := 9
+	var w := font.get_string_size(say_text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 10.0
+	var a := minf(1.0, say_left / 0.4)
+	var y := -42.0 - 8.0 * sc
+	var r := Rect2(-w * 0.5, y - 12.0, w, 14.0)
+	draw_rect(r.grow(1.0), Color(0.1, 0.1, 0.15, 0.85 * a))
+	draw_rect(r, Color(1, 1, 1, 0.95 * a))
+	draw_colored_polygon(PackedVector2Array([Vector2(-3, y + 2.0), Vector2(3, y + 2.0), Vector2(0, y + 7.0)]), Color(1, 1, 1, 0.95 * a))
+	draw_string(font, Vector2(-w * 0.5 + 5.0, y - 1.5), say_text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.1, 0.1, 0.15, a))
+
+
+func _draw_sandwich() -> void:
+	var nom := sin(Time.get_ticks_msec() * 0.012) * 0.8
+	draw_rect(Rect2(5, 3 + nom, 7, 2.5), Color(0.9, 0.75, 0.45))
+	draw_rect(Rect2(5, 5.5 + nom, 7, 1.5), Color(0.4, 0.8, 0.3))
+	draw_rect(Rect2(5, 7 + nom, 7, 2.5), Color(0.9, 0.75, 0.45))
+
+
+## Hitting a picnicker is noted by the picnic event (the second hit wakes everyone).
+func _picnic_hit() -> void:
+	var main = get_parent()
+	if main != null and main.get("events") != null:
+		main.events.picnic_hit(self)

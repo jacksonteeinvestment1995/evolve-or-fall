@@ -7,6 +7,7 @@ const STRIP := 4
 
 var cells := {}      # Vector2i -> true (also holds pond tiles, which are skipped)
 var water := {}
+var skip := {}       # town tiles: solid, but not trees
 var cam: Camera2D
 var _t := 0.0
 
@@ -32,7 +33,7 @@ func _draw() -> void:
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
 			var c2 := Vector2i(x, y)
-			if not cells.has(c2) or water.has(c2):
+			if not cells.has(c2) or water.has(c2) or skip.has(c2):
 				continue
 			var tex: Texture2D = textures[(x + y) % 2]
 			var h := tex.get_height()

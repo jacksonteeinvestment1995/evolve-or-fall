@@ -91,6 +91,12 @@ var eclipse_t := 0.0            # 0 day .. 1 full artificial night, eased
 var blood_moon := false
 var events: Node               # random events (events.gd)
 var remove_armed := false        # the remove button is on: the next click on a building takes it back
+var map_seed := SEED             # random at every launch (the tests keep the fixed SEED)
+var buildings := {}            # Vector2i -> "wall", "tower", "keep", "house" or "well": solid town tiles
+var floors := {}               # Vector2i -> true: castle courtyards and gate aprons
+var layout := {}               # the towns (see towns.gd)
+var _town_tiles: Array[Vector2i] = []
+var town_population := 0       # villagers living in the towns at the start (they count toward the target)
 var punch_amp := 0.0            # a short zoom-in pulse on heavy blows
 var shake_amp := 0.0           # camera shake in pixels, decays by itself
 var calm_time := 0.0           # seconds with no villager nearby (for the quiet music)
@@ -134,6 +140,8 @@ func _exit_tree() -> void:
 
 func _ready() -> void:
 	rng.randomize()
+	if not Engine.has_meta("deterministic_map"):
+		map_seed = randi()
 	_setup_input()
 	_generate()
 	for t in trees:
@@ -293,6 +301,7 @@ func _build_hd2d() -> void:
 	var tree_layer := preload("res://trees.gd").new()
 	tree_layer.cells = trees
 	tree_layer.water = water
+	tree_layer.skip = buildings
 	tree_layer.cam = cam
 	add_child(tree_layer)
 	move_child(tree_layer, 0)
@@ -301,6 +310,12 @@ func _build_hd2d() -> void:
 	mud_layer.cam = cam
 	add_child(mud_layer)
 	move_child(mud_layer, 0)
+	var town_layer := preload("res://town_layer.gd").new()
+	town_layer.main = self
+	town_layer.layout = layout
+	town_layer.cam = cam
+	add_child(town_layer)
+	move_child(town_layer, 0)
 	var path_layer := preload("res://water.gd").new()
 	path_layer.cells = paths
 	path_layer.base = "stone_path"
@@ -488,7 +503,7 @@ func _make_paths(gen: RandomNumberGenerator) -> void:
 ## Bushes, rocks, flowers, fences and gravestones: scenery with no collision.
 func _scatter_props() -> void:
 	var pr := RandomNumberGenerator.new()
-	pr.seed = SEED + 77
+	pr.seed = map_seed + 77
 	var names := ["prop_bush", "prop_rocks_1", "prop_rocks_2", "prop_flowers_1", "prop_flowers_2", "prop_flowers_1", "prop_flowers_2", "prop_bush"]
 	for i in 650:
 		var t := Vector2i(pr.randi_range(2, COLS - 3), pr.randi_range(2, ROWS - 3))
@@ -533,7 +548,7 @@ func _draw_prop(t: Vector2i, name: String) -> void:
 ## Chests: mostly wooden near the base, silver and gold further out, a few cursed ones anywhere.
 func _scatter_treasures() -> void:
 	var tr := RandomNumberGenerator.new()
-	tr.seed = SEED + 99
+	tr.seed = map_seed + 99
 	var placed: Array[Vector2i] = []
 	var plan := {"wood": 14, "silver": 6, "gold": 3, "cursed": 2}
 	for tier in plan:
@@ -576,7 +591,7 @@ func tile_of(pos: Vector2) -> Vector2i:
 
 func _generate() -> void:
 	var gen := RandomNumberGenerator.new()
-	gen.seed = SEED
+	gen.seed = map_seed
 
 	# Solid ring of trees around the map.
 	for x in COLS:
@@ -615,6 +630,7 @@ func _generate() -> void:
 
 	_make_ponds(gen)
 	_make_paths(gen)
+	layout = Towns.generate(self, gen)
 	_find_open_tiles()
 	_build_nav()
 	_scatter_props()
@@ -638,6 +654,11 @@ func _generate() -> void:
 	placed.sort_custom(func(a, b): return Vector2(a - START_TILE).length() > Vector2(b - START_TILE).length())
 	for i in placed.size():
 		_spawn_villager(_tile_center(placed[i]), ELITE_STAGE if i < ELITE_COUNT else 0, gen.randi_range(0, VillagerScript.LINES.size() - 1))
+	_make_town_tiles()
+	if not Engine.has_meta("deterministic_map"):
+		var before := get_child_count()
+		Towns.populate(self, layout, gen)  # residents, soldiers and chests
+		town_population = get_child_count() - before - treasure_spots.size() + treasure_spots.size()
 
 
 ## Every grass tile 小怪 can walk to from the start. Villagers only spawn on these.
@@ -1088,6 +1109,16 @@ func _build_hud() -> void:
 			btn.pressed.connect(func():
 				remove_armed = not remove_armed
 				_update_hotbar())
+		# a number badge in the corner: the key that picks this button (1 tower, 2 wall, X remove)
+		var badge := Label.new()
+		badge.text = ["1", "2", "X"][i]
+		badge.position = Vector2(5, -1)
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_theme_font_size_override("font_size", 20)
+		badge.add_theme_color_override("font_color", Color("ffe27a"))
+		badge.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0))
+		badge.add_theme_constant_override("outline_size", 7)
+		btn.add_child(badge)
 		bar.add_child(btn)
 		hotbar.append(btn)
 
@@ -1166,7 +1197,7 @@ func catchup() -> float:
 func target_population() -> int:
 	var f := clampf(elapsed / RAMP_SECONDS, 0.0, 1.0)
 	var by_time := VILLAGER_COUNT + roundi((POP_TIME_END - VILLAGER_COUNT) * f * f)
-	return mini(POP_CAP, by_time + player.stage * POP_PER_STAGE)
+	return mini(POP_CAP, by_time + player.stage * POP_PER_STAGE + town_population)
 
 
 func spawn_interval() -> float:
@@ -1261,7 +1292,7 @@ func _update_hotbar() -> void:
 			c = Color("ff7a7a") if selected else Color(1, 0.55, 0.55, 0.8)  # too expensive right now
 		for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(key, c)
-	hotbar[2].text = "[X]"
+	hotbar[2].text = ""
 	hotbar[2].set_pressed_no_signal(remove_armed)
 	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
 		hotbar[2].add_theme_color_override(key, Color("ff7a5a") if remove_armed else Color(1, 1, 1, 0.75))
@@ -1477,6 +1508,8 @@ func _update_spawner(delta: float) -> void:
 func spawn_far(stage: int, secret: int = -1):
 	for i in 30:
 		var t: Vector2i = open_tiles[rng.randi_range(0, open_tiles.size() - 1)]
+		if secret < 0 and not _town_tiles.is_empty() and rng.randf() < 0.4:
+			t = _town_tiles[rng.randi_range(0, _town_tiles.size() - 1)]  # new villagers often turn up in a town
 		var p := _tile_center(t)
 		if p.distance_to(player.global_position) < SPAWN_MIN_DISTANCE:
 			continue
@@ -1614,7 +1647,7 @@ func _draw() -> void:
 		_draw_prop(t, props[t])
 
 	for t in trees:
-		if water.has(t):
+		if water.has(t) or buildings.has(t):
 			continue
 		var c := Vector2(t.x + 0.5, t.y + 0.5) * TILE
 		_shadow(c + Vector2(0, 14), 13.0, 4.0, 11.0)
@@ -1671,3 +1704,21 @@ func _shop_pick(i: int, merchant) -> void:
 			player.add_xp(10 + 4 * player.level)
 	Sfx.play(get_tree(), "coin")
 	_say("Bought: %s" % item["name"])
+
+
+## Free tiles around village wells and inside castle courtyards: where new villagers like to appear.
+func _make_town_tiles() -> void:
+	_town_tiles.clear()
+	var open_set := {}
+	for t in open_tiles:
+		open_set[t] = true
+	for v in layout.get("villages", []):
+		for dy in range(-5, 6):
+			for dx in range(-6, 7):
+				var t: Vector2i = v["center"] + Vector2i(dx, dy)
+				if open_set.has(t) and not mud.has(t):
+					_town_tiles.append(t)
+	for c in layout.get("small", []) + ([layout["big"]] if not layout.get("big", {}).is_empty() else []):
+		for t in floors:
+			if c["rect"].has_point(t) and open_set.has(t):
+				_town_tiles.append(t)

@@ -36,6 +36,10 @@ func setup(main: Node2D) -> void:
 			var c := Color("4a7a36")
 			if main.water.has(t):
 				c = Color("2f5fb0")
+			elif main.buildings.has(t):
+				c = Color("a89a8e")
+			elif main.floors.has(t):
+				c = Color("7a7585")
 			elif main.trees.has(t):
 				c = Color("24491f")
 			elif main.mud.has(t):

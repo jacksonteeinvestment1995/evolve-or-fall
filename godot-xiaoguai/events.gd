@@ -17,6 +17,9 @@ const StrikeScript := preload("res://strike.gd")
 const FogScript := preload("res://fog.gd")
 const StampedeScript := preload("res://stampede.gd")
 const MerchantScript := preload("res://merchant.gd")
+const ChickenScript := preload("res://chicken.gd")
+const PicnicScript := preload("res://picnic.gd")
+const UfoScript := preload("res://ufo.gd")
 
 const FIRST_AT := 60.0
 const TIER_AT := [60.0, 240.0, 480.0]     # when each tier of events unlocks (seconds into the run)
@@ -27,6 +30,7 @@ const INFO := {
 	# tier 1: small
 	"rain": {"tier": 1, "warn": 1.5, "length": 18.0, "music": "treasure", "banner": "TREASURE RAIN! Gather what falls"},
 	"lightning": {"tier": 1, "warn": 2.5, "length": 18.0, "music": "meteor", "banner": "A STORM rolls in. Watch the crackling marks!"},
+	"picnic": {"tier": 1, "warn": 2.0, "length": 32.0, "music": "peace", "banner": "A VILLAGER PICNIC! They are busy eating... the second bite wakes them all"},
 	"fog": {"tier": 1, "warn": 3.0, "length": 38.0, "music": "hidden", "banner": "TOXIC FOG drifts in. Keep out of the green cloud"},
 	# tier 2: medium
 	"meteor": {"tier": 2, "warn": 3.0, "length": 16.0, "music": "meteor", "banner": "METEOR SHOWER! Stay away from the red marks"},
@@ -35,10 +39,12 @@ const INFO := {
 	"eclipse": {"tier": 2, "warn": 3.0, "length": 40.0, "music": "hidden", "banner": "SOLAR ECLIPSE! Sudden night falls"},
 	"flood": {"tier": 2, "warn": 3.0, "length": 34.0, "music": "quake", "banner": "HEAVY RAIN! The ponds are rising. Do not stand in water!"},
 	"merchant": {"tier": 2, "warn": 2.0, "length": 60.0, "music": "peace", "banner": "A WANDERING MERCHANT has set up camp nearby"},
+	"chicken": {"tier": 2, "warn": 2.5, "length": 32.0, "music": "treasure", "banner": "CHICKEN REBELLION! The chickens fight the villagers (a hurt you can eat one)"},
 	"comet": {"tier": 2, "warn": 3.5, "length": 5.0, "music": "treasure", "banner": "A COMET is falling! Run to where it lands"},
 	# tier 3: big
 	"raid": {"tier": 3, "warn": 5.0, "length": 1.0, "music": "raid", "banner": "WAR HORN! A raid is coming"},
 	"stampede": {"tier": 3, "warn": 2.5, "length": 12.0, "music": "raid", "banner": "STAMPEDE! Get out of the red lane"},
+	"ufo": {"tier": 3, "warn": 3.0, "length": 36.0, "music": "hidden", "banner": "A UFO! It beams villagers up and drops them far away. Dodge the beam!"},
 	"mimic": {"tier": 3, "warn": 2.0, "length": 4.0, "music": "", "banner": "Treasure chests glitter nearby... how lucky"},
 	"rival": {"tier": 3, "warn": 4.0, "length": 100.0, "music": "hidden", "banner": "A RIVAL HERO hunts you! Defeat it for a gold chest"},
 	"bug": {"tier": 3, "warn": 3.0, "length": 120.0, "music": "raid", "banner": "DEVELOPER ATTACK! A bug escaped from production"},
@@ -56,6 +62,8 @@ var _tick := 0.0
 var _quake_pulse := 0.0
 var _raid_side := Vector2.LEFT
 var _target = null        ## the villager of a rival or bug event
+var _picnickers: Array = []
+var _picnic_hits := 0
 var _flood_added: Array[Vector2i] = []
 var _flood_step := 0.0
 var started := {}          ## event name -> how many times it has started
@@ -179,6 +187,12 @@ func _begin(name: String) -> void:
 			_spawn_stampede()
 		"mimic":
 			_spawn_mimics()
+		"picnic":
+			_spawn_picnic()
+		"chicken":
+			_spawn_chickens()
+		"ufo":
+			_spawn_ufo()
 		"rival":
 			_spawn_rival()
 		"bug":
@@ -214,6 +228,17 @@ func _finish() -> void:
 			main._say("The rival hero is gone.")
 		"bug":
 			main._say("The bug crawled away...")
+		"picnic":
+			_wake_picnic(false)
+			main._say("The picnic is over.")
+		"chicken":
+			for c in main.get_tree().get_nodes_in_group("chickens"):
+				c.leave()
+			main._say("The chickens strut off, victorious.")
+		"ufo":
+			for u in main.get_tree().get_nodes_in_group("ufos"):
+				u.leave()
+			main._say("The UFO flies away.")
 	_target = null
 	main._update_music()
 
@@ -499,3 +524,65 @@ func _spawn_bug() -> void:
 	v.bones_value = 40
 	v.force_chase = true
 	_target = v
+
+
+# --- villager picnic: they sit and eat; the second bite wakes them all ---
+
+func _spawn_picnic() -> void:
+	var pos := _free_spot(240.0, 380.0)
+	if pos == Vector2.INF:
+		pos = main.player.global_position + Vector2(280, 0)
+	var blanket = PicnicScript.new()
+	blanket.position = pos
+	blanket.life = active_left + 3.0
+	main.add_child(blanket)
+	main.move_child(blanket, 0)
+	_picnickers.clear()
+	_picnic_hits = 0
+	for i in 6:
+		var a := float(i) / 6.0 * TAU
+		var v = main._spawn_villager(pos + Vector2.from_angle(a) * Vector2(40.0, 26.0), rng.randi_range(0, 1))
+		v.calm = true
+		_picnickers.append(v)
+
+
+## Called by a picnicker that is hit. The first hit is free; the second wakes everyone.
+func picnic_hit(_who) -> void:
+	_picnic_hits += 1
+	if _picnic_hits >= 2:
+		_wake_picnic(true)
+
+
+func _wake_picnic(angry: bool) -> void:
+	var said := false
+	for v in _picnickers:
+		if is_instance_valid(v) and v.calm:
+			v.calm = false
+			v.force_chase = angry
+			if angry and not said:
+				v.say("HEY! That's MY sandwich!", 2.6)
+				said = true
+	_picnickers.clear()
+	if angry:
+		main._say("The picnic wakes up, and it's angry!")
+		Sfx.play(main.get_tree(), "warn", -3.0)
+
+
+# --- chicken rebellion ---
+
+func _spawn_chickens() -> void:
+	var p = main.player
+	for i in 14:
+		var c = ChickenScript.new()
+		c.position = p.global_position + Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(50.0, 150.0)
+		main.add_child(c)
+	Sfx.play(main.get_tree(), "coin", -4.0, 1.5)
+
+
+# --- UFO ---
+
+func _spawn_ufo() -> void:
+	var u = UfoScript.new()
+	u.main = main
+	u.position = main.player.global_position + Vector2(-420.0, -260.0)
+	main.add_child(u)
