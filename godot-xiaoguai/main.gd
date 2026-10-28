@@ -352,7 +352,7 @@ func _build_hd2d() -> void:
 	ground_layer.cam = cam
 	ground_layer.cols = COLS
 	ground_layer.rows = ROWS
-	ground_layer.show_behind_parent = true  # under the shadows and props main draws itself
+	ground_layer.z_index = -5  # under everything else: the shadows and props main draws, the ponds, the mud
 	add_child(ground_layer)
 	move_child(ground_layer, 0)
 	var mud_layer := preload("res://mud.gd").new()
