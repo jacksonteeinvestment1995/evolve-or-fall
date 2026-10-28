@@ -236,7 +236,7 @@ func effective_damage() -> int:
 func effective_speed() -> float:
 	var level_node = get_parent()
 	var early: float = level_node.enemy_speed_mult() if level_node.has_method("enemy_speed_mult") else 1.0
-	return speed * (1.0 + (_power() - 1.0) * 0.5) * early * (0.65 if has_status("chill") else 1.0)
+	return speed * (1.0 + (_power() - 1.0) * 0.5) * early * (0.65 if has_status("chill") else 1.0) * (1.3 if enraged else 1.0)
 
 
 func _apply_form() -> void:
@@ -341,7 +341,7 @@ func _add_to_level(node: Node2D) -> void:
 	get_parent().add_child.call_deferred(node)
 
 
-func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: String = "", pierce: bool = false, life: float = 2.0) -> void:
+func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: String = "", pierce: bool = false, life: float = 2.0, look: String = "") -> void:
 	var b = BoltScript.new()
 	b.position = global_position
 	b.dir = dir
@@ -354,7 +354,7 @@ func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: Strin
 	b.team = "enemy"
 	if line == 2 and secret < 0:
 		b.sprite = "fx_enemy_arrow"  # the hunters shoot pixel-art arrows
-	b.style = _enemy_bolt_style()
+	b.style = look if look != "" else _enemy_bolt_style()
 	Sfx.play_at(get_tree(), "shoot", global_position, -9.0)
 	_add_to_level(b)
 
@@ -379,7 +379,9 @@ func _shoot(target, cfg: Dictionary) -> void:
 
 ## A short pause between any two skills (each skill also has its own cooldown).
 func skill_cooldown() -> float:
-	return 1.2 if secret >= 0 else maxf(1.5, 3.0 - stage * 0.3)
+	if secret >= 0:
+		return 0.85 if enraged else 1.2
+	return maxf(1.5, 3.0 - stage * 0.3)
 
 
 func _allies_near(radius: float) -> Array:
@@ -439,28 +441,28 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 				fired = true
 		"slow":
 			if dist < 200.0 and los:
-				_spawn_bolt(aim, 180.0, 1, Color("7d5e38"), "slow")
+				_spawn_bolt(aim, 180.0, 1, Color("7d5e38"), "slow", false, 2.0, "mud")
 				cast_color = Color("7d5e38")
 				fired = true
 		"net":
 			if dist < 260.0 and los:
-				_spawn_bolt(aim, 260.0, 1, Color("e8e8f0"), "slow")
+				_spawn_bolt(aim, 260.0, 1, Color("e8e8f0"), "slow", false, 2.0, "net")
 				cast_color = Color("e8e8f0")
 				fired = true
 		"pierce":
 			if dist < 300.0 and los:
-				_spawn_bolt(aim, 300.0, maxi(1, roundi(dmg * 0.9)), _bolt_color(), "", true, 1.4)
+				_spawn_bolt(aim, 300.0, maxi(1, roundi(dmg * 0.9)), _bolt_color(), "", true, 1.4, "javelin")
 				cast_color = _bolt_color()
 				fired = true
 		"axe":
 			if dist < 190.0 and los:
-				_spawn_bolt(aim, 230.0, maxi(1, roundi(dmg * 1.8)), Color("b0a090"))
+				_spawn_bolt(aim, 230.0, maxi(1, roundi(dmg * 1.8)), Color("b0a090"), "", false, 2.0, "axe")
 				cast_color = Color("b0a090")
 				fired = true
 		"volley":
 			if dist < 260.0 and los:
 				for a in [-0.25, 0.0, 0.25]:
-					_spawn_bolt(aim.rotated(a), 330.0, maxi(1, roundi(dmg * 0.7)), _bolt_color())
+					_spawn_bolt(aim.rotated(a), 330.0, maxi(1, roundi(dmg * 0.7)), _bolt_color(), "", false, 2.0, "arrow")
 				cast_color = _bolt_color()
 				fired = true
 		"smite":
@@ -571,6 +573,7 @@ func _physics_process(delta: float) -> void:
 	evolve_flash = maxf(evolve_flash - delta, 0.0)
 	cast_flash = maxf(cast_flash - delta, 0.0)
 	buff_left = maxf(buff_left - delta, 0.0)
+	exposed_left = maxf(exposed_left - delta, 0.0)
 	shield_left = maxf(shield_left - delta, 0.0)
 	for id in skill_timers:
 		skill_timers[id] = maxf(float(skill_timers[id]) - delta, 0.0)
@@ -649,6 +652,7 @@ func _physics_process(delta: float) -> void:
 		if dist < reach and hit_cd == 0.0:
 			hit_cd = HIT_COOLDOWN
 			target.take_hit(effective_damage(), to.normalized())
+			SkillFx.spawn_fx(get_parent(), target.global_position, "slash", Color(1.0, 0.3, 0.25), to.normalized(), 1.1)
 		if skill_cd == 0.0 and not has_status("charm"):
 			if use_skill(target, dist):
 				skill_cd = skill_cooldown()
@@ -752,6 +756,8 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 	if calm:
 		_picnic_hit()
 	var amount := ceili(dmg * 0.5) if shield_left > 0.0 else dmg
+	if exposed_left > 0.0:
+		amount = ceili(amount * 1.5)
 	if has_status("curse"):
 		amount = ceili(amount * 1.5)
 	hp -= amount
@@ -877,7 +883,7 @@ func _draw() -> void:
 
 ## Mimics, the rival hero and the bug pay out a gold chest where they fall.
 func _boss_loot() -> void:
-	if not (mimic or rival or bug):
+	if not (mimic or rival or bug or secret >= 0):
 		return
 	var level_node = get_parent()
 	if level_node == null:
@@ -886,6 +892,16 @@ func _boss_loot() -> void:
 	chest.tier = "gold"
 	chest.position = global_position
 	level_node.call_deferred("add_child", chest)
+	if secret >= 0:
+		# a hidden boss leaves two gold chests
+		var second = TreasureLoot.new()
+		second.tier = "gold"
+		second.position = global_position + Vector2(26, 6)
+		chest.position = global_position + Vector2(-26, 6)
+		level_node.call_deferred("add_child", second)
+		Popups.text(get_tree(), global_position + Vector2(0, -40.0), "BOSS DEFEATED!", Popups.BIG, 22)
+		SkillFx.spawn_levelup(level_node)
+		return
 	Popups.text(get_tree(), global_position + Vector2(0, -30.0), "DEFEATED!", Popups.BIG, 18)
 	if bug:
 		SkillFx.spawn_levelup(level_node)
@@ -1055,6 +1071,8 @@ func _guarding() -> bool:
 
 const BURST_SKILL := ["spore_burst", "shadow_barrage", "judgment"]
 var phase_done := 0
+var enraged := false         ## a hidden boss below a third of its health: faster, quicker skills
+var exposed_left := 0.0       ## the weak point is open: the boss takes 50% more damage
 
 
 ## What this villager's projectiles look like (see SkillFx.draw_bolt). Hunters use the arrow sprite.
@@ -1088,3 +1106,26 @@ func _check_phase() -> void:
 	say(["The spores wake!", "Shadows, rise!", "Judgment!"][secret], 2.2)
 	use_skill_id(BURST_SKILL[secret], pl, 120.0)
 	skill_cd = skill_cooldown()
+	if step == 1:
+		_summon_guards(3)
+	else:
+		# the last phase: it enrages (faster, quicker skills) but is left gasping, its weak point wide open
+		enraged = true
+		exposed_left = 4.0
+		stun_left = maxf(stun_left, 1.2)
+		flash = 0.4
+		Popups.text(get_tree(), global_position + Vector2(0, -34.0 * body_scale), "WEAK POINT!", Popups.BIG, 20)
+		SkillFx.spawn_fx(get_parent(), global_position, "impact", Color("ffe680"), Vector2.RIGHT, 2.5)
+		Sfx.play(get_tree(), "warn", -2.0)
+
+
+## The boss calls guards: a few ordinary villagers that fight at its side.
+func _summon_guards(n: int) -> void:
+	var level_node = get_parent()
+	if level_node == null or not level_node.has_method("_spawn_villager"):
+		return
+	for k in n:
+		var spot := global_position + Vector2.from_angle(TAU * float(k) / float(n)) * 44.0
+		var g = level_node.call("_spawn_villager", spot, 2, -1, -1)
+		g.force_chase = true
+	Popups.text(get_tree(), global_position + Vector2(0, -34.0 * body_scale), "Guards, rise!", Popups.BIG, 16)

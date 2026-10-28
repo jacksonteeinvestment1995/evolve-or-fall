@@ -165,6 +165,39 @@ static func draw_bolt(ci: CanvasItem, style: String, dir: Vector2, radius: float
 	var tm := Time.get_ticks_msec() * 0.01
 	var side := dir.rotated(PI * 0.5)
 	match style:
+		"axe":
+			# a spinning axe: a handle with a curved blade, turning as it flies
+			var spin := tm * 1.6
+			var d2 := Vector2.from_angle(spin)
+			var n2 := d2.orthogonal()
+			ci.draw_line(-d2 * radius * 1.6, d2 * radius * 1.6, Color(0.5, 0.33, 0.18), 2.4)
+			ci.draw_colored_polygon(PackedVector2Array([d2 * radius * 1.7 + n2 * radius * 0.2, d2 * radius * 0.7 + n2 * radius * 1.9, d2 * radius * 0.2 + n2 * radius * 0.4, d2 * radius * 0.9 - n2 * radius * 0.2]), Color(0.78, 0.8, 0.86))
+			ci.draw_polyline(PackedVector2Array([d2 * radius * 1.7 + n2 * radius * 0.2, d2 * radius * 0.7 + n2 * radius * 1.9, d2 * radius * 0.2 + n2 * radius * 0.4]), Color(0.3, 0.32, 0.38), 1.2)
+		"net":
+			# a woven net: a ring with crossing strands
+			ci.draw_arc(Vector2.ZERO, radius * 1.7, 0, TAU, 16, Color(0.92, 0.92, 0.96), 1.6)
+			for k in 3:
+				var an := float(k) / 3.0 * PI + tm * 0.2
+				ci.draw_line(Vector2.from_angle(an) * radius * 1.7, -Vector2.from_angle(an) * radius * 1.7, Color(0.92, 0.92, 0.96, 0.9), 1.1)
+			ci.draw_arc(Vector2.ZERO, radius * 0.9, 0, TAU, 12, Color(0.92, 0.92, 0.96, 0.8), 1.0)
+		"javelin":
+			# a long barbed javelin
+			ci.draw_line(-dir * radius * 4.0, dir * radius * 1.6, Color(0.55, 0.4, 0.25), 2.2)
+			ci.draw_colored_polygon(PackedVector2Array([dir * radius * 3.0, dir * radius * 1.4 + side * 3.0, dir * radius * 1.4 - side * 3.0]), Color(0.9, 0.9, 0.95))
+			ci.draw_line(-dir * radius * 4.0 + side * 2.5, -dir * radius * 3.2, Color(0.8, 0.2, 0.2), 1.6)
+			ci.draw_line(-dir * radius * 4.0 - side * 2.5, -dir * radius * 3.2, Color(0.8, 0.2, 0.2), 1.6)
+		"arrow":
+			# a feathered arrow
+			ci.draw_line(-dir * radius * 3.2, dir * radius * 1.8, Color(0.6, 0.45, 0.28), 1.8)
+			ci.draw_colored_polygon(PackedVector2Array([dir * radius * 3.0, dir * radius * 1.6 + side * 2.4, dir * radius * 1.6 - side * 2.4]), Color(0.85, 0.87, 0.92))
+			for sgn in [-1.0, 1.0]:
+				ci.draw_line(-dir * radius * 3.2, -dir * radius * 4.0 + side * sgn * 2.6, Color(0.85, 0.25, 0.25), 1.4)
+		"mud":
+			# a lump of mud that drips
+			ci.draw_circle(Vector2.ZERO, radius * 1.2, Color(0.4, 0.28, 0.14))
+			ci.draw_circle(Vector2(-radius * 0.3, -radius * 0.3), radius * 0.4, Color(0.55, 0.4, 0.22))
+			for i in 3:
+				ci.draw_circle(-dir * (radius * (1.4 + float(i) * 0.9)) + side * sin(tm + float(i) * 2.0) * radius * 0.5, 1.6 - 0.3 * float(i), Color(0.4, 0.28, 0.14, 0.8))
 		"fire":
 			for i in 5:
 				var f := float(i + 1) / 5.0
@@ -551,3 +584,58 @@ static func draw_bloodmoon(ci: CanvasItem, tm: float) -> void:
 		var f := fposmod(tm * 0.4 + float(i) * 0.2, 1.0)
 		var x := sin(float(i) * 2.7 + tm) * 10.0
 		ci.draw_circle(Vector2(x, 6.0 - f * 30.0), 2.2 * (1.0 - f), Color(0.9, 0.1, 0.2, 0.5 * (1.0 - f)))
+
+
+# --- enemy attacks: shapes that cannot be mistaken for 小怪's own circles ---
+
+## The warning before an enemy ground attack: a hatched red danger area with a spiked rim, a pie that fills as the
+## strike gets closer, and a warning triangle in the middle.
+static func draw_danger_warn(ci: CanvasItem, radius: float, f: float, tint: Color) -> void:
+	var tm := Time.get_ticks_msec() * 0.001
+	var red := Color(1.0, 0.22, 0.18)
+	var hot := red.lerp(tint, 0.3)
+	# the pie that fills up: the nearer the strike, the fuller
+	var steps := 28
+	if f > 0.02:
+		for i in steps:
+			var a0 := -PI / 2.0 + TAU * f * float(i) / steps
+			var a1 := -PI / 2.0 + TAU * f * float(i + 1) / steps
+			ci.draw_colored_polygon(PackedVector2Array([Vector2.ZERO, Vector2.from_angle(a0) * radius, Vector2.from_angle(a1) * radius]), Color(hot, 0.22))
+	# diagonal hatching, clipped to the circle
+	ci.draw_set_transform(Vector2.ZERO, PI / 4.0, Vector2.ONE)
+	var y := -radius + 4.0
+	while y < radius:
+		var w := sqrt(maxf(radius * radius - y * y, 0.0))
+		ci.draw_line(Vector2(-w, y), Vector2(w, y), Color(hot, 0.35), 1.6)
+		y += 9.0
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# a spiked rim that turns slowly
+	var rim := PackedVector2Array()
+	var spikes := 20
+	for i in range(spikes * 2 + 1):
+		var a := float(i) / float(spikes * 2) * TAU + tm * 0.8
+		rim.append(Vector2.from_angle(a) * (radius * (1.0 if i % 2 == 0 else 1.13)))
+	ci.draw_polyline(rim, Color(hot, 0.95), 2.0)
+	# the warning triangle with an exclamation mark, blinking faster as the strike nears
+	var blink := 0.55 + 0.45 * sin(tm * (6.0 + 14.0 * f))
+	var s := clampf(radius * 0.3, 7.0, 18.0)
+	var tri := PackedVector2Array([Vector2(0, -s), Vector2(s * 0.95, s * 0.7), Vector2(-s * 0.95, s * 0.7)])
+	ci.draw_colored_polygon(tri, Color(1.0, 0.85, 0.2, 0.85 * blink))
+	ci.draw_polyline(tri + PackedVector2Array([tri[0]]), Color(0.3, 0.05, 0.05, blink), 2.0)
+	ci.draw_line(Vector2(0, -s * 0.35), Vector2(0, s * 0.2), Color(0.3, 0.05, 0.05, blink), 2.4)
+	ci.draw_circle(Vector2(0, s * 0.45), 1.5, Color(0.3, 0.05, 0.05, blink))
+
+
+## The enemy ground attack going off: jagged shards flung out from the middle (not a plain circle).
+static func draw_danger_burst(ci: CanvasItem, radius: float, st: float, tint: Color) -> void:
+	var a := 1.0 - st
+	var n := 16
+	for i in n:
+		var ang := float(i) / float(n) * TAU + 0.2
+		var d := Vector2.from_angle(ang)
+		var side := d.orthogonal()
+		var len := radius * (0.55 + 0.55 * minf(st * 3.0, 1.0)) * (0.8 + 0.4 * float(i % 3) / 2.0)
+		var w := radius * 0.09
+		ci.draw_colored_polygon(PackedVector2Array([d * len, d * len * 0.35 + side * w, d * len * 0.35 - side * w]), Color(1.0, 0.3 + 0.4 * float(i % 2), 0.2, a * 0.9))
+	ci.draw_circle(Vector2.ZERO, radius * 0.35 * a, Color(1, 0.95, 0.7, a * 0.8))
+	ci.draw_arc(Vector2.ZERO, radius * (0.4 + 0.6 * minf(st * 2.5, 1.0)), 0, TAU, 32, Color(1, 0.4, 0.25, a * 0.8), 3.0)

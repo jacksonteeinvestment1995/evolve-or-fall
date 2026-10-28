@@ -25,6 +25,7 @@ func fresh() -> void:
 	Input.flush_buffered_events()
 	main = load("res://main.tscn").instantiate()
 	main.pause_on_menu = false
+	main.perk_every = 100000
 	root.add_child(main)
 	await frames(5)  # let the new scene settle after its heavy first frame
 	for i in 10:
@@ -395,7 +396,7 @@ func _init() -> void:
 	main.clock = 30.0  # day
 	var bite_by_day: int = p.effective_bite()
 	p.learn_special("bloodmoon")
-	check("Blood Moon: night strength by day", p.effective_bite() > bite_by_day and p._power() >= 1.5)
+	check("Blood Moon: night strength by day", p.effective_bite() > bite_by_day and p._power() >= 1.5, "bite %d -> %d, power %.2f, combo %d" % [bite_by_day, p.effective_bite(), p._power(), p.combo])
 	p.learn("nova")
 	p.learn_special("stormcaller")
 	p.ab_cd.clear()
@@ -2253,5 +2254,128 @@ func _init() -> void:
 				tc_ok = true
 	check("touch controls exist", tc_ok)
 	
+	# combos, perfect dodge, attack speed, perks, pets, boss phases and the long-range skills
+	await fresh()
+	var gp = main.player
+	await clear_enemies()
+	var gb0: int = main.bones
+	for i in 5:
+		gp.register_hit()
+	check("five hits in a row make a combo of 5 that pays 3 bones", gp.combo == 5 and main.bones == gb0 + 3, "combo %d, bones %d -> %d" % [gp.combo, gb0, main.bones])
+	gp.combo = 0
+	var gb_plain: int = gp.effective_bite()
+	gp.combo = 20
+	check("a long combo raises the bite", gp.effective_bite() >= gb_plain and gp.combo_mult() > 1.39)
+	gp.combo = 3
+	gp.combo_t = 0.02
+	await frames(4)
+	check("the combo breaks when it runs out of time", gp.combo == 0)
+	check("bites come about 3x as fast", gp.BITE_TIME_SCALE <= 0.34)
+	gp.learn("bolt")
+	gp.skill_cd["bolt"] = 10.0
+	await frames(30)
+	check("skills recharge twice as fast", float(gp.skill_cd["bolt"]) < 9.2, "left %.2f" % float(gp.skill_cd["bolt"]))
+	gp.hp = gp.max_hp
+	gp.invuln = 0.3
+	gp.perfect_window = 0.3
+	gp.perfect_cd = 0.0
+	var gp_hp: int = gp.hp
+	gp.take_hit(1, Vector2.RIGHT)
+	check("a hit while rolling is a perfect dodge: no damage, a counter ready, time slowed", gp.hp == gp_hp and gp.counter_t > 0.0 and Engine.time_scale < 1.0)
+	Engine.time_scale = 1.0
+	gp.counter_t = 0.0
+
+	var perk_cards: Array = main.PerksData.roll({}, main.rng, 3)
+	check("three different perk cards are dealt", perk_cards.size() == 3 and perk_cards[0] != perk_cards[1] and perk_cards[1] != perk_cards[2])
+	var bite_mod0: float = gp.form_mod("bite")
+	gp.add_perk("sharp_fangs")
+	check("a perk adds its modifier", absf(gp.form_mod("bite") - bite_mod0 - 0.12) < 0.001)
+	for i in 8:
+		gp.add_perk("sharp_fangs")
+	check("a perk stops at its limit", int(gp.perks["sharp_fangs"]) == 5)
+	var max_hp0: int = gp.max_hp
+	gp.add_perk("glass_cannon")
+	check("Glass Cannon trades max HP for bite", gp.max_hp < max_hp0)
+	main.perk_every = 4
+	main.menu_queue.clear()
+	main._on_leveled(4)
+	check("a perk card menu opens at level 4", main.menu_kind == "perk" and main.menu_open)
+	main._close_menu()
+	main.menu_kind = ""
+	main.perk_every = 100000
+
+	var pets_made := 0
+	for i in 4:
+		if main.hatch_pet():
+			pets_made += 1
+	check("at most three pets hatch", pets_made == 3 and get_nodes_in_group("pets").size() == 3)
+	var pet = get_nodes_in_group("pets")[0]
+	var pet_kp0: int = pet.kills_progress
+	gp.on_kill()
+	check("a kill by 小怪 feeds the pets", pet.kills_progress == pet_kp0 + 1 or pet.level > 1)
+	pet.gain_xp(60)
+	check("a pet evolves at level 3 and stops at level 5", pet.level == 5 and pet.evolved())
+	await clear_enemies()
+	var pet_foe = mk(pet.global_position + Vector2(20, 0), 0, 3)
+	pet_foe.max_hp = 300
+	pet_foe.hp = 300
+	pet_foe.apply_status("root", 10.0)
+	await frames(70)
+	check("pets bite villagers", is_instance_valid(pet_foe) and pet_foe.hp < 300)
+	for pt in get_nodes_in_group("pets"):
+		pt.queue_free()
+	await clear_enemies()
+
+	var boss = main._spawn_villager(gp.global_position + Vector2(260, 0), 4, 0, 0)
+	boss.skill_cd = 9999.0
+	boss.max_hp = 1000
+	boss.hp = 1000
+	var foes0: int = enemies().size()
+	boss.take_hit(400, Vector2.RIGHT, false)
+	await frames(2)
+	check("a boss calls three guards at two thirds health", boss.phase_done == 1 and enemies().size() >= foes0 + 3, "enemies %d -> %d" % [foes0, enemies().size()])
+	boss.take_hit(300, Vector2.RIGHT, false)
+	await frames(2)
+	check("at one third the boss enrages and its weak point opens", boss.phase_done == 2 and boss.enraged and boss.exposed_left > 0.0)
+	var boss_hp_a: int = boss.hp
+	boss.take_hit(100, Vector2.RIGHT, false)
+	check("an open weak point makes the boss take 50% more", boss_hp_a - boss.hp >= 150, "lost %d" % (boss_hp_a - boss.hp))
+	await clear_enemies()
+
+	for sid in ["frost_shards", "meteor_call", "chain_zap", "thorn_ring", "spirit_lance"]:
+		check("long-range skill %s exists, can be learned and has an icon and sound" % sid, main.SkillsData.SKILLS.has(sid) and main.SKILL_ICONS.has(sid) and SkillSounds.of(sid)[0] != "s_buff")
+	gp.skill_cd.clear()
+	for sid in ["frost_shards", "meteor_call", "chain_zap", "thorn_ring", "spirit_lance"]:
+		gp.learn(sid)
+		gp.skill_cd[sid] = 0.0
+	var rs_foe = mk(gp.global_position + Vector2(150, 0), 0, 3)
+	rs_foe.max_hp = 500
+	rs_foe.hp = 500
+	rs_foe.apply_status("root", 30.0)
+	var rs_b0: int = bolts().size()
+	gp.skill_cd["frost_shards"] = 0.0
+	var cast_ok = gp.cast("frost_shards", Vector2.RIGHT)
+	await frames(2)
+	check("Frost Shards fires 3 shards", cast_ok and bolts().size() >= rs_b0 + 3)
+	rs_b0 = bolts().size()
+	gp.skill_cd["thorn_ring"] = 0.0
+	cast_ok = gp.cast("thorn_ring")
+	await frames(2)
+	check("Thorn Burst fires a ring of 10", cast_ok and bolts().size() >= rs_b0 + 10, "cast %s bolts %d -> %d rank %d cd %s" % [str(cast_ok), rs_b0, bolts().size(), gp.rank("thorn_ring"), str(gp.skill_cd.get("thorn_ring"))])
+	rs_b0 = bolts().size()
+	gp.skill_cd["spirit_lance"] = 0.0
+	cast_ok = gp.cast("spirit_lance", Vector2.RIGHT)
+	await frames(2)
+	check("Spirit Lance fires one piercing lance", cast_ok and bolts().size() >= rs_b0 + 1)
+	var rs_z0: int = zones().size()
+	gp.skill_cd["meteor_call"] = 0.0
+	cast_ok = gp.cast("meteor_call")
+	await frames(2)
+	check("Falling Star calls a meteor zone", cast_ok and zones().size() >= rs_z0 + 1)
+	var rs_hp: int = rs_foe.hp
+	gp.skill_cd["chain_zap"] = 0.0
+	check("Chain Lightning hits the nearest villager", gp.cast("chain_zap") and rs_foe.hp < rs_hp)
+	await clear_enemies()
+
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

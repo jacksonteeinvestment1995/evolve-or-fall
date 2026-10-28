@@ -70,9 +70,15 @@ func _detonate() -> void:
 func _draw() -> void:
 	if not detonated:
 		var f := clampf(age / maxf(delay, 0.01), 0.0, 1.0)
+		if team == "enemy":
+			SkillFx.draw_danger_warn(self, radius, f, color)
+			return
 		draw_circle(Vector2.ZERO, radius * f, Color(color, 0.2))
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.85), 2.0)
 	else:
+		if team == "enemy" and style == "":
+			SkillFx.draw_danger_burst(self, radius, clampf((age - delay) / maxf(dur, 0.01), 0.0, 1.0), color)
+			return
 		var a := clampf(1.0 - (age - delay) / 0.25, 0.0, 1.0)
 		if style != "":
 			var st := clampf((age - delay) / dur, 0.0, 1.0)

@@ -7,6 +7,7 @@ extends CharacterBody2D
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
 const TreasureData := preload("res://treasure.gd")
+const PerksData := preload("res://perks.gd")
 const SPECIAL_COLORS := {"overdrive": Color("ff5030"), "frenzy": Color("ffa030"), "ironwill": Color("a0b0d0"), "secondwind": Color("60e090"),
 	"phoenix": Color("ff8a30"), "cleave": Color("e0e0ff"), "stormcaller": Color("a0c0ff"), "bloodmoon": Color("e02040"),
 	"gravity": Color("a070ff"), "titan": Color("d0a060"), "mastery": Color("ffd040"), "bonehoard": Color("ffd860")}
@@ -65,6 +66,19 @@ var slow_left := 0.0           ## hit by a mud ball
 var level_flash := 0.0         ## a ring that pops out on every level-up
 var specials := {}             ## special skills picked every 12 levels: id -> true
 var phoenix_used := false
+## Combo: every bite or lunge that lands adds one; the chain breaks after COMBO_WINDOW seconds without a hit. Each
+## step adds 2% damage up to 20 steps, and 5, 10, 20 and 40 pay out bones.
+## Bites come 3.3x as often as the form's table says, and every skill recharges twice as fast.
+const BITE_TIME_SCALE := 0.3
+const SKILL_RECHARGE := 2.0
+const COMBO_WINDOW := 2.5
+const COMBO_MILESTONES := {5: 3, 10: 6, 20: 12, 40: 25}
+var combo := 0
+var combo_t := 0.0
+## Perfect dodge: getting hit while the roll still protects 小怪 slows time, resets the roll and makes the next bite a counter.
+var perfect_window := 0.0
+var perfect_cd := 0.0
+var counter_t := 0.0
 var wind_cd := 0.0             ## Second Wind cooldown
 var ab_cd := {}                ## signature ability cooldowns
 var still_time := 0.0          ## seconds spent standing still (Rooted, Nature regeneration)
@@ -76,6 +90,7 @@ var ghosts: Array = []         # afterimages while sprinting or rolling: {pos, f
 var _ghost_t := 0.0
 var _dust_t := 0.0
 var buffs := {}               ## timed treasure buffs: id -> seconds left
+var perks := {}                ## run upgrades picked from the perk cards: id -> times picked
 var relics := {}              ## permanent treasure relics: id -> how many       ## fractions of HP from form-skill regeneration
 var nature_t := 0.0
 var trail_t := 0.0
@@ -273,6 +288,7 @@ func learn_special(id: String) -> void:
 
 ## Called when a villager 小怪 fought is defeated (not a tower kill).
 func on_kill() -> void:
+	get_tree().call_group("pets", "gain_xp", 1)
 	var drain := rank("drain")
 	if drain > 0 and hp > 0:
 		kill_heal_acc += 0.5 * drain
@@ -290,6 +306,13 @@ func _physics_process(delta: float) -> void:
 	bite_cd = maxf(bite_cd - delta, 0.0)
 	bite_flash = maxf(bite_flash - delta, 0.0)
 	invuln = maxf(invuln - delta, 0.0)
+	perfect_window = maxf(perfect_window - delta, 0.0)
+	perfect_cd = maxf(perfect_cd - delta, 0.0)
+	counter_t = maxf(counter_t - delta, 0.0)
+	if combo > 0:
+		combo_t -= delta
+		if combo_t <= 0.0:
+			combo = 0
 	roll_cd = maxf(roll_cd - delta, 0.0)
 	lunge_cd = maxf(lunge_cd - delta, 0.0)
 	slow_left = maxf(slow_left - delta, 0.0)
@@ -326,6 +349,7 @@ func _physics_process(delta: float) -> void:
 		roll_left = ROLL_TIME
 		roll_cd = ROLL_COOLDOWN
 		invuln = maxf(invuln, ROLL_INVULN)
+		perfect_window = ROLL_INVULN
 		Sfx.play(get_tree(), "roll")
 	elif Input.is_action_just_pressed("lunge") and lunge_cd == 0.0 and not busy:
 		if touch:
@@ -384,7 +408,43 @@ func _power() -> float:
 
 func effective_bite() -> int:
 	var overdrive := 1.4 if specials.has("overdrive") else 1.0
-	return ceili(int(stages[stage]["bite"]) * _power() * (1.0 + 0.25 * rank("fangs") + form_mod("bite") + (form_mod("night_bite") if _night() else 0.0)) * overdrive)
+	var plain := ceili(int(stages[stage]["bite"]) * _power() * (1.0 + 0.25 * rank("fangs") + form_mod("bite") + (form_mod("night_bite") if _night() else 0.0)) * overdrive)
+	return maxi(plain, roundi(plain * combo_mult()))  # the combo rounds to the nearest, so tiny early bites are not bumped up by one
+
+
+func combo_window() -> float:
+	return COMBO_WINDOW + form_mod("combo_time")
+
+
+func combo_mult() -> float:
+	return 1.0 + 0.02 * mini(combo, 20)
+
+
+## A bite or lunge landed: the chain grows, and the milestones pay out.
+func register_hit() -> void:
+	combo += 1
+	combo_t = combo_window()
+	if COMBO_MILESTONES.has(combo):
+		var reward: int = COMBO_MILESTONES[combo]
+		var level_node = get_parent()
+		if level_node.get("bones") != null:
+			level_node.set("bones", int(level_node.get("bones")) + reward)
+		Popups.text(get_tree(), global_position + Vector2(0, -38.0), "COMBO x%d  +%d bones" % [combo, reward], Popups.BIG, 16)
+		Sfx.play(get_tree(), "coin", -4.0)
+
+
+## Hit while the roll still protects: slow time for a moment, refresh the roll, and the next bite counters for double.
+func _perfect_dodge() -> void:
+	perfect_cd = 1.2
+	perfect_window = 0.0
+	counter_t = 3.0 + form_mod("counter_time")
+	roll_cd = 0.0
+	combo_t = combo_window()
+	Popups.text(get_tree(), global_position + Vector2(0, -30.0), "PERFECT!", Popups.BIG, 20)
+	SkillFx.spawn_fx(get_parent(), global_position, "impact", Color("9fe8ff"), Vector2.RIGHT, 2.2)
+	Sfx.play(get_tree(), "dodge")
+	Engine.time_scale = 0.4
+	get_tree().create_timer(0.5, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
 
 
 ## Mud and other terrain can slow him down; the level decides.
@@ -438,6 +498,7 @@ func _lunge_strike() -> void:
 		if e.global_position.distance_to(global_position) <= 14.0 + body_radius:
 			lunge_hit.append(id)
 			e.take_hit(effective_bite() * 2, lunge_dir)
+			register_hit()
 			add_xp(1)
 
 
@@ -452,12 +513,18 @@ func _auto_bite() -> void:
 			target = e
 	if target == null:
 		return
-	bite_cd = float(s["cd"]) * (1.0 - 0.1 * rank("jaws") - form_mod("jaws")) * (0.75 if specials.has("frenzy") else 1.0)
+	bite_cd = float(s["cd"]) * BITE_TIME_SCALE * (1.0 - 0.1 * rank("jaws") - form_mod("jaws")) * (0.75 if specials.has("frenzy") else 1.0)
 	bite_flash = 0.12
 	bite_dir = (target.global_position - global_position).normalized()
 	Sfx.play(get_tree(), "bite", -9.0)
 	var bite := effective_bite()
+	if counter_t > 0.0:
+		bite *= 2
+		counter_t = 0.0
+		Popups.text(get_tree(), target.global_position + Vector2(0, -24.0), "COUNTER!", Popups.BIG, 18)
+		SkillFx.spawn_fx(get_parent(), target.global_position, "impact", Color("ffe680"), bite_dir, 1.6)
 	target.take_hit(bite, bite_dir)
+	register_hit()
 	on_bite_landed(target, bite)
 	SkillFx.spawn_tooth(get_parent(), target.global_position, bite_dir, maxf(0.8, float(s["scale"]) * 0.8))
 	if specials.has("overdrive"):
@@ -754,7 +821,7 @@ func _enemies_within(radius: float) -> Array:
 
 func _update_skills(delta: float) -> void:
 	for id in skill_cd:
-		skill_cd[id] = maxf(float(skill_cd[id]) - delta, 0.0)
+		skill_cd[id] = maxf(float(skill_cd[id]) - delta * SKILL_RECHARGE, 0.0)
 	if skill_cd.get("nova", 1.0) == 0.0 and not _enemies_within(70.0 + 12.0 * rank("nova")).is_empty():
 		cast("nova")
 	if skill_cd.get("bolt", 1.0) == 0.0:
@@ -770,10 +837,63 @@ func _update_skills(delta: float) -> void:
 		var desperate := hp <= max_hp * 0.3 and not _enemies_within(150.0).is_empty()
 		if surrounded or desperate:
 			cast("roar")
+	_update_range_autos()
 	_update_form_autos()
 	if skill_cd.get("doom", 1.0) == 0.0:
 		if _enemies_within(320.0).size() >= 6 or (hp <= max_hp * 0.3 and _enemies_within(250.0).size() >= 2):
 			cast("doom")
+
+
+## The long-range skills: each fires by itself when a villager is inside its reach.
+func _update_range_autos() -> void:
+	var tid := ""
+	for id in ["frost_shards", "meteor_call", "chain_zap", "thorn_ring", "spirit_lance"]:
+		if rank(id) == 0 or float(skill_cd.get(id, 1.0)) > 0.0:
+			continue
+		var reach: float = {"frost_shards": 340.0, "meteor_call": 440.0, "chain_zap": 260.0, "thorn_ring": 200.0, "spirit_lance": 520.0}[id]
+		var target = _nearest_enemy_to(reach)
+		if target == null:
+			continue
+		cast(id, (target.global_position - global_position).normalized())
+		tid = id
+
+
+## A bolt of 小怪's own, for the long-range skills.
+func _player_bolt(dir: Vector2, spd: float, dmg: int, color: Color, style: String, rad: float, life: float, pierce: bool, status: String = "", status_secs: float = 0.0) -> void:
+	var b = BoltScript.new()
+	b.position = global_position
+	b.dir = dir
+	b.speed = spd
+	b.damage = dmg
+	b.team = "player"
+	b.color = color
+	b.style = style
+	b.pierce = pierce
+	b.life = life
+	b.radius = rad
+	b.status = status
+	b.status_time = status_secs
+	b.source = self
+	_add_to_level(b)
+
+
+## A flash of lightning between two points that fades out.
+func _zap_line(a: Vector2, b: Vector2) -> void:
+	var line := Line2D.new()
+	line.width = 3.0
+	line.default_color = Color(0.85, 0.95, 1.0)
+	line.z_index = 5
+	var pts := PackedVector2Array([a])
+	var seg := 5
+	for i in range(1, seg):
+		var u := float(i) / seg
+		pts.append(a.lerp(b, u) + (b - a).orthogonal().normalized() * randf_range(-7.0, 7.0))
+	pts.append(b)
+	line.points = pts
+	get_parent().add_child(line)
+	var tw := line.create_tween()
+	tw.tween_property(line, "modulate:a", 0.0, 0.3)
+	tw.tween_callback(line.queue_free)
 
 
 func _add_to_level(node: Node2D) -> void:
@@ -820,6 +940,53 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			b.radius = 7.0
 			b.source = self
 			_add_to_level(b)
+		"frost_shards":
+			for a in [-0.28, 0.0, 0.28]:
+				_player_bolt(direction.rotated(a), 340.0, ceili(effective_bite() * 1.6 * power), Color("8fd8ff"), "orb", 6.0, 1.1, false, "chill", 3.0)
+		"meteor_call":
+			var tgt = _nearest_enemy_to(440.0)
+			var spot: Vector2 = tgt.global_position if tgt != null else global_position + direction * 200.0
+			var z = ZoneScript.new()
+			z.position = spot
+			z.radius = 55.0 + 8.0 * r
+			z.delay = 0.9
+			z.damage = ceili(effective_bite() * 4.0 * power)
+			z.team = "player"
+			z.color = Color("ff7a30")
+			z.style = "nova"
+			z.dur = 0.7
+			z.status = "burn"
+			z.status_time = 3.0
+			z.source = self
+			_add_to_level(z)
+		"chain_zap":
+			var hit_ids: Array = []
+			var from := global_position
+			var cur = _nearest_enemy_to(260.0)
+			var jumps := 3 + r
+			while cur != null and jumps > 0:
+				jumps -= 1
+				hit_ids.append(cur.get_instance_id())
+				_zap_line(from, cur.global_position)
+				SkillFx.spawn_fx(get_parent(), cur.global_position, "spark", Color("bfe8ff"), Vector2.RIGHT, 1.0)
+				cur.take_hit(ceili(effective_bite() * 2.0 * power), (cur.global_position - from).normalized())
+				add_xp(1)
+				from = cur.global_position
+				var nxt = null
+				var best := 150.0
+				for e in get_tree().get_nodes_in_group("enemies"):
+					if not is_instance_valid(e) or e.is_queued_for_deletion() or e.get_instance_id() in hit_ids:
+						continue
+					var d: float = e.global_position.distance_to(from)
+					if d < best:
+						best = d
+						nxt = e
+				cur = nxt
+		"thorn_ring":
+			for i in 10:
+				_player_bolt(Vector2.from_angle(float(i) / 10.0 * TAU), 260.0, ceili(effective_bite() * 1.4 * power), Color("7ad060"), "seed", 5.0, 0.95, false)
+		"spirit_lance":
+			_player_bolt(direction, 620.0, ceili(effective_bite() * 5.0 * power), Color("ffe680"), "spear", 9.0, 1.0, true)
 		"step":
 			blink(direction)
 		"roar":
@@ -883,7 +1050,11 @@ func dodge_chance() -> float:
 
 
 func take_hit(dmg: int, dir: Vector2) -> void:
-	if invuln > 0.0 or hp <= 0:
+	if hp <= 0:
+		return
+	if invuln > 0.0:
+		if perfect_window > 0.0 and perfect_cd <= 0.0:
+			_perfect_dodge()
 		return
 	if rank("step") > 0 and float(skill_cd.get("step", 0.0)) == 0.0 and randf() < dodge_chance():
 		skill_cd["step"] = float(SkillsData.SKILLS["step"]["cd"])
@@ -994,6 +1165,8 @@ func form_mod(key: String) -> float:
 		total += float(TreasureData.RELICS[rid]["mods"].get(key, 0.0)) * int(relics[rid])
 	for bid in buffs:
 		total += float(TreasureData.BUFFS[bid]["mods"].get(key, 0.0))
+	for pid in perks:
+		total += float(PerksData.PERKS[pid]["mods"].get(key, 0.0)) * int(perks[pid])
 	var all := SkillsData.form_skills()
 	for id in skills:
 		if all.has(id) and all[id].get("mods", {}).has(key):
@@ -1114,6 +1287,18 @@ func add_buff(id: String, secs: float) -> void:
 	if not TreasureData.BUFFS.has(id):
 		return
 	buffs[id] = maxf(float(buffs.get(id, 0.0)), secs)
+
+
+## A perk card picked at a level-up; it stacks up to its limit.
+func add_perk(id: String) -> void:
+	if not PerksData.PERKS.has(id) or int(perks.get(id, 0)) >= int(PerksData.PERKS[id]["max"]):
+		return
+	var old_max := max_hp
+	perks[id] = int(perks.get(id, 0)) + 1
+	if PerksData.PERKS[id]["mods"].has("hp"):
+		_apply_stage(false)
+		hp = clampi(hp + max_hp - old_max, 1, max_hp)
+		hp_changed.emit(hp)
 
 
 ## A permanent treasure relic; it stacks.

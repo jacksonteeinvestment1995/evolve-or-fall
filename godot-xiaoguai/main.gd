@@ -22,7 +22,7 @@ const ELITE_STAGE := 2
 ## A gentle start: for the first minutes villagers are slower, notice 小怪 only when close,
 ## and cannot shoot or use skills. Each of these switches on as the game goes on.
 const GRACE_SECONDS := 180.0    # until then: no day bonus, no ranged attacks, slower walking
-const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swift_paws", "jaws": "quick_jaws", "drain": "soul_drain", "greed": "bone_collector", "nova": "bone_nova", "bolt": "spirit_bolt", "step": "shadow_step"}
+const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swift_paws", "jaws": "quick_jaws", "drain": "soul_drain", "greed": "bone_collector", "nova": "bone_nova", "bolt": "spirit_bolt", "step": "shadow_step", "frost_shards": "fs_z_chill", "meteor_call": "fs_d_fireball", "chain_zap": "fs_e_spark", "thorn_ring": "fs_n_thorn", "spirit_lance": "fs_w_orbs"}
 const SKILLS_AT := 360.0        # villager skills switch on
 const HIDDEN_FROM := 600.0      # hidden enemies can appear from here (10 minutes in)...
 const GUARD_RELEASE := 1200.0    # ...and they wait in the big castle until 20 minutes, then go hunting
@@ -62,6 +62,8 @@ const WallScript := preload("res://wall.gd")
 const GhostScript := preload("res://ghost.gd")
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
+const PerksData := preload("res://perks.gd")
+const PetScript := preload("res://pet.gd")
 const TreasureScript := preload("res://treasure.gd")
 const Popups := preload("res://popups.gd")
 const Sfx := preload("res://sfx.gd")
@@ -125,6 +127,7 @@ var ghost_error := ""
 var ghost_dirty := true
 var hud: Control
 var playables: Node
+var perk_every := PerksData.PERK_EVERY   ## a perk card pick every this many levels (the tests turn it off)
 var touch_mode := false   ## the on-screen controls are showing: walk with the stick, build in front of 小怪
 var banner: Label
 var evo_banner: Label
@@ -141,6 +144,7 @@ var pause_on_menu := true  # the game stops while a level-up menu is open (tests
 
 
 func _ready() -> void:
+	Engine.time_scale = 1.0  # a perfect-dodge slow-mo must never carry over into a restart
 	if OS.has_feature("web") or DisplayServer.is_touchscreen_available():
 		Engine.physics_ticks_per_second = 30  # half the physics work; interpolation keeps the motion smooth
 	rng.randomize()
@@ -1201,6 +1205,7 @@ func _build_hud() -> void:
 	credit.add_theme_constant_override("outline_size", 5)
 	layer.add_child(credit)
 
+	layer.add_child(preload("res://boss_bar.gd").new())
 	minimap = preload("res://minimap.gd").new()
 	layer.add_child(minimap)
 	minimap.setup(self)
@@ -1299,6 +1304,8 @@ func _update_hud() -> void:
 		"build_item": build_item, "build_error": ghost_error,
 		"build_cost": TowerScript.COSTS[0] if build_item == "tower" else WALL_COST,
 		"ability": ab.get("name", ""),
+		"pets": get_tree().get_nodes_in_group("pets").map(func(p): return {"level": p.level, "color": p.info()["color"]}),
+		"combo": player.combo, "combo_frac": clampf(player.combo_t / player.combo_window(), 0.0, 1.0), "counter": player.counter_t > 0.0,
 	})
 
 
@@ -1331,6 +1338,8 @@ func _on_leveled(new_level: int) -> void:
 		menu_queue.append({"type": "skill"})
 	if new_level % player.SPECIAL_EVERY == 0:
 		menu_queue.append({"type": "special"})
+	if new_level % perk_every == 0:
+		menu_queue.append({"type": "perk"})
 	_next_menu()
 
 
@@ -1357,6 +1366,17 @@ func _next_menu() -> void:
 			var art := Sprites.hero(LinesData.LINES[i]["forms"], 1)
 			line_icons.append(Sprites.first_frame_icon(art, 3) if art != "" else null)
 		_open_menu("FIRST EVOLUTION: choose your evolution line", entries, func(i): pick_line(line_ids[i]), 2, 440, line_icons)
+	elif item["type"] == "perk":
+		var cards := PerksData.roll(player.perks, rng, 3)
+		if cards.is_empty():
+			_next_menu()
+			return
+		var perk_entries: Array[String] = []
+		for id in cards:
+			var info: Dictionary = PerksData.PERKS[id]
+			var have: int = int(player.perks.get(id, 0))
+			perk_entries.append("%d. %s   %d → %d\n    %s" % [perk_entries.size() + 1, info["name"], have, have + 1, info["desc"]])
+		_open_menu("LEVEL %d: choose an UPGRADE for this run" % player.level, perk_entries, func(i): pick_perk(cards[i]), 1, 620)
 	elif item["type"] == "special":
 		var specials := SkillsData.roll_specials(player.specials, rng, 3)
 		if specials.is_empty():
@@ -1461,6 +1481,14 @@ func pick_skill(id: String) -> void:
 
 
 ## The special-skill menu (every 12th level, or tests) picks a special.
+func pick_perk(id: String) -> void:
+	_close_menu()
+	player.add_perk(id)
+	Popups.text(get_tree(), player.global_position + Vector2(0, -34.0), PerksData.PERKS[id]["name"] + "!", Popups.BIG, 16)
+	Sfx.play(get_tree(), "pick")
+	_next_menu()
+
+
 func pick_special(id: String) -> void:
 	_close_menu()
 	player.learn_special(id)
@@ -1707,6 +1735,7 @@ const SHOP := [
 	{"name": "Rage tonic", "cost": 35, "desc": "+40% bite damage for 60 seconds"},
 	{"name": "Mystery relic", "cost": 90, "desc": "a random permanent relic"},
 	{"name": "EXP pouch", "cost": 60, "desc": "a pile of EXP right now"},
+	{"name": "Pet egg", "cost": 80, "desc": "hatches a companion that fights and grows (3 at most)"},
 ]
 
 
@@ -1741,8 +1770,34 @@ func _shop_pick(i: int, merchant) -> void:
 			player.add_relic(ids[rng.randi_range(0, ids.size() - 1)])
 		3:
 			player.add_xp(10 + 4 * player.level)
+		4:
+			if not hatch_pet():
+				bones += int(item["cost"])
+				_say("You already have %d pets." % PetScript.MAX_PETS)
+				return
 	Sfx.play(get_tree(), "coin")
 	_say("Bought: %s" % item["name"])
+
+
+## A pet hatches next to 小怪. Returns false when he already has the most pets.
+func hatch_pet() -> bool:
+	var have := get_tree().get_nodes_in_group("pets")
+	if have.size() >= PetScript.MAX_PETS:
+		return false
+	var taken := {}
+	for p in have:
+		taken[p.species] = int(taken.get(p.species, 0)) + 1
+	var kinds: Array = PetScript.SPECIES.keys()
+	kinds.sort_custom(func(a, b): return int(taken.get(a, 0)) < int(taken.get(b, 0)))
+	var fewest: Array = kinds.filter(func(k): return int(taken.get(k, 0)) == int(taken.get(kinds[0], 0)))
+	var pet = PetScript.new()
+	pet.species = fewest[rng.randi_range(0, fewest.size() - 1)]
+	pet.slot = have.size()
+	pet.position = player.global_position + Vector2(0, 18)
+	add_child(pet)
+	Popups.text(get_tree(), player.global_position + Vector2(0, -40.0), "%s hatched!" % pet.form_name(), Popups.BIG, 16)
+	Sfx.play(get_tree(), "levelup", -4.0)
+	return true
 
 
 ## Free tiles around village wells and inside castle courtyards: where new villagers like to appear.

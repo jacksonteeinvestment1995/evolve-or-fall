@@ -31,6 +31,12 @@ const SKILLS := {
 	"step": {"name": "Shadow Step", "kind": "passive", "auto": true, "max": 5, "cd": 2.0, "desc": "Auto: 10% chance per rank to dodge a hit and blink away"},
 	"magnet": {"name": "EXP Magnet", "kind": "passive", "max": 5, "desc": "Pulls EXP stones to you from further away (+90 px per rank)"},
 	"roar": {"name": "Roar", "kind": "passive", "auto": true, "max": 5, "cd": 15.0, "desc": "Auto: when surrounded or low on HP, knocks back and stuns villagers"},
+	# long-range skills: they fire on their own at villagers that are still far away
+	"frost_shards": {"name": "Frost Shards", "kind": "passive", "auto": true, "max": 5, "cd": 6.0, "desc": "Auto: a fan of 3 icy shards at a villager up to 340 px away (slows them)"},
+	"meteor_call": {"name": "Falling Star", "kind": "passive", "auto": true, "max": 5, "cd": 9.0, "desc": "Auto: calls a meteor onto a villager up to 440 px away (burns the area)"},
+	"chain_zap": {"name": "Chain Lightning", "kind": "passive", "auto": true, "max": 5, "cd": 7.0, "desc": "Auto: lightning leaps from the nearest villager through up to 3 more (+1 per rank)"},
+	"thorn_ring": {"name": "Thorn Burst", "kind": "passive", "auto": true, "max": 5, "cd": 8.0, "desc": "Auto: a ring of 10 thorns flies out 240 px in every direction"},
+	"spirit_lance": {"name": "Spirit Lance", "kind": "passive", "auto": true, "max": 5, "cd": 10.0, "desc": "Auto: one huge piercing lance, 600 px long (5x bite)"},
 	# Not offered at level-ups: 小怪 gets it by reaching the final form (level 50).
 	"doom": {"name": "Final Calamity", "kind": "passive", "auto": true, "ultimate": true, "max": 1, "cd": 25.0, "desc": "The strongest skill, earned by the final form: a huge blast that devastates and stuns everything around you"},
 }

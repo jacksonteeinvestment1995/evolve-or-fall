@@ -92,6 +92,10 @@ func _notice_changes(d: Dictionary) -> void:
 			_spark(Vector2(12, 44), Color("fff2c0"), 22.0)
 	if int(d["kills"]) > int(_prev["kills"]):
 		_pop["kills"] = 1.0
+	if int(d["combo"]) > int(_prev["combo"]):
+		_pop["combo"] = 1.0
+	if bool(d["counter"]) and not bool(_prev["counter"]):
+		_flash["counter"] = 1.0
 	if bool(d["night"]) != bool(_prev["night"]):
 		_flash["clock"] = 1.0
 	for k in ["roll", "lunge"]:
@@ -204,6 +208,11 @@ func _draw() -> void:
 		_diamond(Vector2(x + 8, y + sin(_t * 2.5 + i) * 1.2), 7.0, Color("c8a0ff"), i)
 		_text(Vector2(x + 18, y + 5), "x%d" % info["relics"][i]["n"], 12, INK)
 		x += 36.0
+	# the pets: a paw with its level, after the buffs and relics
+	for pet in info["pets"]:
+		_paw(Vector2(x + 8, y), pet["color"])
+		_text(Vector2(x + 18, y + 5), "L%d" % pet["level"], 12, INK)
+		x += 40.0
 	# row 4: what E / X do right now
 	y = 102.0
 	x = 0.0
@@ -232,6 +241,21 @@ func _draw() -> void:
 			var glow := 0.65 + 0.35 * sin(_t * 4.0)
 			draw_circle(Vector2(x + 90, y), 9.0, Color(1, 0.85, 0.3, 0.18 * glow))
 			_text(Vector2(x + 85, y + 5), "E", 14, Color(1, 0.85, 0.3, glow))
+	# combo chain and the counter that a perfect dodge sets up (right of the build prompt)
+	if int(info["combo"]) >= 2:
+		var cx := 270.0
+		var cy := 102.0
+		var heat := clampf(float(info["combo"]) / 20.0, 0.0, 1.0)
+		var flame := Color("ffb030").lerp(Color("ff4a30"), heat)
+		_flame(Vector2(cx, cy), 1.0 + 0.3 * float(_pop.get("combo", 0.0)), flame)
+		_num(Vector2(cx + 14, cy + 6), "x%d" % info["combo"], 16, flame.lightened(0.3), "combo")
+		draw_arc(Vector2(cx, cy), 12.0, -PI / 2.0, -PI / 2.0 + TAU * float(info["combo_frac"]), 20, Color(flame, 0.9), 2.0)
+	if bool(info["counter"]):
+		var pulse := 0.6 + 0.4 * sin(_t * 12.0)
+		draw_circle(Vector2(390, 102), 13.0, Color(1, 0.85, 0.3, 0.25 * pulse))
+		draw_arc(Vector2(390, 102), 13.0, 0, TAU, 24, Color(1, 0.85, 0.3, pulse), 2.0)
+		_fang(Vector2(390, 102), true)
+		_text(Vector2(406, 107), "!", 16, Color(1, 0.85, 0.3, pulse))
 	# sparks on top of everything
 	for s in _sparks:
 		var a: float = float(s["life"]) / float(s["max"])
@@ -431,3 +455,15 @@ func _wall(c: Vector2) -> void:
 	draw_line(c + Vector2(0, -5), c + Vector2(0, 1), Color("4a4640"), 1.2)
 	draw_line(c + Vector2(-4, 1), c + Vector2(-4, 7), Color("4a4640"), 1.2)
 	draw_line(c + Vector2(4, 1), c + Vector2(4, 7), Color("4a4640"), 1.2)
+
+
+func _flame(c: Vector2, s: float, col: Color) -> void:
+	var w := 1.0 + 0.1 * sin(_t * 14.0)
+	draw_colored_polygon(PackedVector2Array([c + Vector2(0, -9) * s * w, c + Vector2(6, 0) * s, c + Vector2(4, 7) * s, c + Vector2(-4, 7) * s, c + Vector2(-6, 0) * s]), col)
+	draw_colored_polygon(PackedVector2Array([c + Vector2(0, -3) * s, c + Vector2(3, 2) * s, c + Vector2(2, 6) * s, c + Vector2(-2, 6) * s, c + Vector2(-3, 2) * s]), Color(1, 0.95, 0.7))
+
+
+func _paw(c: Vector2, col: Color) -> void:
+	draw_circle(c + Vector2(0, 3), 4.5, col)
+	for p in [Vector2(-5, -3), Vector2(-1.7, -6), Vector2(1.7, -6), Vector2(5, -3)]:
+		draw_circle(c + p, 1.9, col)

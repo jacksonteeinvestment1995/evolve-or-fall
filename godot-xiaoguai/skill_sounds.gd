@@ -15,7 +15,8 @@ const MODS := {"bite": "s_claw", "hp": "s_shield", "cut": "s_shield", "speed": "
 const OVERRIDE := {"w_wail": "s_spirit", "d_gust": "s_wind", "b_roar": "s_growl", "m_quake": "s_quake", "s_storm": "s_bone", "z_chill": "s_ice", "l_splash": "s_goo",
 	"n_thorn": "s_leaf", "n_tangle": "s_leaf", "d_inferno": "s_blast", "e_spark": "s_hell"}
 const GENERAL := {"hide": "s_shield", "fangs": "s_claw", "paws": "s_dash", "jaws": "s_bone", "drain": "s_drain", "greed": "coin", "nova": "nova", "bolt": "bolt",
-	"step": "dodge", "roar": "roar", "doom": "doom", "magnet": "s_buff"}
+	"step": "dodge", "roar": "roar", "doom": "doom", "magnet": "s_buff",
+	"frost_shards": "s_ice", "meteor_call": "s_fire", "chain_zap": "s_zap", "thorn_ring": "s_leaf", "spirit_lance": "s_spirit"}
 const SPECIAL := {"overdrive": "s_thunder", "frenzy": "s_claw", "ironwill": "s_rock", "secondwind": "s_heal", "phoenix": "s_fire", "cleave": "s_claw",
 	"stormcaller": "s_zap", "bloodmoon": "s_curse", "gravity": "s_drain", "titan": "s_quake", "mastery": "s_holy", "bonehoard": "coin"}
 
