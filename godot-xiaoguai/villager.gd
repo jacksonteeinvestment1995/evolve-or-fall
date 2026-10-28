@@ -29,6 +29,9 @@ const STRUCTURE_AGGRO := 55.0 ## a tower or wall this close (and nearer than 小
 const LOS_RANGE := 900.0      ## beyond this they just walk straight; closer, they steer around obstacles
 
 ## Base stats for forms 1 to 5; each line then scales them with hp / dmg / spd.
+## Bites are 3.3x as fast as they were, so every villager has 2.5x the health it used to (bosses 3x).
+const HP_SCALE := 2.5
+const BOSS_HP_SCALE := 3.0
 const HP := [2, 6, 12, 20, 32]
 const DMG := [1, 1, 2, 3, 4]
 const SPEED := [55.0, 62.0, 70.0, 78.0, 86.0]
@@ -242,7 +245,7 @@ func effective_speed() -> float:
 func _apply_form() -> void:
 	if secret >= 0:
 		var h: Dictionary = HIDDEN[secret]
-		max_hp = h["hp"]
+		max_hp = roundi(int(h["hp"]) * BOSS_HP_SCALE)
 		damage = h["dmg"]
 		speed = h["spd"]
 		xp_value = h["xp"]
@@ -250,7 +253,7 @@ func _apply_form() -> void:
 		body_scale = h["size"]
 		return
 	var l: Dictionary = LINES[line]
-	max_hp = maxi(1, roundi(HP[stage] * l["hp"]))
+	max_hp = maxi(1, roundi(HP[stage] * l["hp"] * HP_SCALE))
 	damage = maxi(1, roundi(DMG[stage] * l["dmg"]))
 	speed = SPEED[stage] * l["spd"]
 	xp_value = XP[stage]

@@ -9,7 +9,7 @@ signal destroyed(tile: Vector2i)
 
 const MAX_LEVEL := 3
 const COSTS := [15, 25, 40]           ## bones: build, upgrade to 2, upgrade to 3
-const DAMAGE := [1, 2, 3]
+const DAMAGE := [3, 5, 8]   ## (villagers have 2.5x the health since 小怪 bites faster)
 const RATE := [1.0, 0.8, 0.6]         ## seconds between shots
 const REACH := [120.0, 140.0, 160.0]
 

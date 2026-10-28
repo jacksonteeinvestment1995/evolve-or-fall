@@ -41,7 +41,7 @@ func _physics_process(delta: float) -> void:
 		dir = (target.global_position - global_position).normalized()
 		if best < 16.0 and bite_cd == 0.0:
 			bite_cd = 0.8
-			target.take_hit(damage, dir, true)  # a pet's kill drops an EXP stone, not direct EXP
+			target.take_hit(damage * 2, dir, true)  # a pet's kill drops an EXP stone, not direct EXP
 	velocity = dir * speed
 	move_and_slide()
 	queue_redraw()
