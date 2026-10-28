@@ -69,15 +69,21 @@ func _fetch_music_pack() -> void:
 	if not OS.has_feature("web"):
 		return
 	var http := HTTPRequest.new()
-	http.download_file = "user://" + MUSIC_PACK
 	add_child(http)
-	http.request_completed.connect(func(result: int, code: int, _h, _b):
-		if result == HTTPRequest.RESULT_SUCCESS and code == 200 				and ProjectSettings.load_resource_pack("user://" + MUSIC_PACK):
-			pack_loaded = true
-		else:
-			push_warning("Music pack download failed (%d/%d)" % [result, code])
+	http.request_completed.connect(func(result: int, code: int, _h, body: PackedByteArray):
+		if result == HTTPRequest.RESULT_SUCCESS and code == 200 and not body.is_empty():
+			var f := FileAccess.open("user://" + MUSIC_PACK, FileAccess.WRITE)
+			if f != null:
+				f.store_buffer(body)
+				f.close()
+				pack_loaded = ProjectSettings.load_resource_pack("user://" + MUSIC_PACK)
+		if not pack_loaded:
+			push_warning("Music pack could not be loaded (%d/%d)" % [result, code])
 		http.queue_free())
-	http.request(MUSIC_PACK)
+	# the pack sits next to the page: the page address without its file name, query or hash
+	var href := str(JavaScriptBridge.get_interface("location").href).split("?")[0].split("#")[0]
+	var base := href.trim_suffix("/") if href.ends_with("/") else href.get_base_dir()
+	http.request(base + "/" + MUSIC_PACK)
 
 
 ## "Title, by Composer (license)" for the track playing now, or "".

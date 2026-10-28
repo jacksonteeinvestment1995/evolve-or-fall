@@ -2232,5 +2232,26 @@ func _init() -> void:
 	await frames(2)
 	check("GOD's Judgment calls down several strikes", zones().size() >= bs_z0 + 6)
 
+	# YouTube Playables bridge and touch controls
+	await fresh()
+	check("the SDK is told about the first frame, then that the game is ready", main.playables.calls == ["firstFrameReady", "gameReady"], str(main.playables.calls))
+	main.playables.on_pause()
+	check("a pause from YouTube stops the game", paused)
+	main.playables.on_resume()
+	check("a resume from YouTube restarts it", not paused)
+	main.menu_open = true
+	main.pause_on_menu = true
+	main.playables.on_pause()
+	main.playables.on_resume()
+	check("a resume does not close the game's own menu pause", paused)
+	main.menu_open = false
+	main.playables.on_resume()
+	var tc_ok := false
+	for n in main.get_children():
+		for c in n.get_children():
+			if c.get_script() != null and str(c.get_script().resource_path).ends_with("touch_controls.gd"):
+				tc_ok = true
+	check("touch controls exist", tc_ok)
+	
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

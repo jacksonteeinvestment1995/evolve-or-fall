@@ -124,6 +124,7 @@ var ghost_tile := Vector2i(-1, -1)
 var ghost_error := ""
 var ghost_dirty := true
 var hud: Control
+var playables: Node
 var banner: Label
 var evo_banner: Label
 var notice: Label
@@ -170,6 +171,33 @@ func _ready() -> void:
 	_update_music()
 	_update_daynight()
 	_update_hud()
+	get_window().size_changed.connect(_fit_screen)
+	_fit_screen()
+	var touch := CanvasLayer.new()
+	touch.layer = 3
+	add_child(touch)
+	touch.add_child(preload("res://touch_controls.gd").new())
+	# YouTube Playables: the first frame is up, then the game is ready to play
+	playables = preload("res://playables.gd").new()
+	add_child(playables)
+	playables.first_frame_ready()
+	await get_tree().process_frame
+	playables.game_ready()
+
+
+## Phones held upright get a tall layout (720 wide) and everything else a wide one (1280 wide), so the buttons and
+## text stay a readable size; the HUD drops under the minimap when the screen is narrow.
+func _fit_screen() -> void:
+	var win := get_window()
+	var portrait := win.size.y > win.size.x
+	win.content_scale_size = Vector2i(720, 1280) if portrait else Vector2i(1280, 720)
+	if hud != null:
+		hud.position = Vector2(16, 236 if portrait else 12)
+
+
+## True while the game itself wants the tree paused (a level-up menu), so a resume from YouTube does not undo it.
+func wants_pause() -> bool:
+	return menu_open and pause_on_menu
 
 
 # --- music ---
