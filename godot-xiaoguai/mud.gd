@@ -102,7 +102,7 @@ func _draw() -> void:
 	var rect := Rect2(-1e9, -1e9, 2e9, 2e9)
 	if cam != null:
 		var c := cam.get_screen_center_position()
-		var half := Vector2(1280, 720) / cam.zoom * 0.5 + Vector2(TILE, TILE)
+		var half := get_viewport_rect().size / cam.zoom * 0.5 + Vector2(TILE, TILE)
 		rect = Rect2(c - half, half * 2.0)
 	var x0 := floori(rect.position.x / TILE)
 	var x1 := ceili(rect.end.x / TILE)

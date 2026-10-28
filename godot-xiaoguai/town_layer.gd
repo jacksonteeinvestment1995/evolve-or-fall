@@ -49,7 +49,7 @@ func _view() -> Rect2:
 	if cam == null:
 		return Rect2(-1e9, -1e9, 2e9, 2e9)
 	var c := cam.get_screen_center_position()
-	var half := Vector2(1280, 720) / cam.zoom * 0.5 + Vector2(TILE * 3, TILE * 4)
+	var half := get_viewport_rect().size / cam.zoom * 0.5 + Vector2(TILE * 3, TILE * 4)
 	return Rect2(c - half, half * 2.0)
 
 

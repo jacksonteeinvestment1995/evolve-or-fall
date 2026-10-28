@@ -1,7 +1,8 @@
 extends Control
 ## The top-left HUD, drawn with icons and bars instead of sentences, and animated:
-##   row 1  level star, EXP bar, heart + HP bar, sun/moon + day number + time-left bar
-##   row 2  bones, kills, villagers alive, village level
+##   row 1  level star, EXP bar, heart + HP bar
+##   row 2  bones, kills, sun/moon + day number + time-left bar (no enemy or village counts: the player is not told
+##          how many are coming)
 ##   row 3  sprint bar, roll and lunge cooldown rings, buff and relic chips
 ##   row 4  what the build key does right now
 ## Bars ease toward their value, HP leaves a pale damage trail and beats faster when low, numbers pop when they
@@ -12,7 +13,7 @@ const INK := Color(1, 1, 1, 0.95)
 const SHADOW := Color(0, 0, 0, 0.6)
 const BAR_W := 150.0
 const BAR_H := 14.0
-const PLATE := Rect2(-12, -8, 586, 130)
+const PLATE := Rect2(-12, -8, 440, 130)
 
 var info := {}
 var _prev := {}
@@ -38,7 +39,7 @@ var _sparks: Array = []   ## {p, v, life, max, col, r}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(560, 120)
+	custom_minimum_size = Vector2(420, 120)
 	size = custom_minimum_size
 	_plate_box.bg_color = Color(0.04, 0.05, 0.1, 0.5)
 	_plate_box.border_color = Color(1, 1, 1, 0.14)
@@ -91,10 +92,6 @@ func _notice_changes(d: Dictionary) -> void:
 			_spark(Vector2(12, 44), Color("fff2c0"), 22.0)
 	if int(d["kills"]) > int(_prev["kills"]):
 		_pop["kills"] = 1.0
-	if int(d["alive"]) != int(_prev["alive"]):
-		_pop["alive"] = 0.6
-	if int(d["village_level"]) != int(_prev["village_level"]):
-		_pop["village"] = 1.0
 	if bool(d["night"]) != bool(_prev["night"]):
 		_flash["clock"] = 1.0
 	for k in ["roll", "lunge"]:
@@ -162,19 +159,6 @@ func _draw() -> void:
 		"%d/%d" % [info["hp"], info["max_hp"]], float(_flash.get("hp_heal", 0.0)) - float(_flash.get("hp_hit", 0.0)) * 0.0, low)
 	if float(_flash.get("hp_hit", 0.0)) > 0.0:
 		draw_rect(Rect2(Vector2(x, 10) + shake, Vector2(BAR_W, BAR_H)), Color(1, 0.2, 0.2, 0.35 * float(_flash["hp_hit"])))
-	x += BAR_W + 22.0
-	var cf := float(_flash.get("clock", 0.0))
-	if night:
-		_moon(Vector2(x + 9, 16), 9.0)
-	else:
-		_sun(Vector2(x + 9, 16), 8.0)
-	if cf > 0.0:
-		draw_arc(Vector2(x + 9, 16), 10.0 + (1.0 - cf) * 18.0, 0, TAU, 28, Color(1, 1, 1, cf * 0.7), 2.0)
-	x += 24.0
-	_num(Vector2(x, 22), str(info["day"]), 16, Color("ffe08a") if not night else Color("b8c4ff"), "clock")
-	x += 22.0
-	var phase_col := Color("ffb020") if not night else Color("6a7cff")
-	_bar(Rect2(x, 10, 70.0, BAR_H), float(info["phase_left"]) / maxf(float(info["phase_len"]), 1.0), -1.0, phase_col, phase_col.lightened(0.4), "", cf)
 	# row 2
 	var y := 44.0
 	x = 0.0
@@ -183,12 +167,20 @@ func _draw() -> void:
 	x += 90.0
 	_skull(Vector2(x + 10, y), 9.0 * (1.0 + 0.3 * float(_pop.get("kills", 0.0))))
 	_num(Vector2(x + 26, y + 6), str(roundi(_kills)), 16, INK, "kills")
+	# the day or night: sun or moon, day number and time left, beside the kills
 	x += 90.0
-	_person(Vector2(x + 10, y), 1.0 + 0.2 * float(_pop.get("alive", 0.0)))
-	_num(Vector2(x + 24, y + 6), "%d/%d" % [info["alive"], info["target_pop"]], 16, INK, "alive")
-	x += 100.0
-	_house(Vector2(x + 10, y), 1.0 + 0.3 * float(_pop.get("village", 0.0)))
-	_num(Vector2(x + 26, y + 6), "%d/5" % info["village_level"], 16, INK, "village")
+	var cf := float(_flash.get("clock", 0.0))
+	if night:
+		_moon(Vector2(x + 9, y), 9.0)
+	else:
+		_sun(Vector2(x + 9, y), 8.0)
+	if cf > 0.0:
+		draw_arc(Vector2(x + 9, y), 10.0 + (1.0 - cf) * 18.0, 0, TAU, 28, Color(1, 1, 1, cf * 0.7), 2.0)
+	x += 24.0
+	_num(Vector2(x, y + 6), str(info["day"]), 16, Color("ffe08a") if not night else Color("b8c4ff"), "clock")
+	x += 22.0
+	var phase_col := Color("ffb020") if not night else Color("6a7cff")
+	_bar(Rect2(x, y - 7, 90.0, BAR_H), float(info["phase_left"]) / maxf(float(info["phase_len"]), 1.0), -1.0, phase_col, phase_col.lightened(0.4), "", cf)
 	# row 3
 	y = 74.0
 	x = 0.0
@@ -367,20 +359,6 @@ func _skull(c: Vector2, r: float) -> void:
 	draw_circle(c + Vector2(r * 0.38, -1), r * 0.25, Color("2a2a2a"))
 	draw_circle(c + Vector2(-r * 0.38, -1), r * 0.1, Color(1, 0.3, 0.2, 0.4 + 0.5 * glow))
 	draw_circle(c + Vector2(r * 0.38, -1), r * 0.1, Color(1, 0.3, 0.2, 0.4 + 0.5 * glow))
-
-
-func _person(c: Vector2, s: float) -> void:
-	var hop := absf(sin(_t * 2.2)) * -1.2
-	draw_circle(c + Vector2(0, -5 + hop) * s, 3.6 * s, Color("f0c8a0"))
-	draw_colored_polygon(PackedVector2Array([c + Vector2(-6, 8) * s, c + Vector2(6, 8) * s, c + Vector2(4, -1 + hop) * s, c + Vector2(-4, -1 + hop) * s]), Color("c8503c"))
-
-
-func _house(c: Vector2, s: float) -> void:
-	draw_rect(Rect2(c + Vector2(-7, -1) * s, Vector2(14, 9) * s), Color("d8b888"))
-	draw_colored_polygon(PackedVector2Array([c + Vector2(-9, -1) * s, c + Vector2(9, -1) * s, c + Vector2(0, -9) * s]), Color("b04030"))
-	draw_rect(Rect2(c + Vector2(-2, 3) * s, Vector2(4, 5) * s), Color("6a4020"))
-	var smoke := fposmod(_t * 0.7, 1.0)
-	draw_circle(c + Vector2(5 + smoke * 3.0, -9 * s - smoke * 7.0), 1.6 * (1.0 - smoke * 0.5), Color(1, 1, 1, 0.5 * (1.0 - smoke)))
 
 
 func _bolt(c: Vector2, s: float, col: Color) -> void:

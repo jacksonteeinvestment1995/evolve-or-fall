@@ -873,6 +873,7 @@ func blink(direction: Vector2) -> void:
 		pos = next
 		travelled += 8.0
 	global_position = pos
+	reset_physics_interpolation()  # a jump, not a glide
 	invuln = maxf(invuln, 0.4)
 
 

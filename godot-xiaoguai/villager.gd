@@ -545,7 +545,25 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 	return fired
 
 
+## Villagers far off screen think and move only every fourth tick (with the time of all four), which saves a lot of
+## work on phones; anything near 小怪, hidden bosses and chasers close by run every tick.
+const FAR_LOD := 1100.0
+var _lod_tick := 0
+var _lod_time := 0.0
+
+
 func _physics_process(delta: float) -> void:
+	if secret < 0 and not Engine.has_meta("deterministic_map"):  # (the tests need every villager on every tick)
+		var near_player = get_tree().get_first_node_in_group("player")
+		if near_player != null and near_player.global_position.distance_squared_to(global_position) > FAR_LOD * FAR_LOD:
+			_lod_tick += 1
+			_lod_time += delta
+			if _lod_tick % 4 != 0:
+				return
+			delta = _lod_time
+			_lod_time = 0.0
+		else:
+			_lod_time = 0.0
 	hit_cd = maxf(hit_cd - delta, 0.0)
 	shoot_cd = maxf(shoot_cd - delta, 0.0)
 	skill_cd = maxf(skill_cd - delta, 0.0)

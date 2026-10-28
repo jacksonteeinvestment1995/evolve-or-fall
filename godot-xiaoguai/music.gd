@@ -20,14 +20,14 @@ const TRACKS := {
 	"dk_nene6": {"loop": "res://audio/music/dk_nene6.ogg", "title": "Boss Battle #6 Metal", "by": "nene (CC0)"},
 	"dk_metal_chromatic": {"loop": "res://audio/music/dk_metal_chromatic.ogg", "title": "Metal (Chromatic, Electronic)", "by": "Pro Sensory (CC0)"},
 	"dk_davieplier": {"loop": "res://audio/music/dk_davieplier.ogg", "title": "Heavy battle music", "by": "Davieplier (CC0)"},
-	# situational tracks, generated in code (synth_music.gd), so they need no files or licence
-	"peace": {"synth": "peace", "title": "Quiet Meadow", "by": "generated in-game"},
-	"danger": {"synth": "danger", "title": "Heartbeat", "by": "generated in-game"},
-	"hidden": {"synth": "hidden", "title": "Something Stirs", "by": "generated in-game"},
-	"meteor": {"synth": "meteor", "title": "Falling Sky", "by": "generated in-game"},
-	"quake": {"synth": "quake", "title": "Ground Breaker", "by": "generated in-game"},
-	"raid": {"synth": "raid", "title": "War Horn", "by": "generated in-game"},
-	"treasure": {"synth": "treasure", "title": "Golden Rain", "by": "generated in-game"},
+	# situational tracks, made in code (synth_music.gd) and rendered to small ogg files in audio/synth/, so they need no licence
+	"peace": {"loop": "res://audio/synth/peace.ogg", "title": "Quiet Meadow", "by": "generated in-game"},
+	"danger": {"loop": "res://audio/synth/danger.ogg", "title": "Heartbeat", "by": "generated in-game"},
+	"hidden": {"loop": "res://audio/synth/hidden.ogg", "title": "Something Stirs", "by": "generated in-game"},
+	"meteor": {"loop": "res://audio/synth/meteor.ogg", "title": "Falling Sky", "by": "generated in-game"},
+	"quake": {"loop": "res://audio/synth/quake.ogg", "title": "Ground Breaker", "by": "generated in-game"},
+	"raid": {"loop": "res://audio/synth/raid.ogg", "title": "War Horn", "by": "generated in-game"},
+	"treasure": {"loop": "res://audio/synth/treasure.ogg", "title": "Golden Rain", "by": "generated in-game"},
 }
 const FADE_SECONDS := 1.5
 
@@ -62,6 +62,7 @@ func _ready() -> void:
 
 ## The web build ships its streamed music as a separate pack that is downloaded once the game is running.
 const MUSIC_PACK := "music.pck"
+const FIRST_TRACK := "dk_davieplier"   ## the one big-music track that ships in the first download
 var pack_loaded := false
 
 
@@ -98,10 +99,11 @@ func play_track(id: String) -> bool:
 	if id == current or not TRACKS.has(id):
 		return false
 	var info: Dictionary = TRACKS[id]
-	var loop_stream: AudioStream = SynthMusic.stream(info["synth"]) if info.has("synth") else _load(info["loop"], true)
+	var loop_stream: AudioStream = _load(info["loop"], true)
+	if loop_stream == null and OS.has_feature("web") and not pack_loaded and id != FIRST_TRACK and not info["loop"].begins_with("res://audio/synth/"):
+		# the music pack is still downloading: the one small track in the first download covers the wait
+		return play_track(FIRST_TRACK)
 	if loop_stream == null:
-		if info.has("synth"):
-			SynthMusic.prepare(info["synth"])  # not built yet: it will play on a later try
 		return false
 	current = id
 	plays = 0

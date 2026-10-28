@@ -140,11 +140,9 @@ var menu_kind := ""  # what the open menu is: "line", "skill" or "special"
 var pause_on_menu := true  # the game stops while a level-up menu is open (tests turn this off)
 
 
-func _exit_tree() -> void:
-	SynthMusic.finish()
-
-
 func _ready() -> void:
+	if OS.has_feature("web") or DisplayServer.is_touchscreen_available():
+		Engine.physics_ticks_per_second = 30  # half the physics work; interpolation keeps the motion smooth
 	rng.randomize()
 	if not Engine.has_meta("deterministic_map"):
 		map_seed = randi()
@@ -166,7 +164,6 @@ func _ready() -> void:
 	events = preload("res://events.gd").new()
 	events.main = self
 	add_child(events)
-	SynthMusic.prepare_all()  # the situational music is built in the background
 	music = MusicScript.new()
 	add_child(music)
 	_update_music()
@@ -351,6 +348,13 @@ func _build_hd2d() -> void:
 	tree_layer.cam = cam
 	add_child(tree_layer)
 	move_child(tree_layer, 0)
+	var ground_layer := preload("res://ground_layer.gd").new()
+	ground_layer.cam = cam
+	ground_layer.cols = COLS
+	ground_layer.rows = ROWS
+	ground_layer.show_behind_parent = true  # under the shadows and props main draws itself
+	add_child(ground_layer)
+	move_child(ground_layer, 0)
 	var mud_layer := preload("res://mud.gd").new()
 	mud_layer.cells = mud
 	mud_layer.cam = cam
@@ -372,12 +376,14 @@ func _build_hd2d() -> void:
 	town_layer.build()
 	var path_layer := preload("res://water.gd").new()
 	path_layer.cells = paths
+	path_layer.cam = cam
 	path_layer.base = "stone_path"
 	path_layer.edge_prefix = "pathedge_"
 	add_child(path_layer)
 	move_child(path_layer, 0)
 	var pond_layer := preload("res://water.gd").new()
 	pond_layer.cells = water
+	pond_layer.cam = cam
 	add_child(pond_layer)
 	move_child(pond_layer, 0)  # draw under the player, villagers and buildings so their whole bodies show in water
 
@@ -387,7 +393,8 @@ func _build_hd2d() -> void:
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hd2d_mat = ShaderMaterial.new()
-	hd2d_mat.shader = load("res://hd2d.gdshader")
+	# phones and browsers get the light finish: the full one reads the whole screen back every frame
+	hd2d_mat.shader = load("res://hd2d_lite.gdshader" if OS.has_feature("web") or DisplayServer.is_touchscreen_available() else "res://hd2d.gdshader")
 	rect.material = hd2d_mat
 	layer.add_child(rect)
 	add_child(layer)
@@ -1659,15 +1666,13 @@ func _draw() -> void:
 	var mud_tex := Sprites.tex("mud")
 	var tree_tex := [Sprites.tex("tree_1"), Sprites.tex("tree_2")]
 	var art := grass[0] != null
-	draw_rect(Rect2(0, 0, COLS * TILE, ROWS * TILE), Color("5b8a3c"))
-	for y in ROWS:
-		for x in COLS:
-			if art:
-				# a stable pseudo-random pick, so the meadow does not flicker or repeat in rows
-				var pick := ((x * 73856093) ^ (y * 19349663)) & 0x7fffffff
-				draw_texture_rect(grass[pick % 3 if pick % 7 < 2 else 0], Rect2(x * TILE, y * TILE, TILE, TILE), false)
-			elif (x + y) % 2 == 0:
-				draw_rect(Rect2(x * TILE, y * TILE, TILE, TILE), Color(1, 1, 1, 0.04))
+	if not art:
+		draw_rect(Rect2(0, 0, COLS * TILE, ROWS * TILE), Color("5b8a3c"))
+	if not art:  # no grass art: a faint checkerboard (with art, ground_layer.gd draws the meadow near the camera)
+		for y in ROWS:
+			for x in COLS:
+				if (x + y) % 2 == 0:
+					draw_rect(Rect2(x * TILE, y * TILE, TILE, TILE), Color(1, 1, 1, 0.04))
 
 	for m in mud:
 		var r := Rect2(m.x * TILE, m.y * TILE, TILE, TILE)

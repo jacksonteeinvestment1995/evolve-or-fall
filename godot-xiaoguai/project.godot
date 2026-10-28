@@ -25,6 +25,11 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[physics]
+
+common/max_physics_steps_per_frame=3
+common/physics_interpolation=true
+
 [rendering]
 
 viewport/hdr_2d=true
