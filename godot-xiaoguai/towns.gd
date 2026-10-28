@@ -423,7 +423,11 @@ static func _garrison(main: Node2D, c: Dictionary, count: int, stage_min: int, s
 	for i in count:
 		var t := _courtyard(c, rng, main)
 		if t.x >= 0:
-			main._spawn_villager(main._tile_center(t), rng.randi_range(stage_min, stage_max), lines[rng.randi_range(0, lines.size() - 1)])
+			var v = main._spawn_villager(main._tile_center(t), rng.randi_range(stage_min, stage_max), lines[rng.randi_range(0, lines.size() - 1)])
+			v.guard_home = Vector2(c["rect"].get_center()) * 32.0
+			v.guard_range = 700.0 if c["kind"] == "big" else 480.0
+			v.guard_leash = 900.0 if c["kind"] == "big" else 620.0
+			v.guard_until = main.GUARD_RELEASE if c["kind"] == "big" else 780.0
 
 
 static func _chest(main: Node2D, c: Dictionary, tier: String, rng: RandomNumberGenerator) -> void:

@@ -46,7 +46,7 @@ const LINES := [
 	{"name": "Priest", "forms": ["Acolyte", "Priest", "Cleric", "High Priest", "Saint"], "hp": 1.1, "dmg": 0.8, "spd": 1.0},
 	{"name": "Mage", "forms": ["Apprentice", "Mage", "Battlemage", "Archmage", "Grand Magus"], "hp": 0.7, "dmg": 1.5, "spd": 0.9},
 	{"name": "Smith", "forms": ["Smith", "Armorer", "Forgemaster", "Iron Smith", "Titan Smith"], "hp": 1.6, "dmg": 1.2, "spd": 0.7},
-	{"name": "Thief", "forms": ["Thief", "Rogue", "Assassin", "Shadow Blade", "Night Master"], "hp": 0.8, "dmg": 1.1, "spd": 1.4},
+	{"name": "Thief", "forms": ["Thief", "Rogue", "Assassin", "Shadow Blade", "Night Master"], "hp": 0.8, "dmg": 1.1, "spd": 1.7},
 	{"name": "Noble", "forms": ["Noble", "Lord", "Duke", "King", "Emperor"], "hp": 1.2, "dmg": 1.0, "spd": 1.0},
 ]
 
@@ -57,12 +57,11 @@ const HIDDEN := [
 ]
 
 ## Ranged basic attacks by line (index into LINES). mult scales their damage.
+## Only archers, priests and mages shoot (and the hidden bosses). Villagers fight in melee; assassins do not shoot but run fast.
 const RANGED := {
-	0: {"range": 110.0, "speed": 200.0, "mult": 0.6, "color": Color("c9a27a")},  # Farmer: thrown stones
 	2: {"range": 230.0, "speed": 330.0, "mult": 0.8, "color": Color("e8e0a0")},  # Hunter: arrows
 	5: {"range": 150.0, "speed": 200.0, "mult": 0.6, "color": Color("fff2a0")},  # Priest: holy bolts
 	6: {"range": 210.0, "speed": 240.0, "mult": 0.9, "color": Color("a060ff")},  # Mage: magic bolts
-	8: {"range": 120.0, "speed": 300.0, "mult": 0.7, "color": Color("c0c0d0")},  # Thief: daggers
 }
 const HIDDEN_RANGED := {"range": 260.0, "speed": 300.0, "mult": 1.0, "color": Color("ff4060")}
 
@@ -87,14 +86,15 @@ const LINE_SKILLS := [
 	[[1, "rally"], [2, "summon"], [3, "shield"], [4, "smite"]],     # Noble
 ]
 const HIDDEN_SKILLS := [
-	["charge", "rage", "pierce"],                    # Parasite Hero
-	["fireball", "nova", "blink", "shield"],         # Dark Hero
-	["smite", "nova", "slam", "heal", "rally"],      # GOD
+	["spore_burst", "charge", "rage", "pierce"],        # Parasite Hero
+	["shadow_barrage", "fireball", "nova", "blink", "shield"],   # Dark Hero
+	["judgment", "smite", "nova", "slam", "heal", "rally"],   # GOD
 ]
 const SKILL_COOLDOWN := {
 	"slow": 6.0, "net": 7.0, "pierce": 6.0, "axe": 6.0, "volley": 7.0, "smite": 7.0,
 	"fireball": 9.0, "bomb": 10.0, "slam": 8.0, "nova": 10.0, "charge": 8.0, "blink": 9.0,
 	"shield": 12.0, "rage": 14.0, "rally": 14.0, "heal": 10.0, "summon": 22.0,
+	"spore_burst": 14.0, "shadow_barrage": 16.0, "judgment": 20.0,
 }
 
 var line := 0
@@ -197,6 +197,10 @@ func skill_name() -> String:
 
 
 ## How far this villager can notice 小怪 (grows during the first minutes).
+var guard_home := Vector2.INF     ## a guard stays near this spot (a castle) and only fights what comes close
+var guard_range := 520.0       ## it notices 小怪 only when he is this close to its post
+var guard_leash := 760.0       ## and never goes farther than this from it
+var guard_until := 0.0         ## the run time (seconds) when it is released and hunts like the others
 var calm := false              ## sitting at a picnic: no walking, no fighting until woken
 var say_text := ""             ## what the speech bubble says
 var say_left := 0.0
@@ -350,6 +354,7 @@ func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: Strin
 	b.team = "enemy"
 	if line == 2 and secret < 0:
 		b.sprite = "fx_enemy_arrow"  # the hunters shoot pixel-art arrows
+	b.style = _enemy_bolt_style()
 	Sfx.play_at(get_tree(), "shoot", global_position, -9.0)
 	_add_to_level(b)
 
@@ -410,6 +415,28 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 	var dmg := effective_damage()
 	var fired := false
 	match id:
+		"spore_burst":
+			if dist < 460.0:
+				_fan(14, 150.0, maxi(1, roundi(dmg * 0.7)), Color("7ae040"), 0.0, 2.4)
+				cast_color = Color("7ae040")
+				fired = true
+		"shadow_barrage":
+			if dist < 520.0:
+				for w in 3:
+					get_tree().create_timer(0.35 * w).timeout.connect(func():
+						if is_instance_valid(self) and hp > 0:
+							_fan(12, 210.0, maxi(1, roundi(dmg * 0.6)), Color("a050e0"), 0.13 * w, 2.0))
+				_spawn_zone(global_position, 70.0, 0.6, maxi(1, roundi(dmg * 1.2)), Color("a050e0"))
+				cast_color = Color("a050e0")
+				fired = true
+		"judgment":
+			if dist < 560.0:
+				for k in 6:
+					var spot: Vector2 = target.global_position + Vector2.from_angle(randf() * TAU) * randf_range(10.0, 110.0)
+					_spawn_zone(spot, 40.0, 0.9 + 0.12 * k, maxi(1, roundi(dmg * 1.8)), Color("ffe680"))
+				_spawn_zone(target.global_position, 120.0, 1.5, maxi(1, roundi(dmg * 2.2)), Color("fff2a0"))
+				cast_color = Color("ffe680")
+				fired = true
 		"slow":
 			if dist < 200.0 and los:
 				_spawn_bolt(aim, 180.0, 1, Color("7d5e38"), "slow")
@@ -563,6 +590,9 @@ func _physics_process(delta: float) -> void:
 			best = seen
 			target = player
 			reach = 10.0 + player.body_radius
+			if _guarding() and (player.global_position.distance_to(guard_home) > guard_range or global_position.distance_to(guard_home) > guard_leash):
+				target = null  # a guard keeps to its post until the guards are released
+				best = INF
 	var struct_best := minf(STRUCTURE_AGGRO, best)
 	for t in get_tree().get_nodes_in_group("structures"):
 		var d: float = t.global_position.distance_to(global_position)
@@ -606,6 +636,9 @@ func _physics_process(delta: float) -> void:
 				skill_cd = skill_cooldown()
 			else:
 				skill_cd = 0.5  # nothing to use it on yet; look again shortly
+	if target == null and _guarding() and global_position.distance_to(guard_home) > 48.0:
+		_nav_update(guard_home, delta)
+		dir = _steer(guard_home) * 0.7  # back to the post
 	if has_status("root"):
 		dir = Vector2.ZERO  # rooted: cannot walk, but can still shoot and use skills
 	velocity = dir * move_speed + knock
@@ -709,8 +742,10 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 		knock = dir * 260.0  # towers hurt but never push villagers back
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
 	Sfx.play_at(get_tree(), "kill" if hp <= 0 else "hit", global_position, -7.0)
-	if hp > 0 and say_left <= 0.0 and randf() < 0.1:
+	if hp > 0 and say_left <= 0.0 and randf() < 0.1 and secret < 0:
 		say(HURT_LINES[randi() % HURT_LINES.size()], 1.6)
+	if secret >= 0 and hp > 0:
+		_check_phase()
 	Juice.hit(get_parent(), global_position + Vector2(0, -6.0 * body_scale), dir, float(amount) / maxf(1.0, float(max_hp)) + 0.25, Color(0.7, 0.85, 1.0) if by_tower else Color(1.0, 0.92, 0.65))
 	if hp > 0 and has_status("shock") and randf() < 0.25:
 		# shocked villagers pass part of every hit on to the nearest other villager
@@ -987,3 +1022,51 @@ func _picnic_hit() -> void:
 	var main = get_parent()
 	if main != null and main.get("events") != null:
 		main.events.picnic_hit(self)
+
+
+## True while this villager is a guard on duty (it has a post and the guards have not been released yet).
+func _guarding() -> bool:
+	if guard_home == Vector2.INF:
+		return false
+	var level_node = get_parent()
+	var now: float = float(level_node.get("elapsed")) if level_node != null and level_node.get("elapsed") != null else 0.0
+	return now < guard_until
+
+
+# --- the hidden bosses: their own shot looks and burst skills ---
+
+const BURST_SKILL := ["spore_burst", "shadow_barrage", "judgment"]
+var phase_done := 0
+
+
+## What this villager's projectiles look like (see SkillFx.draw_bolt). Hunters use the arrow sprite.
+func _enemy_bolt_style() -> String:
+	if secret >= 0:
+		return ["spore", "shadow", "divine"][secret]
+	match line:
+		5:
+			return "holy"
+		6:
+			return "magic"
+	return ""
+
+
+## A ring of bolts, rotated by `turn` radians.
+func _fan(n: int, speed: float, dmg: int, color: Color, turn: float, life: float) -> void:
+	for i in n:
+		_spawn_bolt(Vector2.from_angle(turn + float(i) / n * TAU), speed, dmg, color, "", false, life)
+
+
+## At two thirds and one third of its health a hidden boss bursts at once, whatever its cooldown.
+func _check_phase() -> void:
+	var frac := float(hp) / maxf(1.0, float(max_hp))
+	var step := 0 if frac > 0.66 else (1 if frac > 0.33 else 2)
+	if step <= phase_done:
+		return
+	phase_done = step
+	var pl = get_tree().get_first_node_in_group("player")
+	if pl == null:
+		return
+	say(["The spores wake!", "Shadows, rise!", "Judgment!"][secret], 2.2)
+	use_skill_id(BURST_SKILL[secret], pl, 120.0)
+	skill_cd = skill_cooldown()

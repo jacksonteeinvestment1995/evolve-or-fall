@@ -46,8 +46,8 @@ const INFO := {
 	"stampede": {"tier": 3, "warn": 2.5, "length": 12.0, "music": "raid", "banner": "STAMPEDE! Get out of the red lane"},
 	"ufo": {"tier": 3, "warn": 3.0, "length": 36.0, "music": "hidden", "banner": "A UFO! It beams villagers up and drops them far away. Dodge the beam!"},
 	"mimic": {"tier": 3, "warn": 2.0, "length": 4.0, "music": "", "banner": "Treasure chests glitter nearby... how lucky"},
-	"rival": {"tier": 3, "warn": 4.0, "length": 100.0, "music": "hidden", "banner": "A RIVAL HERO hunts you! Defeat it for a gold chest"},
-	"bug": {"tier": 3, "warn": 3.0, "length": 120.0, "music": "raid", "banner": "DEVELOPER ATTACK! A bug escaped from production"},
+	"rival": {"tier": 3, "min_at": 900.0, "warn": 4.0, "length": 100.0, "music": "hidden", "banner": "A RIVAL HERO hunts you! Defeat it for a gold chest"},
+	"bug": {"tier": 3, "min_at": 700.0, "warn": 3.0, "length": 120.0, "music": "raid", "banner": "DEVELOPER ATTACK! A bug escaped from production"},
 }
 
 var main: Node2D
@@ -124,7 +124,7 @@ func _pick() -> String:
 			top = t + 1
 	for n in INFO:
 		var tier: int = INFO[n]["tier"]
-		if n == last or not tier_unlocked(tier):
+		if n == last or not tier_unlocked(tier) or main.elapsed < float(INFO[n].get("min_at", 0.0)):
 			continue
 		var w := 1.0 + 0.8 * float(tier - 1)
 		if tier < top:

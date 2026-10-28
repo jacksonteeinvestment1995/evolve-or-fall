@@ -24,7 +24,8 @@ const ELITE_STAGE := 2
 const GRACE_SECONDS := 180.0    # until then: no day bonus, no ranged attacks, slower walking
 const SKILL_ICONS := {"hide": "tough_hide", "fangs": "sharp_fangs", "paws": "swift_paws", "jaws": "quick_jaws", "drain": "soul_drain", "greed": "bone_collector", "nova": "bone_nova", "bolt": "spirit_bolt", "step": "shadow_step"}
 const SKILLS_AT := 360.0        # villager skills switch on
-const HIDDEN_FROM := 600.0      # hidden enemies can appear from here
+const HIDDEN_FROM := 600.0      # hidden enemies can appear from here (10 minutes in)...
+const GUARD_RELEASE := 1200.0    # ...and they wait in the big castle until 20 minutes, then go hunting
 const CHASE_START := 450.0      # villagers notice 小怪 only this close at first...
 const CHASE_FULL_AT := 60.0     # ...growing until, after a minute, they find 小怪 from anywhere
 const EARLY_SPEED := 0.75       # villager walking speed at the very start
@@ -1530,22 +1531,40 @@ func spawn_far(stage: int, secret: int = -1):
 	return null
 
 
+## A hidden boss appears inside the big castle and stays there as its guard until GUARD_RELEASE.
+func spawn_boss(secret: int):
+	var big: Dictionary = layout.get("big", {})
+	if big.is_empty():
+		return spawn_far(VillagerScript.MAX_STAGE, secret)
+	var rect: Rect2i = big["rect"]
+	for i in 60:
+		var t := Vector2i(rng.randi_range(rect.position.x + 1, rect.end.x - 2), rng.randi_range(rect.position.y + 1, rect.end.y - 2))
+		if floors.has(t) and not trees.has(t):
+			var v = _spawn_villager(_tile_center(t), VillagerScript.MAX_STAGE, -1, secret)
+			v.guard_home = Vector2(rect.get_center()) * TILE
+			v.guard_range = 700.0
+			v.guard_leash = 900.0
+			v.guard_until = GUARD_RELEASE
+			return v
+	return spawn_far(VillagerScript.MAX_STAGE, secret)
+
+
 ## At every dawn and dusk there is a chance that a hidden enemy appears.
 func _on_phase_change() -> void:
 	if elapsed < HIDDEN_FROM or rng.randf() > HIDDEN_SPAWN_CHANCE:
 		return
 	var count := 1 + int(elapsed / 400.0)
 	var secret := 0
-	if elapsed > 900.0 and village_level >= 5 and rng.randf() < 0.15:
+	if elapsed > 1200.0 and village_level >= 5 and rng.randf() < 0.15:
 		secret = 2
-	elif elapsed > 800.0 and rng.randf() < 0.4:
+	elif elapsed > 780.0 and rng.randf() < 0.4:
 		secret = 1
 	var spawned := 0
 	for i in count:
-		if spawn_far(VillagerScript.MAX_STAGE, secret) != null:
+		if spawn_boss(secret) != null:
 			spawned += 1
 	if spawned > 0:
-		_say("%s stirs in the dark..." % VillagerScript.HIDDEN[secret]["name"] if is_night() else "%s walks in the light..." % VillagerScript.HIDDEN[secret]["name"])
+		_say("%s gathers in the big castle..." % VillagerScript.HIDDEN[secret]["name"])
 
 
 func _process(delta: float) -> void:

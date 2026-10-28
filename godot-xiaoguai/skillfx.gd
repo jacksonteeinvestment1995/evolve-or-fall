@@ -224,6 +224,59 @@ static func draw_bolt(ci: CanvasItem, style: String, dir: Vector2, radius: float
 			ci.draw_circle(Vector2.ZERO, radius * 1.1, Color(0.15, 0.02, 0.12))
 			ci.draw_circle(Vector2.ZERO, radius * 0.7, Color(0.9, 0.15, 0.4))
 			ci.draw_circle(dir * radius * 0.2, radius * 0.3, Color(1.0, 0.8, 0.5))
+		"magic":
+			# a violet arcane orb: runes circling it and sparks spiralling off
+			ci.draw_circle(Vector2.ZERO, radius * 1.7, Color(0.6, 0.3, 1.0, 0.22))
+			ci.draw_circle(Vector2.ZERO, radius * 0.9, Color(0.75, 0.5, 1.0))
+			ci.draw_circle(Vector2.ZERO, radius * 0.45, Color(1, 1, 1))
+			for i in 4:
+				var a := tm * 0.5 + float(i) * TAU / 4.0
+				var rp := Vector2.from_angle(a) * radius * 1.6
+				ci.draw_rect(Rect2(rp - Vector2(1.2, 1.2), Vector2(2.4, 2.4)), Color(0.9, 0.8, 1.0))
+			for i in 3:
+				var f := fposmod(tm * 0.08 + float(i) * 0.33, 1.0)
+				ci.draw_circle(-dir * f * radius * 4.0 + side * sin(f * 9.0 + float(i)) * radius * 0.8, 1.3, Color(0.8, 0.6, 1.0, 1.0 - f))
+		"holy":
+			# a golden star-cross of light
+			ci.draw_circle(Vector2.ZERO, radius * 1.6, Color(1.0, 0.95, 0.5, 0.25))
+			var rot := tm * 0.1
+			for k in 2:
+				var d := Vector2.from_angle(rot + float(k) * PI * 0.5)
+				var n := d.rotated(PI * 0.5)
+				ci.draw_colored_polygon(PackedVector2Array([d * radius * 2.2, n * radius * 0.35, -d * radius * 2.2, -n * radius * 0.35]), Color(1.0, 0.95, 0.6))
+			ci.draw_circle(Vector2.ZERO, radius * 0.6, Color(1, 1, 1))
+			ci.draw_line(-dir * radius * 3.0, -dir * radius, Color(1.0, 0.95, 0.6, 0.5), 1.5)
+		"spore":
+			# a green spore pod with wriggling tendrils and drips
+			ci.draw_circle(Vector2.ZERO, radius * 1.15, Color(0.3, 0.6, 0.2))
+			ci.draw_circle(Vector2(-radius * 0.3, -radius * 0.3), radius * 0.4, Color(0.7, 0.95, 0.4))
+			for i in 3:
+				var base := Vector2.from_angle(float(i) * 2.1 + tm * 0.1) * radius
+				ci.draw_line(base, base * 1.8 + side * sin(tm * 0.4 + float(i)) * 2.0, Color(0.4, 0.8, 0.25), 1.6)
+			for i in 2:
+				ci.draw_circle(-dir * (radius * (1.6 + float(i) * 1.2)) + side * sin(tm + float(i) * 3.0) * 2.0, 1.4, Color(0.6, 0.95, 0.3, 0.7))
+		"shadow":
+			# a spinning crescent blade of darkness with a violet edge
+			var ang := tm * 0.7
+			var pts := PackedVector2Array()
+			for j in 9:
+				var a2 := ang + 0.3 + float(j) / 8.0 * (PI * 1.4)
+				pts.append(Vector2.from_angle(a2) * radius * 2.0)
+			for j in 9:
+				var a3 := ang + 0.3 + float(8 - j) / 8.0 * (PI * 1.4)
+				pts.append(Vector2.from_angle(a3 + 0.15) * radius * 1.2)
+			ci.draw_colored_polygon(pts, Color(0.12, 0.05, 0.2))
+			ci.draw_polyline(pts.slice(0, 9), Color(0.7, 0.3, 1.0), 1.6)
+			ci.draw_circle(-dir * radius * 2.0, radius * 0.6, Color(0.5, 0.2, 0.8, 0.3))
+		"divine":
+			# a lance of golden light with a halo and trailing feathers
+			var lance := PackedVector2Array([dir * radius * 3.4, side * radius * 0.5, -dir * radius * 2.4, -side * radius * 0.5])
+			ci.draw_colored_polygon(lance, Color(1.0, 0.9, 0.4))
+			ci.draw_polyline(lance + PackedVector2Array([lance[0]]), Color(1, 1, 0.9), 1.2)
+			ci.draw_arc(dir * radius * 0.4, radius * 1.4, 0.0, TAU, 14, Color(1.0, 0.95, 0.6, 0.6), 1.4)
+			for i in 3:
+				var f2 := fposmod(tm * 0.06 + float(i) * 0.33, 1.0)
+				ci.draw_colored_polygon(PackedVector2Array([-dir * (radius * 2.6 + f2 * 8.0) + side * (float(i) - 1.0) * 3.0, -dir * (radius * 3.4 + f2 * 8.0) + side * (float(i) - 1.0) * 3.0 + side * 1.6, -dir * (radius * 3.4 + f2 * 8.0) + side * (float(i) - 1.0) * 3.0 - side * 1.6]), Color(1.0, 0.95, 0.7, 0.8 * (1.0 - f2)))
 		_:
 			ci.draw_line(-dir * radius * 2.5, Vector2.ZERO, Color(tint, 0.4), radius)
 			ci.draw_circle(Vector2.ZERO, radius, tint)

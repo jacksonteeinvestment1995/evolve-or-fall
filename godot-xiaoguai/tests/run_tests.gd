@@ -797,7 +797,7 @@ func _init() -> void:
 	check("later, Dark Heroes can appear", enemies().filter(func(e): return e.secret == 1).size() >= 1)
 	check("but GOD needs village level 5", enemies().all(func(e): return e.secret != 2))
 	await clear_enemies()
-	main.elapsed = 1000.0
+	main.elapsed = 1300.0
 	main.village_level = 5
 	for i in 120:
 		main._on_phase_change()
@@ -2169,6 +2169,68 @@ func _init() -> void:
 	check("Blood Drain heals less than before", p.AbilitiesData.ABILITIES[0]["desc"].contains("6/9/12%"))
 	p.learn_special("secondwind")
 	check("Second Wind waits 90 s", SkillsD.SPECIALS["secondwind"]["desc"].contains("90"))
+
+	# =========================== bosses and soldiers stay in the castle at first ===========================
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	main.elapsed = 650.0
+	var gd_boss = main.spawn_boss(0)
+	var gd_rect: Rect2i = main.layout["big"]["rect"]
+	check("a hidden boss appears inside the big castle", gd_boss != null and gd_rect.has_point(main.tile_of(gd_boss.global_position)))
+	check("it is a guard until minute 20", gd_boss._guarding() and gd_boss.guard_until == main.GUARD_RELEASE)
+	p.global_position = Vector2(main.START_TILE) * 32.0 + Vector2(40, 0)
+	gd_boss.force_chase = false
+	var gd_pos: Vector2 = gd_boss.global_position
+	await frames(30)
+	check("the guard does not go hunting while the guards are held", gd_boss.global_position.distance_to(gd_pos) < 60.0)
+	main.elapsed = 1250.0
+	check("after minute 20 the guard is released", not gd_boss._guarding())
+	await clear_enemies()
+	main.elapsed = 300.0
+	Towns.populate(main, main.layout, main.rng)
+	await frames(2)
+	var gd_soldiers: Array = enemies().filter(func(e): return e.guard_home != Vector2.INF)
+	check("castle soldiers are guards too", gd_soldiers.size() >= 12, str(gd_soldiers.size()))
+	check("rival hero and the bug wait for later", main.events.INFO["rival"]["min_at"] >= 900.0 and main.events.INFO["bug"]["min_at"] >= 700.0)
+
+	# =========================== who shoots, how it looks, boss bursts ===========================
+	await fresh()
+	p = main.player
+	await clear_enemies()
+	main.elapsed = 700.0
+	var bs_names := ["Farmer", "Woodsman", "Hunter", "Militia", "Knight", "Priest", "Mage", "Smith", "Thief", "Noble"]
+	var bs_shooters := []
+	for i in 10:
+		var bv = mk(Vector2(3000, 600 + i * 40), 3, i)
+		if not bv.ranged_config().is_empty():
+			bs_shooters.append(bs_names[i])
+	check("only the archer, priest and mage shoot", bs_shooters == ["Hunter", "Priest", "Mage"], str(bs_shooters))
+	var bs_thief = mk(Vector2(3000, 1100), 3, 8)
+	var bs_knight = mk(Vector2(3000, 1140), 3, 4)
+	check("assassins run faster than other villagers", bs_thief.speed > bs_knight.speed * 1.5, "%.0f vs %.0f" % [bs_thief.speed, bs_knight.speed])
+	for sec in 3:
+		var bh = main._spawn_villager(Vector2(3000, 1200 + sec * 40), 4, 0, sec)
+		check("hidden boss %d can shoot" % sec, not bh.ranged_config().is_empty())
+	check("projectiles look different per shooter", mk(Vector2(3000, 1500), 3, 6)._enemy_bolt_style() == "magic" and mk(Vector2(3000, 1540), 3, 5)._enemy_bolt_style() == "holy" and main._spawn_villager(Vector2(3000, 1580), 4, 0, 0)._enemy_bolt_style() == "spore" and main._spawn_villager(Vector2(3000, 1620), 4, 0, 1)._enemy_bolt_style() == "shadow" and main._spawn_villager(Vector2(3000, 1660), 4, 0, 2)._enemy_bolt_style() == "divine")
+	await clear_enemies()
+	var bs_boss = main._spawn_villager(p.global_position + Vector2(200, 0), 4, 0, 0)
+	bs_boss.skill_cd = 9999.0
+	bs_boss.max_hp = 1000
+	bs_boss.hp = 1000
+	var bs_b0: int = bolts().size()
+	bs_boss.use_skill_id("spore_burst", p, 200.0)
+	await frames(2)
+	check("Parasite Hero: Spore Burst fires a ring of spores", bolts().size() >= bs_b0 + 14)
+	var bs_b1: int = bolts().size()
+	bs_boss.take_hit(400, Vector2.RIGHT, false)
+	await frames(2)
+	check("a boss bursts when it drops below two thirds of its health", bs_boss.phase_done == 1 and bolts().size() > bs_b1)
+	check("every boss has its own burst skill", bs_boss.HIDDEN_SKILLS[0].has("spore_burst") and bs_boss.HIDDEN_SKILLS[1].has("shadow_barrage") and bs_boss.HIDDEN_SKILLS[2].has("judgment"))
+	var bs_z0: int = zones().size()
+	bs_boss.use_skill_id("judgment", p, 200.0)
+	await frames(2)
+	check("GOD's Judgment calls down several strikes", zones().size() >= bs_z0 + 6)
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)
