@@ -297,7 +297,7 @@ func _physics_process(delta: float) -> void:
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if dir != Vector2.ZERO:
 		has_target = false
-	elif Input.is_action_pressed("move_mouse") and get_viewport().gui_get_hovered_control() == null:
+	elif Input.is_action_pressed("move_mouse") and get_viewport().gui_get_hovered_control() == null and not bool(get_parent().get("remove_armed")):
 		move_target = get_global_mouse_position()
 		has_target = true
 	if dir == Vector2.ZERO and has_target:

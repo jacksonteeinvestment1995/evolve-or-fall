@@ -90,6 +90,7 @@ var eclipse_left := 0.0         # seconds of artificial night left (eclipse, blo
 var eclipse_t := 0.0            # 0 day .. 1 full artificial night, eased
 var blood_moon := false
 var events: Node               # random events (events.gd)
+var remove_armed := false        # the remove button is on: the next click on a building takes it back
 var punch_amp := 0.0            # a short zoom-in pulse on heavy blows
 var shake_amp := 0.0           # camera shake in pixels, decays by itself
 var calm_time := 0.0           # seconds with no villager nearby (for the quiet music)
@@ -289,6 +290,12 @@ func _build_hd2d() -> void:
 	shadow_tex.width = 64
 	shadow_tex.height = 64
 
+	var tree_layer := preload("res://trees.gd").new()
+	tree_layer.cells = trees
+	tree_layer.water = water
+	tree_layer.cam = cam
+	add_child(tree_layer)
+	move_child(tree_layer, 0)
 	var mud_layer := preload("res://mud.gd").new()
 	mud_layer.cells = mud
 	mud_layer.cam = cam
@@ -1060,42 +1067,29 @@ func _build_hud() -> void:
 	var hotbar_tips := ["Tower (key 1): shoots the nearest villager. Build on it again to upgrade.", "Bone wall (key 2): blocks the way.", "Remove (key X): take back a tower or wall under the mouse for half its bones."]
 	for i in 3:
 		var ic := Sprites.icon(hotbar_icons[i], 2)
+		# all three are clickable icon buttons: tower, bone wall, and remove (click it, then click a building)
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.icon = ic
+		btn.expand_icon = false
+		btn.custom_minimum_size = Vector2(104, 58)
+		btn.tooltip_text = hotbar_tips[i]
+		btn.add_theme_font_size_override("font_size", 22)
+		btn.add_theme_constant_override("icon_max_width", 48)
 		if i < 2:
-			# a clickable button: the picture and the price, no name
-			var btn := Button.new()
-			btn.toggle_mode = true
-			btn.focus_mode = Control.FOCUS_NONE
-			btn.icon = ic
-			btn.expand_icon = false
-			btn.custom_minimum_size = Vector2(104, 58)
-			btn.tooltip_text = hotbar_tips[i]
-			btn.add_theme_font_size_override("font_size", 22)
-			btn.add_theme_constant_override("icon_max_width", 48)
 			var which := "tower" if i == 0 else "wall"
 			btn.pressed.connect(func():
 				build_item = which
+				remove_armed = false
 				ghost_dirty = true
 				_update_hotbar())
-			bar.add_child(btn)
-			hotbar.append(btn)
 		else:
-			var cell := HBoxContainer.new()
-			cell.add_theme_constant_override("separation", 6)
-			bar.add_child(cell)
-			if ic != null:
-				var tr := TextureRect.new()
-				tr.texture = ic
-				tr.custom_minimum_size = Vector2(44, 44)
-				tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-				tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-				tr.tooltip_text = hotbar_tips[i]
-				cell.add_child(tr)
-			var l := Label.new()
-			l.add_theme_font_size_override("font_size", 22)
-			l.add_theme_color_override("font_outline_color", Color.BLACK)
-			l.add_theme_constant_override("outline_size", 8)
-			cell.add_child(l)
-			hotbar.append(l)
+			btn.pressed.connect(func():
+				remove_armed = not remove_armed
+				_update_hotbar())
+		bar.add_child(btn)
+		hotbar.append(btn)
 
 	# music credit, bottom right (the final track is CC-BY and needs it)
 	credit = Label.new()
@@ -1268,7 +1262,9 @@ func _update_hotbar() -> void:
 		for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(key, c)
 	hotbar[2].text = "[X]"
-	hotbar[2].add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
+	hotbar[2].set_pressed_no_signal(remove_armed)
+	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+		hotbar[2].add_theme_color_override(key, Color("ff7a5a") if remove_armed else Color(1, 1, 1, 0.75))
 
 
 # --- level-ups, evolution lines and skills ---
@@ -1571,6 +1567,8 @@ func _process(delta: float) -> void:
 			try_build()
 		if Input.is_action_just_pressed("demolish"):
 			try_demolish()
+		if remove_armed and Input.is_action_just_pressed("move_mouse") and get_viewport().gui_get_hovered_control() == null:
+			try_demolish()
 	if Input.is_action_just_pressed("restart"):
 		get_tree().paused = false
 		get_tree().reload_current_scene()
@@ -1623,9 +1621,7 @@ func _draw() -> void:
 		_shadow(c + Vector2(0, 7), 10.0, 4.5, 18.0)
 		var tt: Texture2D = tree_tex[(t.x + t.y) % 2]
 		if tt != null:
-			# the 32x48 tree stands on its tile: trunk foot at the tile's lower middle
-			draw_texture_rect(tt, Rect2(t.x * TILE, (t.y + 1) * TILE - tt.get_height(), TILE, tt.get_height()), false)
-			continue
+			continue  # the swaying tree layer (trees.gd) draws the tree itself
 		draw_circle(c + Vector2(0, 8), 13.0, Color(0, 0, 0, 0.25))
 		draw_rect(Rect2(c.x - 3, c.y, 6, 12), Color("5a3b22"))
 		draw_circle(c + Vector2(0, -4), 14.0, Color("2f6b2f"))
