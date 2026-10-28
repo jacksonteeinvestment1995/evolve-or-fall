@@ -10,7 +10,7 @@ const HEARD_WITHIN := 900.0   ## farther than this from 小怪 and a positional 
 ## name -> [recipe, minimum seconds between two plays]. A recipe is a list of parts:
 ## [wave, from_hz, to_hz, seconds, volume, start_seconds]. wave: sine square saw tri noise.
 const SOUNDS := {
-	"bite": [[["noise", 0, 0, 0.05, 0.5, 0.0], ["square", 240, 110, 0.07, 0.35, 0.0]], 0.12],
+	"bite": [[["noise", 0, 0, 0.06, 0.6, 0.0], ["square", 240, 110, 0.08, 0.5, 0.0]], 0.12],
 	"hit": [[["noise", 0, 0, 0.05, 0.45, 0.0], ["sine", 320, 140, 0.08, 0.5, 0.0]], 0.05],
 	"kill": [[["square", 420, 90, 0.16, 0.4, 0.0], ["noise", 0, 0, 0.08, 0.3, 0.0]], 0.05],
 	"hurt": [[["saw", 200, 60, 0.22, 0.55, 0.0], ["noise", 0, 0, 0.1, 0.4, 0.0]], 0.15],

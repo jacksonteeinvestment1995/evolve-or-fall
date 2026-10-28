@@ -61,7 +61,7 @@ func damage() -> int:
 	var pl = get_tree().get_first_node_in_group("player")
 	if pl != null:
 		owner_level = int(pl.level)
-	return 2 * (int(info()["dmg"]) + (level - 1) + int(owner_level / 10.0) + (2 if evolved() else 0))  # twice, as villagers have 2.5x the health
+	return ceili(1.25 * (int(info()["dmg"]) + (level - 1) + int(owner_level / 10.0) + (2 if evolved() else 0)))  # villagers have 1.25x the health
 
 
 ## 小怪 made a kill: the pet learns from it.

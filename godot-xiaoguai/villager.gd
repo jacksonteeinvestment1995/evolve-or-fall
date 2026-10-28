@@ -29,9 +29,9 @@ const STRUCTURE_AGGRO := 55.0 ## a tower or wall this close (and nearer than 小
 const LOS_RANGE := 900.0      ## beyond this they just walk straight; closer, they steer around obstacles
 
 ## Base stats for forms 1 to 5; each line then scales them with hp / dmg / spd.
-## Bites are 3.3x as fast as they were, so every villager has 2.5x the health it used to (bosses 3x).
-const HP_SCALE := 2.5
-const BOSS_HP_SCALE := 3.0
+## Bites are 3.3x as fast as they were, so every villager has 1.25x the health it used to (bosses 1.5x).
+const HP_SCALE := 1.25
+const BOSS_HP_SCALE := 1.5
 const HP := [2, 6, 12, 20, 32]
 const DMG := [1, 1, 2, 3, 4]
 const SPEED := [55.0, 62.0, 70.0, 78.0, 86.0]

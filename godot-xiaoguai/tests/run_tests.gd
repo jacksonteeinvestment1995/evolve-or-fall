@@ -1969,15 +1969,14 @@ func _init() -> void:
 	check("10 new dark tracks are in the music list", mu.TRACKS.keys().filter(func(k): return k.begins_with("dk_")).size() == 10)
 	check("every pool track exists", mu.POOLS.keys().all(func(pn): return mu.POOLS[pn].all(func(t): return mu.TRACKS.has(t))))
 	check("all 10 new tracks sit in a pool", mu.TRACKS.keys().filter(func(k): return k.begins_with("dk_")).all(func(k): return mu.POOLS.values().any(func(arr): return arr.has(k))))
-	check("each pool track plays three times", mu.PLAYS_EACH == 3)
+	check("each pool track plays for about a minute", absf(mu.TRACK_SECONDS - 60.0) < 5.0)
 	mu.play_pool("mid")
 	check("a pool starts with its first track", mu.current == "battle2" and mu.pool_name == "mid")
 	mu._front.stop()
-	mu.plays = 2
-	mu._last_pos = 30.0
+	mu.track_time = mu.TRACK_SECONDS - 0.1
 	mu._front.play()
-	mu._process(0.0)
-	check("after the third full play the next track starts", mu.current == "dk_heavy_battle_1" and mu.plays == 0, mu.current)
+	mu._process(0.2)
+	check("after a minute the next track starts", mu.current == "dk_heavy_battle_1" and mu.track_time == 0.0, mu.current)
 	mu.play_single("danger")
 	check("a single situational track leaves the pool", mu.pool_name == "")
 
@@ -2413,7 +2412,7 @@ func _init() -> void:
 	for pid in main.PerksData.PERKS:
 		check("the %s perk icon exists" % pid, Sprites.tex("icon_perk_" + pid) != null)
 	await fresh()
-	check("the evolution line menu explains each line", main._line_blurb(0).contains("Family trait") and main._line_blurb(0).contains("Ability") and main._line_blurb(0).contains("Own skills"))
+	check("the evolution line menu gives each line a short trait, ability and skills line", main._line_blurb(0).count("|") == 2 and main._line_blurb(0).length() < 90, main._line_blurb(0))
 	check("a skill says where it comes from", main._skill_origin("z_grip").contains("line skill") and main._skill_origin("fangs").contains("general"))
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])

@@ -31,9 +31,10 @@ const TRACKS := {
 }
 const FADE_SECONDS := 1.5
 
-## The normal fighting music, by situation. Each track plays PLAYS_EACH full times, then the next one in
+## The normal fighting music, by situation. Each track plays for TRACK_SECONDS, then the next one in
 ## the list starts (the first track of a pool always plays first).
-const PLAYS_EACH := 3
+## Each track plays for about a minute (looping as often as it needs to) before the next one in the pool.
+const TRACK_SECONDS := 60.0
 const POOLS := {
 	"early": ["battle1", "dk_davieplier", "dk_metal_chromatic", "dk_nene7"],
 	"mid": ["battle2", "dk_heavy_battle_1", "dk_nene6"],
@@ -41,11 +42,11 @@ const POOLS := {
 	"night": ["night", "dk_heavy_boss_2", "dk_nene9"],
 }
 
-var volume_db := -12.0
+var volume_db := -18.0
 var current := ""
 var pool_name := ""      ## the pool being played ("" for a single situational track)
 var pool_index := 0
-var plays := 0           ## full plays of the current pool track so far
+var track_time := 0.0    ## seconds the current pool track has been playing
 var _last_pos := 0.0
 var _front: AudioStreamPlayer
 var _back: AudioStreamPlayer
@@ -106,7 +107,7 @@ func play_track(id: String) -> bool:
 	if loop_stream == null:
 		return false
 	current = id
-	plays = 0
+	track_time = 0.0
 	_last_pos = 0.0
 	# the old front player fades out, and becomes the next back player
 	var old := _front
@@ -151,7 +152,7 @@ func play_pool(name: String) -> void:
 		return
 	pool_name = name
 	pool_index = 0
-	plays = 0
+	track_time = 0.0
 	_last_pos = 0.0
 	play_track(POOLS[name][0])
 
@@ -162,18 +163,14 @@ func play_single(id: String) -> bool:
 	return play_track(id)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if pool_name == "" or current == "" or not _front.playing:
 		return
-	var pos := _front.get_playback_position()
-	if pos + 0.5 < _last_pos:  # the loop wrapped round: one more full play is done
-		plays += 1
-		if plays >= PLAYS_EACH:
-			plays = 0
-			pool_index = (pool_index + 1) % POOLS[pool_name].size()
-			play_track(POOLS[pool_name][pool_index])
-			pos = 0.0
-	_last_pos = pos
+	track_time += delta
+	if track_time >= TRACK_SECONDS:
+		track_time = 0.0
+		pool_index = (pool_index + 1) % POOLS[pool_name].size()
+		play_track(POOLS[pool_name][pool_index])
 
 
 func stop() -> void:

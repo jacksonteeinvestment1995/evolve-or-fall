@@ -369,7 +369,7 @@ func _physics_process(delta: float) -> void:
 		lunge_left = LUNGE_TIME
 		lunge_cd = LUNGE_COOLDOWN
 		lunge_hit.clear()
-		Sfx.play(get_tree(), "lunge")
+		Sfx.play(get_tree(), "lunge", 3.0)
 
 	_update_sprint(delta, dir != Vector2.ZERO)
 	var speed_mult: float = stages[stage]["speed"] * (1.0 + (_power() - 1.0) * 0.4)
@@ -525,7 +525,7 @@ func _auto_bite() -> void:
 	bite_cd = float(s["cd"]) * BITE_TIME_SCALE * (1.0 - 0.1 * rank("jaws") - form_mod("jaws")) * (0.75 if specials.has("frenzy") else 1.0)
 	bite_flash = 0.12
 	bite_dir = (target.global_position - global_position).normalized()
-	Sfx.play(get_tree(), "bite", -9.0)
+	Sfx.play(get_tree(), "bite", 0.0)
 	var bite := effective_bite()
 	if counter_t > 0.0:
 		bite *= 2

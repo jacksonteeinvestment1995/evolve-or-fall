@@ -1363,10 +1363,10 @@ func _next_menu() -> void:
 			if not LinesData.released(i):
 				continue
 			line_ids.append(i)
-			entries.append("%d. %s  [%s family]\n%s" % [entries.size() + 1, LinesData.title(i), LinesData.LINES[i]["family"], _line_blurb(i)])
+			entries.append("%d. %s  [%s]\n%s" % [entries.size() + 1, LinesData.title(i), LinesData.LINES[i]["family"], _line_blurb(i)])
 			var art := Sprites.hero(LinesData.LINES[i]["forms"], 1)
 			line_icons.append(Sprites.first_frame_icon(art, 3) if art != "" else null)
-		_open_menu("LEVEL %d: choose your evolution line" % player.level, entries, func(i): pick_line(line_ids[i]), 1, 760, line_icons)
+		_open_menu("LEVEL %d: choose your evolution line" % player.level, entries, func(i): pick_line(line_ids[i]), 1, 680, line_icons, 62)
 	elif item["type"] == "perk":
 		var cards := PerksData.roll(player.perks, rng, 3)
 		if cards.is_empty():
@@ -1405,7 +1405,7 @@ func _next_menu() -> void:
 		_open_menu("LEVEL %d: choose a skill" % player.level, entries, func(i): pick_skill(options[i]), 1, 620, icons)
 
 
-func _open_menu(title: String, entries: Array[String], on_pick: Callable, columns: int, width: int, icons: Array = []) -> void:
+func _open_menu(title: String, entries: Array[String], on_pick: Callable, columns: int, width: int, icons: Array = [], fixed_row_h: int = 0) -> void:
 	Sfx.play(get_tree(), "menu")
 	menu_open = true
 	get_tree().paused = pause_on_menu
@@ -1428,8 +1428,8 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 	box.add_child(head)
 	var scroll := ScrollContainer.new()
 	# tall enough for every row, so a normal pick never needs scrolling (only the 26-line list does)
-	var row_h := (56 if (columns > 1 and not icons.is_empty()) else (44 if columns > 1 else 70)) + 4
-	scroll.custom_minimum_size = Vector2(width * columns + 28, mini(600, row_h * ceili(entries.size() / float(columns)) + 16))
+	var row_h := (fixed_row_h if fixed_row_h > 0 else (56 if (columns > 1 and not icons.is_empty()) else (44 if columns > 1 else 70))) + 4
+	scroll.custom_minimum_size = Vector2(width * columns + 28, mini(640 if fixed_row_h > 0 else 600, row_h * ceili(entries.size() / float(columns)) + 16))
 	box.add_child(scroll)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # text wraps, so there is never a sideways scrollbar
 	var grid := GridContainer.new()
@@ -1439,7 +1439,7 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 	for i in entries.size():
 		var b := Button.new()
 		b.text = entries[i]
-		b.custom_minimum_size = Vector2(width, (56 if not icons.is_empty() else 44) if columns > 1 else 70)
+		b.custom_minimum_size = Vector2(width, fixed_row_h if fixed_row_h > 0 else ((56 if not icons.is_empty() else 44) if columns > 1 else 70))
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		b.clip_text = false
@@ -1476,21 +1476,22 @@ func pick_line(i: int) -> void:
 
 ## What sets an evolution line apart, in three short lines for the level-10 menu: the family's trait (shared by every
 ## line of the family), the line's own signature ability, and the skills only this line can learn.
+const SHORT_TRAITS := {"Undead": "Night regen", "Slime": "Splits blobs", "Dragon": "Bite sparks", "Beast": "Fast", "Nature": "Rest to heal", "Material": "-1 damage taken", "Demon": "+1 bone per kill"}
+
+
 func _line_blurb(i: int) -> String:
 	var fam: String = LinesData.LINES[i]["family"]
-	var text := "Family trait: %s" % player.AbilitiesData.FAMILY_TRAITS[fam]
+	var ability := "no ability yet"
 	if player.AbilitiesData.ABILITIES.has(i):
-		var ab: Dictionary = player.AbilitiesData.ABILITIES[i]
-		text += "\nAbility (form 3): %s - %s" % [ab["name"], ab["desc"]]
-	else:
-		text += "\nAbility: none yet"
+		ability = str(player.AbilitiesData.ABILITIES[i]["name"])
 	var names: Array[String] = []
 	for e in SkillsData.FORM_LIST:
 		if int(e[1]) == i:
 			names.append(str(e[3]))
-	if not names.is_empty():
-		text += "\nOwn skills: %s" % ", ".join(names)
-	return text
+	var skills := ", ".join(names.slice(0, 2))
+	if names.size() > 2:
+		skills += " +%d" % (names.size() - 2)
+	return "   %s | %s | %s" % [SHORT_TRAITS.get(fam, fam), ability, skills]
 
 
 ## Where a skill comes from: every line learns the general ones, and each line also has skills of its own.

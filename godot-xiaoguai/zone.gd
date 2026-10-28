@@ -70,7 +70,7 @@ func _detonate() -> void:
 		if stun > 0.0:
 			e.stun_left = maxf(e.stun_left, stun)
 	if landed and hit_sound != "":
-		SkillSounds.play_at(get_tree(), hit_sound, global_position, -3.0)
+		SkillSounds.play_at(get_tree(), hit_sound, global_position, 0.0)
 
 
 func _draw() -> void:

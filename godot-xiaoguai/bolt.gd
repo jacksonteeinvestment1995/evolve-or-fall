@@ -57,7 +57,7 @@ func _physics_process(delta: float) -> void:
 				hit_ids.append(id)
 				e.take_hit(damage, dir)
 				if hit_sound != "":
-					SkillSounds.play_at(get_tree(), hit_sound, e.global_position, -5.0)
+					SkillSounds.play_at(get_tree(), hit_sound, e.global_position, -2.0)
 				if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
 					e.apply_status(status, status_time)
 				if source != null and is_instance_valid(source):
