@@ -27,6 +27,8 @@ func fresh() -> void:
 	main.pause_on_menu = false
 	root.add_child(main)
 	await frames(5)  # let the new scene settle after its heavy first frame
+	for i in 10:
+		await process_frame  # the first two idle frames take 80-150 ms; wait them out so key presses are not lost
 
 
 func mouse_to(pos: Vector2) -> void:
@@ -766,6 +768,8 @@ func _init() -> void:
 	main.spawn_cd = 0.0
 	p.stage = 6
 	await frames(3)
+	for i in 6:
+		await process_frame  # the spawner runs in _process; give it real idle frames to run in
 	check("after evolving, many villagers arrive at once", enemies().size() >= 2, str(enemies().size()))
 	p.stage = 0
 	await clear_enemies()
