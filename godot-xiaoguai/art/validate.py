@@ -31,6 +31,10 @@ M['bone_wall_damaged'] = S('structure', [(32, 32)], 1, 2)
 M['bone_tower_1'] = S('structure', [(32, 32), (32, 40)], 2, 2)
 M['bone_tower_2'] = S('structure', [(32, 40), (32, 48)], 2, 2)
 M['bone_tower_3'] = S('structure', [(32, 48)], 2, 2)
+for n, sz in [('castle_wall_a', (32, 40)), ('castle_wall_b', (32, 40)), ('castle_wall_torch', (32, 40)), ('castle_tower_big', (96, 136)),
+              ('castle_tower_small', (64, 104)), ('castle_tower_mid', (64, 88)), ('castle_gate_h', (96, 56)), ('castle_gate_pillar', (32, 56)),
+              ('castle_keep', (192, 176)), ('castle_barracks', (96, 80)), ('castle_stable', (96, 72)), ('castle_banner', (16, 40))]:
+    M[n] = S('structure', [sz], 1, 1)   # art/src/castle_kit.spr
 for n in ['grass_1', 'grass_2', 'grass_3', 'mud', 'stone_path']: M[n] = S('tile', [(32, 32)], 1, 1)
 for n in ['tree_1', 'tree_2']: M[n] = S('tile', [(32, 48)], 1, 2)
 FX = [(16, 16), (24, 24), (16, 24), (24, 16)]
@@ -108,11 +112,20 @@ for n, (sz, sec) in WA.items():
 # props
 PROP_SIZES = [(16, 16), (32, 32), (32, 48), (48, 32)]
 M['tile_water'] = S('tile', [(32, 32)], 2, 3)
+M['village_cottage'] = S('structure', [(64, 80)], 1, 1)
+M['village_house_a'] = S('structure', [(96, 80)], 1, 1)
+M['village_house_b'] = S('structure', [(96, 88)], 1, 1)
+M['village_inn'] = S('structure', [(128, 112)], 1, 1)
+M['village_barn'] = S('structure', [(128, 104)], 1, 1)
 for d_ in ['edge_n', 'edge_e', 'edge_s', 'edge_w', 'corner_ne', 'corner_se', 'corner_sw', 'corner_nw', 'inner_ne', 'inner_se', 'inner_sw', 'inner_nw']:
     M['shore_' + d_] = S('tile', [(32, 32)], 1, 3)      # frames follow tile_water
     M['pathedge_' + d_] = S('tile', [(32, 32)], 1, 1)
 for n in ['prop_fence', 'prop_fence_corner', 'prop_rocks_1', 'prop_rocks_2', 'prop_bush', 'prop_flowers_1', 'prop_flowers_2', 'prop_gravestone']:
     M[n] = S('tile', PROP_SIZES, 1, 2)
+for n, sz in [('stall_red', (64, 56)), ('stall_blue', (64, 56)), ('stall_green', (64, 56)), ('haystack', (32, 32)), ('barrels', (32, 32)),
+              ('woodpile', (32, 32)), ('bench', (32, 24)), ('planter', (32, 24)), ('signpost', (32, 40)), ('lamppost', (32, 56)),
+              ('well', (32, 48)), ('cart', (64, 40)), ('tent_a', (64, 56)), ('tent_b', (64, 56))]:
+    M['prop_' + n] = S('tile', [sz], 1, 1)   # art/src/village_props.spr
 
 def check_palette(pal, errs, notes):
     if not pal: errs.append('palette is empty'); return

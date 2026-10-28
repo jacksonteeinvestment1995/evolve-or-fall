@@ -45,7 +45,7 @@ func _physics_process(delta: float) -> void:
 		return
 	# a hurt 小怪 can eat a chicken he walks into
 	if pl != null and pl.hp > 0 and pl.hp < pl.max_hp * 0.6 and pl.global_position.distance_to(global_position) < 14.0 + pl.body_radius * 0.5:
-		var heal := maxi(1, roundi(pl.max_hp * 0.12))
+		var heal := maxi(1, roundi(pl.max_hp * 0.08))
 		pl.hp = mini(pl.max_hp, pl.hp + heal)
 		pl.hp_changed.emit(pl.hp)
 		pl.add_buff("swift", 8.0)

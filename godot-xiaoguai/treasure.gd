@@ -15,7 +15,7 @@ const MAX_RELIC := 3
 const BUFFS := {
 	"rage": {"name": "Rage", "desc": "+40% bite damage", "mods": {"bite": 0.4}, "color": Color("ff6040")},
 	"swift": {"name": "Swift", "desc": "+30% move speed", "mods": {"speed": 0.3}, "color": Color("60d0ff")},
-	"mend": {"name": "Mend", "desc": "regenerate 1.5 HP per second", "mods": {"regen": 1.5}, "color": Color("70e070")},
+	"mend": {"name": "Mend", "desc": "regenerate 0.9 HP per second", "mods": {"regen": 0.9}, "color": Color("70e070")},
 	"ward": {"name": "Ward", "desc": "take 2 less damage", "mods": {"cut": 2}, "color": Color("c0c0ff")},
 }
 
@@ -23,8 +23,8 @@ const RELICS := {
 	"fang_charm": {"name": "Fang Charm", "desc": "+10% bite damage", "mods": {"bite": 0.1}},
 	"iron_heart": {"name": "Iron Heart", "desc": "+12% max HP", "mods": {"hp": 0.12}},
 	"wind_boots": {"name": "Wind Boots", "desc": "+6% move speed", "mods": {"speed": 0.06}},
-	"vital_leaf": {"name": "Vital Leaf", "desc": "regenerate 0.4 HP per second", "mods": {"regen": 0.4}},
-	"bone_ring": {"name": "Bone Ring", "desc": "heal 4% of bite damage", "mods": {"drain": 0.04}},
+	"vital_leaf": {"name": "Vital Leaf", "desc": "regenerate 0.25 HP per second", "mods": {"regen": 0.25}},
+	"bone_ring": {"name": "Bone Ring", "desc": "heal 2.5% of bite damage", "mods": {"drain": 0.025}},
 	"tough_shell": {"name": "Tough Shell", "desc": "take 1 less damage", "mods": {"cut": 1}},
 }
 
@@ -94,7 +94,7 @@ func open(pl) -> Array[String]:
 		if rng.randf() < 0.2:
 			lines.append(_give_buff(pl, 15.0))
 		elif rng.randf() < 0.1:
-			var heal := roundi(pl.max_hp * 0.3)
+			var heal := roundi(pl.max_hp * 0.2)
 			pl.hp = mini(pl.max_hp, pl.hp + heal)
 			pl.hp_changed.emit(pl.hp)
 			lines.append("+%d HP" % heal)

@@ -40,6 +40,10 @@ func setup(main: Node2D) -> void:
 				c = Color("a89a8e")
 			elif main.floors.has(t):
 				c = Color("7a7585")
+			elif main.bridges.has(t):
+				c = Color("8a5f36")
+			elif main.dirt.has(t):
+				c = Color("b89868")
 			elif main.trees.has(t):
 				c = Color("24491f")
 			elif main.mud.has(t):

@@ -347,14 +347,14 @@ func _init() -> void:
 	p.hp = 1
 	p.learn_special("secondwind")
 	await frames(3)
-	check("Second Wind: heals half your HP when low", p.hp >= p.max_hp * 0.5 - 1, "hp %d of %d" % [p.hp, p.max_hp])
+	check("Second Wind: heals 30% of your HP when low", p.hp >= p.max_hp * 0.3 - 1, "hp %d of %d" % [p.hp, p.max_hp])
 	p.wind_cd = 60.0
-	check("Second Wind is limited to once a minute", p.wind_cd > 0.0)
+	check("Second Wind is limited to once every 90 s", p.wind_cd > 0.0)
 	p.learn_special("phoenix")
 	p.invuln = 0.0
 	p.hp = 1
 	p.take_hit(5, Vector2.LEFT)
-	check("Phoenix: a deadly hit brings you back with 60% HP", p.hp == roundi(p.max_hp * 0.6) and p.phoenix_used)
+	check("Phoenix: a deadly hit brings you back with 40% HP", p.hp == roundi(p.max_hp * 0.4) and p.phoenix_used)
 	p.invuln = 0.0
 	p.hp = 1
 	p.take_hit(5, Vector2.LEFT)
@@ -1159,8 +1159,8 @@ func _init() -> void:
 	main.clock = 90.0
 	p.hp = p.max_hp - 3
 	var undead_hp: int = p.hp
-	await frames(140)
-	check("Undead: heals 1 HP per second at night", p.hp >= undead_hp + 2, "%d -> %d" % [undead_hp, p.hp])
+	await frames(220)
+	check("Undead: heals 1 HP every 1.7 s at night", p.hp >= undead_hp + 2, "%d -> %d" % [undead_hp, p.hp])
 	main.clock = 30.0
 	p.hp = p.max_hp - 3
 	undead_hp = p.hp
@@ -1203,7 +1203,7 @@ func _init() -> void:
 	use_line(18, 1)
 	p.hp = p.max_hp - 3
 	var nature_hp: int = p.hp
-	await frames(260)
+	await frames(420)
 	check("Nature: regenerates while standing still", p.hp > nature_hp, "%d -> %d" % [nature_hp, p.hp])
 
 	# Material: less damage per hit
@@ -2156,6 +2156,19 @@ func _init() -> void:
 	fn_ev.active_left = 0.0
 	fn_ev._process(0.1)
 	fn_ev.enabled = true
+
+	# =========================== healing is weaker ===========================
+	await fresh()
+	p = main.player
+	p.choose_line(0)
+	p.learn("drain")
+	p.hp = 1
+	for i in 4:
+		p.on_kill()
+	check("Soul Drain: about half an HP per kill (4 kills heal 2)", p.hp == 3, str(p.hp))
+	check("Blood Drain heals less than before", p.AbilitiesData.ABILITIES[0]["desc"].contains("6/9/12%"))
+	p.learn_special("secondwind")
+	check("Second Wind waits 90 s", SkillsD.SPECIALS["secondwind"]["desc"].contains("90"))
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

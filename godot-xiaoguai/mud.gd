@@ -9,6 +9,8 @@ const ARC_STEPS := 4
 
 var cells := {}
 var cam: Camera2D
+var tex_name := "mud"        ## "mud", or "dirt" for the village paths
+var bubbles := true          ## mud bubbles; dirt does not
 var _t := 0.0
 
 
@@ -94,7 +96,7 @@ func _draw_poly(pts: PackedVector2Array, tex: Texture2D, tint: Color = Color.WHI
 
 
 func _draw() -> void:
-	var tex := Sprites.tex("mud")
+	var tex: Texture2D = Sprites.dirt_tex() if tex_name == "dirt" else Sprites.tex(tex_name)
 	if tex == null or cells.is_empty():
 		return
 	var rect := Rect2(-1e9, -1e9, 2e9, 2e9)
@@ -116,7 +118,8 @@ func _draw() -> void:
 			var pts := _tile_poly(c)
 			_draw_poly(pts, tex, tint)
 			_fillets(c, tex)
-			_bubble(c)
+			if bubbles:
+				_bubble(c)
 
 
 ## A bubble swells on some tiles, then pops with a ring and a few droplets.

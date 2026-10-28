@@ -94,6 +94,9 @@ var remove_armed := false        # the remove button is on: the next click on a 
 var map_seed := SEED             # random at every launch (the tests keep the fixed SEED)
 var buildings := {}            # Vector2i -> "wall", "tower", "keep", "house" or "well": solid town tiles
 var floors := {}               # Vector2i -> true: castle courtyards and gate aprons
+var bridges := {}              # Vector2i -> true: wooden bridges over a castle moat
+var dirt := {}                 # Vector2i -> true: village dirt paths and plazas (a little faster to walk)
+var decor := {}                # Vector2i -> sprite name: town props that stand on one tile
 var layout := {}               # the towns (see towns.gd)
 var _town_tiles: Array[Vector2i] = []
 var town_population := 0       # villagers living in the towns at the start (they count toward the target)
@@ -310,12 +313,20 @@ func _build_hd2d() -> void:
 	mud_layer.cam = cam
 	add_child(mud_layer)
 	move_child(mud_layer, 0)
+	var dirt_layer := preload("res://mud.gd").new()
+	dirt_layer.cells = dirt
+	dirt_layer.cam = cam
+	dirt_layer.tex_name = "dirt"
+	dirt_layer.bubbles = false
+	add_child(dirt_layer)
+	move_child(dirt_layer, 0)
 	var town_layer := preload("res://town_layer.gd").new()
 	town_layer.main = self
 	town_layer.layout = layout
 	town_layer.cam = cam
 	add_child(town_layer)
 	move_child(town_layer, 0)
+	town_layer.build()
 	var path_layer := preload("res://water.gd").new()
 	path_layer.cells = paths
 	path_layer.base = "stone_path"
@@ -750,6 +761,8 @@ func speed_mult_at(pos: Vector2) -> float:
 		return WATER_SLOW
 	if paths.has(t):
 		return PATH_FAST
+	if dirt.has(t):
+		return 1.1
 	return MUD_SLOW if mud.has(t) else 1.0
 
 

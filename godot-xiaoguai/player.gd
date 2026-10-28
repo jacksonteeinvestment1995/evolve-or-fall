@@ -70,6 +70,8 @@ var ab_cd := {}                ## signature ability cooldowns
 var still_time := 0.0          ## seconds spent standing still (Rooted, Nature regeneration)
 var trait_t := 0.0
 var regen_acc := 0.0
+var kill_heal_acc := 0.0       ## fractions of HP from Soul Drain
+var bite_heal_acc := 0.0       ## fractions of HP from bite lifesteal
 var ghosts: Array = []         # afterimages while sprinting or rolling: {pos, flip, frame, age}
 var _ghost_t := 0.0
 var _dust_t := 0.0
@@ -195,7 +197,7 @@ func add_xp(amount: int) -> void:
 		level_flash = 0.8
 		SkillFx.spawn_levelup(self)
 		Popups.text(get_tree(), global_position + Vector2(0, -34.0), "LEVEL UP!", Popups.HEAL, 16)
-		hp = mini(max_hp, hp + roundi(max_hp * 0.3))
+		hp = mini(max_hp, hp + roundi(max_hp * 0.2))
 		hp_changed.emit(hp)
 		leveled.emit(level)
 		_check_evolution()
@@ -259,7 +261,9 @@ func learn_special(id: String) -> void:
 		_:
 			SkillFx.spawn_fx(self, Vector2.ZERO, "pick", sp_col)
 	if id == "ironwill":
-		_apply_stage(true)
+		_apply_stage(false)
+		hp = mini(max_hp, hp + roundi(max_hp * 0.5))
+		hp_changed.emit(hp)
 	elif id == "mastery":
 		for sid in skills.keys():
 			skills[sid] = mini(int(skills[sid]) + 1, int(SkillsData.info(sid)["max"]))
@@ -271,9 +275,13 @@ func learn_special(id: String) -> void:
 func on_kill() -> void:
 	var drain := rank("drain")
 	if drain > 0 and hp > 0:
-		hp = mini(max_hp, hp + drain)
-		hp_changed.emit(hp)
-		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "+%d" % drain, Popups.HEAL, 13)
+		kill_heal_acc += 0.5 * drain
+		var whole := int(kill_heal_acc)
+		if whole > 0:
+			kill_heal_acc -= whole
+			hp = mini(max_hp, hp + whole)
+			hp_changed.emit(hp)
+			Popups.text(get_tree(), global_position + Vector2(0, -22.0), "+%d" % whole, Popups.HEAL, 13)
 
 
 func _physics_process(delta: float) -> void:
@@ -539,8 +547,8 @@ func on_bite_landed(target, dmg: int) -> void:
 				SkillSounds.play_at(get_tree(), "cleave", e.global_position, -6.0)
 	var ab := ability()
 	if not ab.is_empty() and ab["id"] == "blood_drain":
-		var frac: float = [0.10, 0.15, 0.20][int(ab["rank"]) - 1]
-		var healed := maxi(1, roundi(dmg * frac))
+		var frac: float = [0.06, 0.09, 0.12][int(ab["rank"]) - 1]
+		var healed := maxi(1, roundi(dmg * frac * 0.7))
 		hp = mini(max_hp, hp + healed)
 		hp_changed.emit(hp)
 		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "+%d" % healed, Popups.HEAL, 13)
@@ -624,8 +632,8 @@ func _update_ability(delta: float) -> void:
 	# special skills that work over time
 	wind_cd = maxf(wind_cd - delta, 0.0)
 	if specials.has("secondwind") and wind_cd == 0.0 and hp > 0 and hp < max_hp * 0.25:
-		wind_cd = 60.0
-		hp = mini(max_hp, hp + roundi(max_hp * 0.5))
+		wind_cd = 90.0
+		hp = mini(max_hp, hp + roundi(max_hp * 0.3))
 		hp_changed.emit(hp)
 		Popups.text(get_tree(), global_position + Vector2(0, -22.0), "Second Wind!", Popups.HEAL, 16)
 		SkillFx.spawn_fx(self, Vector2.ZERO, "heal")
@@ -639,15 +647,15 @@ func _update_ability(delta: float) -> void:
 	# family traits, from form 1
 	var fam := family()
 	trait_t += delta
-	if trait_t >= 1.0:
-		trait_t -= 1.0
+	if trait_t >= 1.7:
+		trait_t -= 1.7
 		if fam == "Undead" and _night() and hp < max_hp:
 			hp += 1
 			hp_changed.emit(hp)
 	if fam == "Nature":
 		if still_time >= 1.0:
 			nature_t += delta
-			if nature_t >= 3.0:
+			if nature_t >= 4.5:
 				nature_t = 0.0
 				if hp < max_hp:
 					hp += 1
@@ -867,7 +875,7 @@ func take_hit(dmg: int, dir: Vector2) -> void:
 	hp_changed.emit(hp)
 	if hp <= 0 and specials.has("phoenix") and not phoenix_used:
 		phoenix_used = true  # Phoenix: one comeback per run
-		hp = roundi(max_hp * 0.6)
+		hp = roundi(max_hp * 0.4)
 		invuln = 2.0
 		hp_changed.emit(hp)
 		_player_zone(global_position, 160.0, 0.0, ceili(effective_bite() * 5.0), Color("ff8a30"), 1.5)
@@ -974,9 +982,12 @@ func _form_on_bite(target, dmg: int) -> void:
 	var all := SkillsData.form_skills()
 	var drain := form_mod("drain")
 	if drain > 0.0:
-		var healed := maxi(1, roundi(dmg * drain))
-		hp = mini(max_hp, hp + healed)
-		hp_changed.emit(hp)
+		bite_heal_acc += dmg * drain
+		var healed := int(bite_heal_acc)
+		if healed > 0:
+			bite_heal_acc -= healed
+			hp = mini(max_hp, hp + healed)
+			hp_changed.emit(hp)
 	for id in skills:
 		if not all.has(id) or not all[id].has("onbite") or not is_instance_valid(target):
 			continue

@@ -30,6 +30,34 @@ static func tex(name: String) -> Texture2D:
 
 ## A small icon scaled up with hard edges (for menu buttons), or null.
 ## Frame 0 of a strip scaled up with hard edges (a form's picture for a menu), or null.
+## A warm, packed-earth tile for village paths, generated once.
+static func dirt_tex() -> Texture2D:
+	if _cache.has("#dirt"):
+		return _cache["#dirt"]
+	var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	for y in 32:
+		for x in 32:
+			var n := rng.randf()
+			var c := Color(0.74, 0.58, 0.38)
+			if n < 0.18:
+				c = Color(0.66, 0.5, 0.32)
+			elif n > 0.86:
+				c = Color(0.82, 0.68, 0.46)
+			img.set_pixel(x, y, c)
+	for i in 7:
+		var px := rng.randi_range(2, 28)
+		var py := rng.randi_range(2, 28)
+		for dx in 2:
+			for dy in 2:
+				img.set_pixel(px + dx, py + dy, Color(0.55, 0.46, 0.38))
+		img.set_pixel(px, py, Color(0.7, 0.62, 0.52))
+	var t := ImageTexture.create_from_image(img)
+	_cache["#dirt"] = t
+	return t
+
+
 static func first_frame_icon(name: String, factor: int = 3) -> Texture2D:
 	var key := "%s#first%d" % [name, factor]
 	if _cache.has(key):

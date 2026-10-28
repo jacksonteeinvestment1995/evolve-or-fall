@@ -7,7 +7,7 @@ const UNLOCK_STAGES := [3, 6, 9]
 
 ## line index (see lines.gd) -> ability
 const ABILITIES := {
-	0: {"id": "blood_drain", "name": "Blood Drain", "desc": "Bites heal you (10/15/20% of the damage); rank 3 adds a bleeding red mist"},
+	0: {"id": "blood_drain", "name": "Blood Drain", "desc": "Bites heal you (6/9/12% of the damage); rank 3 adds a bleeding red mist"},
 	1: {"id": "bone_servants", "name": "Bone Servants", "desc": "Raises 2/3/4 skeleton helpers when 3 or more villagers are near"},
 	6: {"id": "molten_trail", "name": "Molten Trail", "desc": "Sprinting leaves burning goo that sets villagers on fire"},
 	10: {"id": "fire_breath", "name": "Fire Breath", "desc": "A cone of fire at the nearest villager every 8/6/5 s; rank 3 is twice as wide"},
@@ -18,11 +18,11 @@ const ABILITIES := {
 }
 
 const FAMILY_TRAITS := {
-	"Undead": "Heal 1 HP per second at night",
+	"Undead": "Heal 1 HP every 1.7 s at night",
 	"Slime": "Damage you take splits off a blob that hits the nearest villager",
 	"Dragon": "15% of bites also spark onto a second villager",
 	"Beast": "+10% speed, +25% at night",
-	"Nature": "Regenerate 1 HP every 3 s while standing still",
+	"Nature": "Regenerate 1 HP every 4.5 s while standing still",
 	"Material": "Every hit you take does 1 less damage",
 	"Demon": "Every kill drops 1 extra bone",
 }
