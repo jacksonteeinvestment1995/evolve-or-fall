@@ -171,6 +171,7 @@ var ui_portrait := false
 var touch_ui: Control      ## the on-screen joystick and buttons (touch_controls.gd)
 var hotbar_bar: HBoxContainer
 var hud_layer: CanvasLayer   ## the HUD's layer, hidden while a level-up menu is up
+var perf_notice: Control     ## the "turn on graphics acceleration" notice (perf_notice.gd), web only
 var start_gate: Control      ## the "TAP TO START" panel (start_gate.gd) while it is up
 var _away := false           ## the page lost focus mid-run on a phone: ask for a tap (and so the sound) when it is back
 var hotbar_parts: Array = []  ## per build button: the phone look's pieces (name, cost) and the desktop icon and key badge
@@ -220,6 +221,11 @@ func _ready() -> void:
 	touch.add_child(touch_ui)
 	if needs_start_gate():
 		open_start_gate("TAP TO START")
+	var notice_layer := CanvasLayer.new()
+	notice_layer.layer = 11
+	add_child(notice_layer)
+	perf_notice = preload("res://perf_notice.gd").new()
+	notice_layer.add_child(perf_notice)
 	# YouTube Playables: the first frame is up, then the game is ready to play
 	playables = preload("res://playables.gd").new()
 	add_child(playables)
@@ -288,8 +294,8 @@ func _layout_ui() -> void:
 	var mid_shift := 0.0 if (portrait or not t) else ((stick_right + cluster_left) * 0.5 - vs.x * 0.5)
 	if hotbar_bar != null:
 		hotbar_bar.add_theme_constant_override("separation", (8 if not portrait else 10) if t else 36)
-		hotbar_bar.offset_bottom = -22.0 if t else -12.0
-		hotbar_bar.offset_top = hotbar_bar.offset_bottom - ((64.0 if portrait else 52.0) if t else 44.0)
+		hotbar_bar.offset_bottom = -14.0 if t else -12.0
+		hotbar_bar.offset_top = hotbar_bar.offset_bottom - (44.0 if t else 44.0)
 		hotbar_bar.offset_left = mid_shift
 		hotbar_bar.offset_right = mid_shift
 		for i in hotbar.size():
@@ -425,7 +431,7 @@ func _style_hotbar_button(i: int, t: bool) -> void:
 	part["inner"].visible = t
 	part["badge"].visible = not t
 	btn.icon = null if t else part["icon"]
-	btn.custom_minimum_size = Vector2(122, 64) if t else Vector2(104, 58)
+	btn.custom_minimum_size = Vector2(96, 44) if t else Vector2(104, 58)
 	for st in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
 		btn.remove_theme_stylebox_override(st)
 	if t:
@@ -1589,16 +1595,16 @@ func _build_hud() -> void:
 		# the phone look: the picture, what it is, and its price in bones (shown instead of the icon and key)
 		var inner := HBoxContainer.new()
 		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		inner.offset_left = 8
-		inner.offset_right = -6
+		inner.offset_left = 5
+		inner.offset_right = -4
 		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_theme_constant_override("separation", 6)
+		inner.add_theme_constant_override("separation", 4)
 		inner.visible = false
 		var pic := TextureRect.new()
 		pic.texture = ic
 		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		pic.custom_minimum_size = Vector2(44, 44)
+		pic.custom_minimum_size = Vector2(32, 32)
 		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		inner.add_child(pic)
@@ -1609,10 +1615,10 @@ func _build_hud() -> void:
 		inner.add_child(words)
 		var what := Label.new()
 		what.text = ["TOWER", "WALL", "REMOVE"][i]
-		what.add_theme_font_size_override("font_size", 15)
+		what.add_theme_font_size_override("font_size", 12)
 		what.add_theme_color_override("font_color", Color("ffe08a"))
 		what.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.0))
-		what.add_theme_constant_override("outline_size", 5)
+		what.add_theme_constant_override("outline_size", 4)
 		words.add_child(what)
 		var price := HBoxContainer.new()
 		price.add_theme_constant_override("separation", 3)
@@ -1622,13 +1628,13 @@ func _build_hud() -> void:
 		bone.texture = Sprites.icon("icon_bone", 2)
 		bone.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		bone.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		bone.custom_minimum_size = Vector2(20, 20)
+		bone.custom_minimum_size = Vector2(14, 14)
 		bone.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		bone.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		price.add_child(bone)
 		var cost_l := Label.new()
 		cost_l.text = "+50%" if i == 2 else ""
-		cost_l.add_theme_font_size_override("font_size", 16 if i == 2 else 20)
+		cost_l.add_theme_font_size_override("font_size", 12 if i == 2 else 15)
 		cost_l.add_theme_color_override("font_outline_color", Color.BLACK)
 		cost_l.add_theme_constant_override("outline_size", 4)
 		price.add_child(cost_l)
