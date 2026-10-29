@@ -32,13 +32,18 @@ const EARLY_SPEED := 0.75       # villager walking speed at the very start
 const RAMP_SECONDS := 1200.0
 const POP_TIME_END := 120       # how many the clock alone allows once the 20 minutes are up...
 const POP_PER_STAGE := 22       # ...plus this many more for every evolution 小怪 has gone through
-const POP_CAP := 360            # never more than this alive at once
+const POP_CAP := 200            # never more than this alive at once (a crowd this big already slows a phone)
 const SPAWN_SLOW := 3.0         # seconds between respawns at the start...
 const SPAWN_FAST := 0.3         # ...and at the end of the ramp
 const SPAWN_MIN_DISTANCE := 800.0
 const KILLS_PER_VILLAGE_LEVEL := 30  # village level 1 to 5 sets the form new villagers are born in
 const VILLAGE_TIERS := ["Novice", "Trained", "Veteran", "Elite", "Master"]
 const HIDDEN_SPAWN_CHANCE := 0.6     # at each dawn and dusk
+const GOD_AT := 900.0               # GOD, the last boss, descends at 15 minutes
+const RIVAL_AT := 3.0               # the rival hero (the enemy's own main character) is there from the very start: 3 seconds in
+const RIVAL_RESPAWN := 30.0         # ...and returns this many seconds after 小怪 defeats it
+const DUEL_AT := 1200.0             # at 20 minutes it is the final duel: no more respawns
+const RIVAL_SKILL_POOL := ["pierce", "volley", "smite", "fireball", "bomb", "slam", "nova", "charge", "blink", "shield", "rage", "heal", "axe", "slow"]
 
 ## Day and night. Days make villagers stronger; nights make 小怪 stronger.
 const DAY_SECONDS := 60.0
@@ -63,7 +68,6 @@ const GhostScript := preload("res://ghost.gd")
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
 const PerksData := preload("res://perks.gd")
-const PetScript := preload("res://pet.gd")
 const TreasureScript := preload("res://treasure.gd")
 const Popups := preload("res://popups.gd")
 const Sfx := preload("res://sfx.gd")
@@ -127,6 +131,9 @@ var ghost_error := ""
 var ghost_dirty := true
 var hud: Control
 var playables: Node
+var god_spawned := false
+## The rival's state outlives its body: it keeps its line, EXP, level and skills across respawns.
+var rival := {"line": -1, "xp": 0, "level": 1, "skills": [], "node": null, "respawn": -1.0, "falls": 0, "duel": false, "skip_xp": false}
 var perk_every := PerksData.PERK_EVERY   ## a perk card pick every this many levels (the tests turn it off)
 var touch_mode := false   ## the on-screen controls are showing: walk with the stick, build in front of 小怪
 var banner: Label
@@ -279,6 +286,24 @@ func daylight() -> float:
 
 func is_night() -> bool:
 	return fposmod(clock, DAY_SECONDS + NIGHT_SECONDS) >= DAY_SECONDS or eclipse_t > 0.5
+
+
+## Villagers spawned at 5 minutes have 1.7x their health, at 10 minutes 2.4x, at 15 minutes 3.1x, at 20 minutes 3.9x
+## (like the swarms of a survivor game that grow tougher with the clock), and hit up to 1.7x as hard by 15 minutes.
+static func hp_mult_at(seconds: float) -> float:
+	return 1.0 + seconds / 420.0
+
+
+static func damage_mult_at(seconds: float) -> float:
+	return 1.0 + seconds / 900.0
+
+
+func enemy_hp_mult() -> float:
+	return 1.0 if Engine.has_meta("deterministic_map") else hp_mult_at(elapsed)  # (the tests jump the clock around)
+
+
+func enemy_damage_mult() -> float:
+	return 1.0 if Engine.has_meta("deterministic_map") else damage_mult_at(elapsed)
 
 
 func enemy_power() -> float:
@@ -840,6 +865,8 @@ func _update_drowning(delta: float) -> void:
 	for b in bodies:
 		if not is_instance_valid(b) or b.is_queued_for_deletion():
 			continue
+		if b != player and b.immune():
+			continue  # GOD walks through water
 		var id: int = b.get_instance_id()
 		alive[id] = true
 		var t: float = drown.get(id, 0.0)
@@ -1304,7 +1331,6 @@ func _update_hud() -> void:
 		"build_item": build_item, "build_error": ghost_error,
 		"build_cost": TowerScript.COSTS[0] if build_item == "tower" else WALL_COST,
 		"ability": ab.get("name", ""),
-		"pets": get_tree().get_nodes_in_group("pets").map(func(p): return {"level": p.level, "color": p.info()["color"]}),
 		"combo": player.combo, "combo_frac": clampf(player.combo_t / player.combo_window(), 0.0, 1.0), "counter": player.counter_t > 0.0,
 	})
 
@@ -1532,6 +1558,10 @@ func _on_hp_changed(_hp: int) -> void:
 
 func _on_villager_defeated(xp: int, bones_gain: int, by_tower: bool) -> void:
 	kills += 1
+	if bool(rival["skip_xp"]):
+		rival["skip_xp"] = false
+	else:
+		rival_gain(xp)
 	Sfx.play(get_tree(), "coin", -6.0)
 	village_level = mini(VILLAGE_TIERS.size(), 1 + int(kills / float(KILLS_PER_VILLAGE_LEVEL)))
 	bones += roundi(bones_gain * (1.0 + 0.25 * player.rank("greed")) * (2.0 if player.specials.has("bonehoard") else 1.0) * (2.0 if blood_moon and eclipse_t > 0.5 else 1.0))
@@ -1632,9 +1662,7 @@ func _on_phase_change() -> void:
 		return
 	var count := 1 + int(elapsed / 400.0)
 	var secret := 0
-	if elapsed > 1200.0 and village_level >= 5 and rng.randf() < 0.15:
-		secret = 2
-	elif elapsed > 780.0 and rng.randf() < 0.4:
+	if elapsed > 780.0 and rng.randf() < 0.4:
 		secret = 1
 	var spawned := 0
 	for i in count:
@@ -1644,7 +1672,142 @@ func _on_phase_change() -> void:
 		_say("%s gathers in the big castle..." % VillagerScript.HIDDEN[secret]["name"])
 
 
+## GOD descends: the last boss. It does not wait in the castle; it hunts 小怪 at once.
+func _check_god() -> void:
+	if god_spawned or elapsed < GOD_AT or game_over or player == null or Engine.has_meta("deterministic_map"):  # (the tests jump the clock around)
+		return
+	spawn_god()
+
+
+# --- the rival hero ---
+
+## Pick the rival's evolution line (a different one most runs) and bring it into the world when its time comes.
+func _update_rival(delta: float) -> void:
+	if Engine.has_meta("deterministic_map") or game_over or player == null:
+		return
+	if int(rival["line"]) < 0:
+		var lines: Array = []
+		for i in LinesData.LINES.size():
+			if LinesData.released(i) and i != player.line:
+				lines.append(i)
+		rival["line"] = lines[rng.randi_range(0, lines.size() - 1)]
+	var node = rival["node"]
+	if node != null and is_instance_valid(node) and not node.is_queued_for_deletion():
+		if elapsed >= DUEL_AT and not bool(rival["duel"]):
+			_start_duel(node)
+		return
+	if float(rival["respawn"]) > 0.0:
+		rival["respawn"] = float(rival["respawn"]) - delta
+		if float(rival["respawn"]) > 0.0:
+			return
+	if elapsed < RIVAL_AT or bool(rival["duel"]) and int(rival["falls"]) > 0:
+		return
+	spawn_rival()
+
+
+func spawn_rival():
+	var spot := Vector2.INF
+	var big: Dictionary = layout.get("big", {})
+	if not big.is_empty():
+		var rect: Rect2i = big["rect"]
+		spot = _tile_center(Vector2i(rect.get_center()))
+	if spot == Vector2.INF or spot.distance_to(player.global_position) < 500.0:
+		var far = spawn_far(VillagerScript.MAX_STAGE)
+		if far == null:
+			return null
+		spot = far.global_position
+		far.queue_free()
+	var v = _spawn_villager(spot, 3, 0, -1)
+	v.hero_down.connect(_on_rival_down)
+	_refresh_rival(v, true)
+	rival["node"] = v
+	rival["respawn"] = -1.0
+	_say("%s the rival hero (%s line) rises: it will fight you until the end." % [v.form_name().capitalize(), LinesData.LINES[int(rival["line"])]["forms"][0]] if int(rival["falls"]) == 0 else "The rival hero is back, Lv %d." % int(rival["level"]))
+	return v
+
+
+func rival_stage() -> int:
+	return PlayerScript.stage_for_level(int(rival["level"]))
+
+
+func _refresh_rival(v, full_heal: bool) -> void:
+	v.setup_rival(int(rival["line"]), int(rival["level"]), rival_stage(), rival["skills"], full_heal)
+
+
+## Everything 小怪 defeats feeds the rival: half of its EXP goes to the enemy's main character.
+func rival_gain(xp: int) -> void:
+	if int(rival["line"]) < 0:
+		return
+	rival["xp"] = int(rival["xp"]) + maxi(1, roundi(xp * 0.5))
+	var before_stage := rival_stage()
+	var grew := false
+	while int(rival["level"]) < PlayerScript.MAX_LEVEL and int(rival["xp"]) >= PlayerScript.xp_for_level(int(rival["level"]) + 1):
+		rival["level"] = int(rival["level"]) + 1
+		grew = true
+		if int(rival["level"]) % 3 == 0 and rival["skills"].size() < 10:
+			var open: Array = RIVAL_SKILL_POOL.filter(func(id): return not rival["skills"].has(id))
+			if not open.is_empty():
+				rival["skills"].append(open[rng.randi_range(0, open.size() - 1)])
+	if not grew:
+		return
+	var node = rival["node"]
+	if node != null and is_instance_valid(node) and not node.is_queued_for_deletion():
+		_refresh_rival(node, false)
+		if rival_stage() > before_stage:
+			_say("The rival hero evolved into %s!" % node.form_name().capitalize())
+			Sfx.play(get_tree(), "warn", -3.0)
+
+
+func _on_rival_down(v) -> void:
+	rival["skip_xp"] = true  # its own death is not EXP for itself
+	rival["node"] = null
+	rival["falls"] = int(rival["falls"]) + 1
+	if bool(rival["duel"]):
+		game_over = true
+		banner.text = "VICTORY!\nYou defeated the rival hero"
+		banner.visible = true
+		Sfx.play(get_tree(), "win")
+		return
+	rival["respawn"] = RIVAL_RESPAWN
+	_say("The rival hero fell. It returns in %d seconds, stronger." % int(RIVAL_RESPAWN))
+
+
+## 20 minutes: the rival heals fully, never respawns again, and the game ends when one of you falls.
+func _start_duel(v) -> void:
+	rival["duel"] = true
+	v.hp = v.max_hp
+	banner.text = "FINAL DUEL\n%s" % v.form_name()
+	banner.visible = true
+	get_tree().create_timer(4.0).timeout.connect(func():
+		if is_instance_valid(banner) and not game_over:
+			banner.visible = false)
+	Sfx.play(get_tree(), "warn", 2.0)
+	shake_amp = maxf(shake_amp, 6.0)
+	_say("The final duel! Defeat the rival hero to win.")
+
+
+func spawn_god():
+	god_spawned = true
+	var v = spawn_boss(2)
+	if v == null:
+		return null
+	v.guard_until = 0.0
+	v.force_chase = true
+	banner.text = "GOD DESCENDS"
+	banner.visible = true
+	notice_timer = 0.0
+	get_tree().create_timer(4.0).timeout.connect(func():
+		if is_instance_valid(banner):
+			banner.visible = false)
+	Sfx.play(get_tree(), "warn", 2.0)
+	shake_amp = maxf(shake_amp, 6.0)
+	_say("GOD has descended. It cannot be slowed, burned, rooted, drowned or killed in one blow.")
+	return v
+
+
 func _process(delta: float) -> void:
+	_check_god()
+	_update_rival(delta)
 	if eclipse_left > 0.0:
 		eclipse_left -= delta
 	eclipse_t = move_toward(eclipse_t, 1.0 if eclipse_left > 0.0 else 0.0, delta * 0.5)
@@ -1775,7 +1938,6 @@ const SHOP := [
 	{"name": "Rage tonic", "cost": 35, "desc": "+40% bite damage for 60 seconds"},
 	{"name": "Mystery relic", "cost": 90, "desc": "a random permanent relic"},
 	{"name": "EXP pouch", "cost": 60, "desc": "a pile of EXP right now"},
-	{"name": "Pet egg", "cost": 80, "desc": "hatches a companion that fights and grows (3 at most)"},
 ]
 
 
@@ -1810,34 +1972,8 @@ func _shop_pick(i: int, merchant) -> void:
 			player.add_relic(ids[rng.randi_range(0, ids.size() - 1)])
 		3:
 			player.add_xp(10 + 4 * player.level)
-		4:
-			if not hatch_pet():
-				bones += int(item["cost"])
-				_say("You already have %d pets." % PetScript.MAX_PETS)
-				return
 	Sfx.play(get_tree(), "coin")
 	_say("Bought: %s" % item["name"])
-
-
-## A pet hatches next to 小怪. Returns false when he already has the most pets.
-func hatch_pet() -> bool:
-	var have := get_tree().get_nodes_in_group("pets")
-	if have.size() >= PetScript.MAX_PETS:
-		return false
-	var taken := {}
-	for p in have:
-		taken[p.species] = int(taken.get(p.species, 0)) + 1
-	var kinds: Array = PetScript.SPECIES.keys()
-	kinds.sort_custom(func(a, b): return int(taken.get(a, 0)) < int(taken.get(b, 0)))
-	var fewest: Array = kinds.filter(func(k): return int(taken.get(k, 0)) == int(taken.get(kinds[0], 0)))
-	var pet = PetScript.new()
-	pet.species = fewest[rng.randi_range(0, fewest.size() - 1)]
-	pet.slot = have.size()
-	pet.position = player.global_position + Vector2(0, 18)
-	add_child(pet)
-	Popups.text(get_tree(), player.global_position + Vector2(0, -40.0), "%s hatched!" % pet.form_name(), Popups.BIG, 16)
-	Sfx.play(get_tree(), "levelup", -4.0)
-	return true
 
 
 ## Free tiles around village wells and inside castle courtyards: where new villagers like to appear.

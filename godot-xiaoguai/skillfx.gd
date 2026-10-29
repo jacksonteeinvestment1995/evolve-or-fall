@@ -639,3 +639,48 @@ static func draw_danger_burst(ci: CanvasItem, radius: float, st: float, tint: Co
 		ci.draw_colored_polygon(PackedVector2Array([d * len, d * len * 0.35 + side * w, d * len * 0.35 - side * w]), Color(1.0, 0.3 + 0.4 * float(i % 2), 0.2, a * 0.9))
 	ci.draw_circle(Vector2.ZERO, radius * 0.35 * a, Color(1, 0.95, 0.7, a * 0.8))
 	ci.draw_arc(Vector2.ZERO, radius * (0.4 + 0.6 * minf(st * 2.5, 1.0)), 0, TAU, 32, Color(1, 0.4, 0.25, a * 0.8), 3.0)
+
+
+# --- polish shared by every skill of 小怪: soft glows, sparkle trails, shockwaves and rays ---
+
+## A soft light: stacked translucent discs, brightest in the middle, with a white-hot core.
+static func glow(ci: CanvasItem, center: Vector2, radius: float, tint: Color, strength: float = 1.0) -> void:
+	for i in 5:
+		var f := float(i) / 5.0
+		ci.draw_circle(center, radius * (1.0 - f * 0.75), Color(tint, (0.05 + 0.07 * f) * strength))
+	ci.draw_circle(center, radius * 0.22, Color(1, 1, 1, 0.55 * strength).lerp(Color(tint, 0.9), 0.25))
+
+
+## Little lights that drift off behind a moving projectile and fade, so it leaves a shimmering tail.
+static func sparkle_trail(ci: CanvasItem, dir: Vector2, radius: float, tint: Color, seed: float = 0.0) -> void:
+	var tm := Time.get_ticks_msec() * 0.004 + seed
+	var side := dir.orthogonal()
+	for i in 7:
+		var f := float(i) / 7.0
+		var wob := sin(tm * 3.0 + float(i) * 1.9) * radius * 0.7 * f
+		var p := -dir * radius * (1.4 + f * 5.5) + side * wob
+		ci.draw_circle(p, maxf(radius * (0.5 - 0.4 * f), 0.6), Color(tint.lightened(0.4 * (1.0 - f)), 0.75 * (1.0 - f)))
+	# a thin bright streak right behind the head
+	ci.draw_line(-dir * radius * 1.2, -dir * radius * 4.5, Color(tint.lightened(0.5), 0.45), maxf(radius * 0.45, 1.0))
+
+
+## An expanding double ring with soft fill, for a blast going off (st runs 0 to 1).
+static func shock_ring(ci: CanvasItem, radius: float, st: float, tint: Color) -> void:
+	var e := 1.0 - pow(1.0 - clampf(st, 0.0, 1.0), 3.0)   # fast at first, then easing out
+	var a := 1.0 - clampf(st, 0.0, 1.0)
+	ci.draw_circle(Vector2.ZERO, radius * e, Color(tint, 0.10 * a))
+	ci.draw_arc(Vector2.ZERO, radius * e, 0.0, TAU, 48, Color(tint.lightened(0.35), 0.85 * a), 3.0)
+	ci.draw_arc(Vector2.ZERO, radius * e * 0.82, 0.0, TAU, 40, Color(tint, 0.5 * a), 1.6)
+
+
+## Rays and embers thrown out of a blast's centre.
+static func burst_rays(ci: CanvasItem, radius: float, st: float, tint: Color, count: int = 12) -> void:
+	var a := 1.0 - clampf(st, 0.0, 1.0)
+	var e := 1.0 - pow(1.0 - clampf(st, 0.0, 1.0), 2.0)
+	for i in count:
+		var ang := float(i) / float(count) * TAU + 0.35
+		var d := Vector2.from_angle(ang)
+		var r0 := radius * (0.15 + 0.5 * e)
+		var r1 := radius * (0.35 + 0.65 * e) * (0.85 + 0.3 * float(i % 3) / 2.0)
+		ci.draw_line(d * r0, d * r1, Color(tint.lightened(0.5), 0.8 * a), 2.0 * (1.0 - 0.5 * e))
+		ci.draw_circle(d * r1, 1.6 * a + 0.4, Color(1, 1, 1, 0.9 * a))

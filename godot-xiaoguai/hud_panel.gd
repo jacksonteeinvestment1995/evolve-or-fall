@@ -208,11 +208,6 @@ func _draw() -> void:
 		_diamond(Vector2(x + 8, y + sin(_t * 2.5 + i) * 1.2), 7.0, Color("c8a0ff"), i)
 		_text(Vector2(x + 18, y + 5), "x%d" % info["relics"][i]["n"], 12, INK)
 		x += 36.0
-	# the pets: a paw with its level, after the buffs and relics
-	for pet in info["pets"]:
-		_paw(Vector2(x + 8, y), pet["color"])
-		_text(Vector2(x + 18, y + 5), "L%d" % pet["level"], 12, INK)
-		x += 40.0
 	# row 4: what E / X do right now
 	y = 102.0
 	x = 0.0
@@ -462,8 +457,3 @@ func _flame(c: Vector2, s: float, col: Color) -> void:
 	draw_colored_polygon(PackedVector2Array([c + Vector2(0, -9) * s * w, c + Vector2(6, 0) * s, c + Vector2(4, 7) * s, c + Vector2(-4, 7) * s, c + Vector2(-6, 0) * s]), col)
 	draw_colored_polygon(PackedVector2Array([c + Vector2(0, -3) * s, c + Vector2(3, 2) * s, c + Vector2(2, 6) * s, c + Vector2(-2, 6) * s, c + Vector2(-3, 2) * s]), Color(1, 0.95, 0.7))
 
-
-func _paw(c: Vector2, col: Color) -> void:
-	draw_circle(c + Vector2(0, 3), 4.5, col)
-	for p in [Vector2(-5, -3), Vector2(-1.7, -6), Vector2(1.7, -6), Vector2(5, -3)]:
-		draw_circle(c + p, 1.9, col)

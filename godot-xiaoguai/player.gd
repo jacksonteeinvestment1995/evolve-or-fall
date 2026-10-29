@@ -290,7 +290,6 @@ func learn_special(id: String) -> void:
 
 ## Called when a villager 小怪 fought is defeated (not a tower kill).
 func on_kill() -> void:
-	get_tree().call_group("pets", "gain_xp", 1)
 	var drain := rank("drain")
 	if drain > 0 and hp > 0:
 		kill_heal_acc += 0.5 * drain
@@ -593,7 +592,7 @@ func reduce_damage(dmg: int) -> int:
 	if not ab.is_empty() and ab["id"] == "stone_skin":
 		cut += 1 + int(ab["rank"])  # 2, 3, 4
 	cut += roundi(form_mod("cut"))
-	return maxi(1, dmg - cut)
+	return maxi(maxi(1, ceili(dmg * 0.4)), dmg - cut)  # armour never takes off more than 60% of a hit
 
 
 func _nearest_enemy(radius: float):
@@ -1214,9 +1213,9 @@ func form_mod(key: String) -> float:
 ## On-bite statuses and healing from form skills.
 func _form_on_bite(target, dmg: int) -> void:
 	var all := SkillsData.form_skills()
-	var drain := form_mod("drain")
+	var drain := minf(form_mod("drain"), 0.08)  # life steal tops out at 8% of the damage, and 2% of max HP per bite
 	if drain > 0.0:
-		bite_heal_acc += dmg * drain
+		bite_heal_acc += minf(dmg * drain, maxf(1.0, max_hp * 0.02))
 		var healed := int(bite_heal_acc)
 		if healed > 0:
 			bite_heal_acc -= healed
@@ -1233,7 +1232,7 @@ func _form_on_bite(target, dmg: int) -> void:
 
 
 func _form_regen(delta: float) -> void:
-	var per_sec := form_mod("regen")
+	var per_sec := minf(form_mod("regen"), 2.0)  # regeneration tops out at 2 HP per second
 	if per_sec <= 0.0 or hp >= max_hp:
 		return
 	regen_acc += per_sec * delta

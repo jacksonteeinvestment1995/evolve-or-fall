@@ -183,13 +183,17 @@ func _draw() -> void:
 			continue
 		var ep: Vector2 = to_screen.call(e.global_position)
 		var secret: int = e.get("secret") if e.get("secret") != null else -1
-		if secret >= 0:
-			# hidden enemies are shown even outside the circle: pinned to its edge, pointing the way
+		var is_rival: bool = bool(e.get("hero_rival"))
+		if secret >= 0 or is_rival:
+			# hidden enemies and the rival hero are shown even outside the circle: pinned to its edge, pointing the way
 			var dir := ep - c
 			var pin := ep if dir.length() <= RADIUS - 5.0 else c + dir.normalized() * (RADIUS - 5.0)
 			var pulse := 0.5 + 0.5 * sin(_t * 5.0)
-			draw_circle(pin, 4.0 + pulse * 1.8, Color(HIDDEN_COLORS[clampi(secret, 0, 2)], 0.35))
-			draw_circle(pin, 3.0, HIDDEN_COLORS[clampi(secret, 0, 2)])
+			var mark: Color = Color("ff2a2a") if is_rival else HIDDEN_COLORS[clampi(secret, 0, 2)]
+			draw_circle(pin, 4.0 + pulse * 1.8, Color(mark, 0.35))
+			draw_circle(pin, 3.0, mark)
+			if is_rival:
+				draw_rect(Rect2(pin - Vector2(5, 5), Vector2(10, 10)), Color("ffd84a"), false, 1.5)
 		elif inside.call(ep) and _revealed(main_node.tile_of(e.global_position)):
 			var stage: int = e.get("stage") if e.get("stage") != null else 0
 			var sz := 2.2 + minf(float(stage), 4.0) * 0.5

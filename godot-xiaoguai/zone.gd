@@ -65,9 +65,9 @@ func _detonate() -> void:
 				source.add_xp(1)
 		if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
 			e.apply_status(status, status_time)
-		if knock > 0.0:
+		if knock > 0.0 and not e.immune():
 			e.knock = away * knock
-		if stun > 0.0:
+		if stun > 0.0 and not e.immune():
 			e.stun_left = maxf(e.stun_left, stun)
 	if landed and hit_sound != "":
 		SkillSounds.play_at(get_tree(), hit_sound, global_position, 0.0)
@@ -81,6 +81,12 @@ func _draw() -> void:
 			return
 		draw_circle(Vector2.ZERO, radius * f, Color(color, 0.2))
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.85), 2.0)
+		# the charging blast: a rotating rune ring and a growing light, so it reads as 小怪's skill coming
+		var tm := Time.get_ticks_msec() * 0.003
+		for k in 6:
+			var ang := tm + float(k) / 6.0 * TAU
+			draw_circle(Vector2.from_angle(ang) * radius * 0.9, 2.0 + 1.5 * f, Color(color.lightened(0.4), 0.9))
+		SkillFx.glow(self, Vector2.ZERO, radius * (0.3 + 0.5 * f), color, 0.7)
 	else:
 		if team == "enemy" and style == "":
 			SkillFx.draw_danger_burst(self, radius, clampf((age - delay) / maxf(dur, 0.01), 0.0, 1.0), color)
@@ -88,6 +94,8 @@ func _draw() -> void:
 		var a := clampf(1.0 - (age - delay) / 0.25, 0.0, 1.0)
 		if style != "":
 			var st := clampf((age - delay) / dur, 0.0, 1.0)
+			SkillFx.shock_ring(self, radius * 1.05, st, color)
+			SkillFx.burst_rays(self, radius, st, color)
 			match style:
 				"nova":
 					SkillFx.draw_bone_nova(self, radius, st, color)

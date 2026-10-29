@@ -106,8 +106,6 @@ func open(pl) -> Array[String]:
 		lines.append(_give_buff(pl, 25.0 if tier == "gold" else 30.0))
 		if tier == "cursed" or rng.randf() < 0.6:
 			lines.append(_give_relic(pl))
-		if tier == "gold" and level_node.has_method("hatch_pet") and rng.randf() < 0.25 and level_node.hatch_pet():
-			lines.append("A pet egg hatched!")
 		if tier == "gold" and rng.randf() < 0.25:
 			var pick: Array = SkillsData.roll(pl.skills, rng, 1, pl.line, pl.stage)
 			if not pick.is_empty():

@@ -141,8 +141,8 @@ static func stream_for(sound: String) -> AudioStreamWAV:
 
 
 static func _ensure(tree: SceneTree) -> bool:
-	if _holder != null and is_instance_valid(_holder) and _holder.is_inside_tree():
-		return true
+	if _holder != null and is_instance_valid(_holder):
+		return _holder.is_inside_tree()  # (a holder still waiting to join the tree must not be built a second time)
 	if tree == null or tree.root == null:
 		return false
 	_holder = Node.new()

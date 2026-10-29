@@ -26,7 +26,7 @@ func _process(delta: float) -> void:
 	var best_d := SHOW_RANGE
 	if pl != null:
 		for e in get_tree().get_nodes_in_group("enemies"):
-			if not is_instance_valid(e) or e.is_queued_for_deletion() or int(e.get("secret")) < 0 or bool(e.get("calm")):
+			if not is_instance_valid(e) or e.is_queued_for_deletion() or (int(e.get("secret")) < 0 and not bool(e.get("hero_rival"))) or bool(e.get("calm")):
 				continue
 			var d: float = e.global_position.distance_to(pl.global_position)
 			if d < best_d:
@@ -53,7 +53,7 @@ func _draw() -> void:
 	var enraged: bool = bool(_boss.get("enraged"))
 	var exposed: bool = float(_boss.get("exposed_left")) > 0.0
 	var name_col := Color(1, 0.55, 0.45, a) if enraged else Color(1, 1, 1, a)
-	var title: String = _boss.form_name().to_upper()
+	var title: String = _boss.form_name().to_upper() + ((" - LV %d" % _boss.rival_level) if bool(_boss.get("hero_rival")) else "")
 	_font.draw_string(get_canvas_item(), Vector2(1, 15), title, HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color(0, 0, 0, 0.7 * a))
 	_font.draw_string(get_canvas_item(), Vector2(0, 14), title, HORIZONTAL_ALIGNMENT_CENTER, W, 16, name_col)
 	var r := Rect2(0, 22, W, H)

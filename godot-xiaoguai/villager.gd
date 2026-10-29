@@ -7,6 +7,7 @@
 ## Hidden forms (reachable from a line's last form at night, or by a day/night change):
 ##   Parasite Hero (hero + demon parasite) -> Dark Hero -> GOD
 
+signal hero_down(v)
 signal defeated(xp: int, bones: int, by_tower: bool)
 
 const BoltScript := preload("res://bolt.gd")
@@ -23,6 +24,11 @@ const HIDDEN_CHANCE := 0.3    ## ...with this chance, but only at night
 const PARASITE_TO_DARK := 60.0
 const DARK_TO_GOD := 90.0     ## also needs village level 5
 const HIT_COOLDOWN := 1.0
+const LinesRef := preload("res://lines.gd")
+const RIVAL_HP := [5, 7, 9, 11, 14, 17, 21, 26, 32, 40, 50]
+const RIVAL_BITE := [1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 6]
+const LOOT_CHANCE := 0.4        ## a boss, mimic or rival leaves a gold chest this often
+const GOD_HIT_CAP := 0.03       ## GOD loses at most this share of its health to one hit (nothing kills it outright)
 const SHOOT_COOLDOWN := 1.6
 const CHARGE_TIME := 0.35
 const STRUCTURE_AGGRO := 55.0 ## a tower or wall this close (and nearer than 小怪) draws their attack
@@ -56,7 +62,7 @@ const LINES := [
 const HIDDEN := [
 	{"name": "Parasite Hero", "hp": 60, "dmg": 5, "spd": 95.0, "xp": 60, "bones": 15, "size": 1.7},
 	{"name": "Dark Hero", "hp": 100, "dmg": 8, "spd": 105.0, "xp": 100, "bones": 25, "size": 1.9},
-	{"name": "GOD", "hp": 200, "dmg": 12, "spd": 110.0, "xp": 250, "bones": 60, "size": 2.4},
+	{"name": "GOD", "hp": 3000, "dmg": 22, "spd": 112.0, "xp": 600, "bones": 150, "size": 2.4},
 ]
 
 ## Ranged basic attacks by line (index into LINES). mult scales their damage.
@@ -137,6 +143,8 @@ var repath_cd := 0.0
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
+	collision_layer = 4   # villagers only bump into trees: a crowd of them no longer pushes and snags on each other (it cost a lot)
+	collision_mask = 1
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
 	circle.radius = 8.0
@@ -149,6 +157,58 @@ func _ready() -> void:
 	hp = max_hp
 	skill_cd = randf_range(2.0, 6.0)
 	repath_cd = randf() * 0.4
+
+
+## Make this villager the rival hero at a level: its line, form, stats and skills come from the rival's state.
+func setup_rival(line_idx: int, level: int, form_stage: int, skills: Array, full_heal: bool = true) -> void:
+	hero_rival = true
+	rival_line = line_idx
+	rival_level = level
+	stage = form_stage
+	rival_skills = skills.duplicate()
+	var fam: Dictionary = LinesRef.FAMILIES[LinesRef.LINES[line_idx]["family"]]
+	var forms: Array = LinesRef.LINES[line_idx]["forms"]
+	var frac := float(hp) / float(maxi(max_hp, 1)) if max_hp > 1 and not full_heal else 1.0
+	max_hp = ceili(RIVAL_HP[form_stage] * 25.0 * float(fam["hp"]))
+	hp = clampi(roundi(max_hp * frac), 1, max_hp)
+	damage = maxi(1, roundi(RIVAL_BITE[form_stage] * 1.4 * float(fam["dmg"])))
+	speed = (72.0 + 5.0 * form_stage) * float(fam["spd"])
+	xp_value = 30 + level * 8
+	bones_value = 20
+	body_scale = 1.15 + 0.05 * form_stage
+	title_override = "RIVAL %s" % (forms[form_stage - 1] if form_stage > 0 else "Xiao Guai")
+	force_chase = true
+
+
+## Below a quarter of its health the rival turns and runs, mending itself on the way, and comes back to fight once it is
+## above 60% again. In the final duel it never runs. Returns the direction to run in (zero when it is not fleeing).
+func _rival_flee(delta: float) -> Vector2:
+	var pl = get_tree().get_first_node_in_group("player")
+	if pl == null:
+		return Vector2.ZERO
+	var level_node = get_parent()
+	var duel: bool = level_node != null and level_node.get("rival") != null and bool(level_node.rival.get("duel", false))
+	var frac := float(hp) / float(maxi(max_hp, 1))
+	if not fleeing and frac < 0.25 and not duel:
+		fleeing = true
+		say("Retreat!", 1.6)
+	elif fleeing and (frac > 0.6 or duel):
+		fleeing = false
+		say("Now I am back!", 1.6)
+	if not fleeing:
+		return Vector2.ZERO
+	_flee_heal += max_hp * 0.05 * delta
+	if _flee_heal >= 1.0:
+		var whole := int(_flee_heal)
+		_flee_heal -= whole
+		hp = mini(max_hp, hp + whole)
+	hit_cd = maxf(hit_cd, 0.4)  # no biting while it runs
+	return (global_position - pl.global_position).normalized()
+
+
+## The sprite of the rival's current form: the same art 小怪 would wear in that line.
+func rival_art() -> String:
+	return Sprites.hero(LinesRef.LINES[rival_line]["forms"], stage)
 
 
 func form_name() -> String:
@@ -173,6 +233,11 @@ func _is_shooter() -> bool:
 
 
 func ranged_config() -> Dictionary:
+	if hero_rival:
+		var fam: String = LinesRef.LINES[rival_line]["family"]
+		if fam == "Dragon" or fam == "Demon" or fam == "Undead" or fam == "Nature":
+			return {"range": 250.0, "speed": 290.0, "mult": 0.9, "color": Color("ff5a40")}
+		return {}
 	if not _is_shooter() and not _unlocked("ranged_unlocked"):
 		return {}
 	if secret >= 0:
@@ -183,6 +248,8 @@ func ranged_config() -> Dictionary:
 ## Every skill this villager knows right now (none early in the game, see skills_unlocked).
 func available_skills() -> Array:
 	var out: Array = []
+	if hero_rival:
+		return rival_skills.duplicate()
 	if not _is_shooter() and not _unlocked("skills_unlocked"):
 		return out
 	if secret >= 0:
@@ -211,6 +278,14 @@ var say_cd := randf_range(2.0, 9.0)
 var lines_override: Array = []  ## if set, the only things this villager says
 var mimic := false             ## a chest that bit back (events)
 var rival := false             ## the rival hero (events)
+## THE rival: the enemy's own main character. It has an evolution line of its own, learns skills, grows from the EXP
+## of everything 小怪 defeats, and comes back 30 seconds after it falls (see Main._start_rival).
+var hero_rival := false
+var rival_line := 0
+var rival_level := 1
+var rival_skills: Array = []
+var fleeing := false         ## the rival runs from 小怪 when its health is low, and heals on the way
+var _flee_heal := 0.0
 var bug := false               ## the developer's escaped bug (events)
 var title_override := ""       ## a special name shown instead of the form name
 var force_chase := false      ## raiders know where 小怪 is from the start
@@ -233,7 +308,20 @@ func _power() -> float:
 
 
 func effective_damage() -> int:
-	return ceili(damage * _power())
+	var level_node = get_parent()
+	var grown: float = level_node.enemy_damage_mult() if level_node != null and level_node.has_method("enemy_damage_mult") else 1.0
+	return ceili(damage * _power() * grown)
+
+
+## Villagers spawned later are tougher (see Main.enemy_hp_mult).
+func _time_hp() -> float:
+	var level_node = get_parent()
+	return level_node.enemy_hp_mult() if level_node != null and level_node.has_method("enemy_hp_mult") else 1.0
+
+
+## GOD shrugs off water, mud, every status, stuns and knock-back, and cannot be killed in one blow.
+func immune() -> bool:
+	return secret == 2
 
 
 func effective_speed() -> float:
@@ -253,7 +341,7 @@ func _apply_form() -> void:
 		body_scale = h["size"]
 		return
 	var l: Dictionary = LINES[line]
-	max_hp = maxi(1, roundi(HP[stage] * l["hp"] * HP_SCALE))
+	max_hp = maxi(1, roundi(HP[stage] * l["hp"] * HP_SCALE * _time_hp()))
 	damage = maxi(1, roundi(DMG[stage] * l["dmg"]))
 	speed = SPEED[stage] * l["spd"]
 	xp_value = XP[stage]
@@ -273,6 +361,8 @@ func change_form(new_stage: int, new_secret: int) -> void:
 
 
 func apply_stun(seconds: float) -> void:
+	if immune():
+		return
 	stun_left = maxf(stun_left, seconds)
 
 
@@ -288,6 +378,8 @@ func _village_level() -> int:
 
 
 func _grow(delta: float) -> void:
+	if hero_rival:
+		return  # the rival grows by the main character's kills, not by time
 	form_age += delta
 	if secret < 0:
 		if stage < MAX_STAGE:
@@ -299,8 +391,6 @@ func _grow(delta: float) -> void:
 				change_form(stage, 0)
 	elif secret == 0 and form_age >= PARASITE_TO_DARK:
 		change_form(stage, 1)
-	elif secret == 1 and form_age >= DARK_TO_GOD and _village_level() >= 5:
-		change_form(stage, 2)
 
 
 # --- steering: walk straight when the way is clear, otherwise follow an A* path ---
@@ -550,8 +640,10 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 	return fired
 
 
-## Villagers far off screen think and move only every fourth tick (with the time of all four), which saves a lot of
-## work on phones; anything near 小怪, hidden bosses and chasers close by run every tick.
+## Villagers far from 小怪 think and move less often (with the time of the ticks they skipped): beyond MID_LOD every
+## second tick, beyond FAR_LOD every fourth. That saves a lot of work in big crowds and on phones; anything close to
+## 小怪 and the hidden bosses run every tick.
+const MID_LOD := 450.0
 const FAR_LOD := 1100.0
 var _lod_tick := 0
 var _lod_time := 0.0
@@ -560,10 +652,12 @@ var _lod_time := 0.0
 func _physics_process(delta: float) -> void:
 	if secret < 0 and not Engine.has_meta("deterministic_map"):  # (the tests need every villager on every tick)
 		var near_player = get_tree().get_first_node_in_group("player")
-		if near_player != null and near_player.global_position.distance_squared_to(global_position) > FAR_LOD * FAR_LOD:
+		var d2: float = near_player.global_position.distance_squared_to(global_position) if near_player != null else 0.0
+		if d2 > MID_LOD * MID_LOD:
+			var every := 4 if d2 > FAR_LOD * FAR_LOD else 2
 			_lod_tick += 1
 			_lod_time += delta
-			if _lod_tick % 4 != 0:
+			if _lod_tick % every != 0:
 				return
 			delta = _lod_time
 			_lod_time = 0.0
@@ -666,6 +760,11 @@ func _physics_process(delta: float) -> void:
 	if target == null and _guarding() and global_position.distance_to(guard_home) > 48.0:
 		_nav_update(guard_home, delta)
 		dir = _steer(guard_home) * 0.7  # back to the post
+	if hero_rival:
+		var away := _rival_flee(delta)
+		if away != Vector2.ZERO:
+			dir = away
+			move_speed *= 1.15
 	if has_status("root"):
 		dir = Vector2.ZERO  # rooted: cannot walk, but can still shoot and use skills
 	velocity = dir * move_speed + knock
@@ -682,6 +781,8 @@ func has_status(status_name: String) -> bool:
 ## Put a status on this villager. Returns false if it resisted: the hidden forms cannot be
 ## frozen, rooted or charmed, and a freeze cannot be repeated right away.
 func apply_status(status_name: String, seconds: float, stacks: int = 1) -> bool:
+	if immune():
+		return false
 	if secret >= 0 and status_name in ["freeze", "root", "charm"]:
 		return false
 	if status_name == "freeze":
@@ -724,6 +825,8 @@ func _tick_statuses(delta: float) -> void:
 func hurt(dmg: int) -> void:
 	if is_queued_for_deletion():
 		return
+	if immune():
+		dmg = mini(dmg, maxi(1, ceili(max_hp * GOD_HIT_CAP)))
 	hp -= dmg
 	flash = 0.1
 	var tint := Popups.WHITE
@@ -762,13 +865,15 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 	if calm:
 		_picnic_hit()
 	var amount := ceili(dmg * 0.5) if shield_left > 0.0 else dmg
+	if immune():
+		amount = mini(amount, maxi(1, ceili(max_hp * GOD_HIT_CAP)))
 	if exposed_left > 0.0:
 		amount = ceili(amount * 1.5)
 	if has_status("curse"):
 		amount = ceili(amount * 1.5)
 	hp -= amount
 	flash = 0.15
-	if not by_tower:
+	if not by_tower and not immune():
 		knock = dir * 260.0  # towers hurt but never push villagers back
 	Popups.damage(get_tree(), global_position + Vector2(0, -16.0 * body_scale), amount, Popups.TOWER if by_tower else Popups.WHITE)
 	Sfx.play_at(get_tree(), "die_enemy" if hp <= 0 else "hit", global_position, -5.0 if hp <= 0 else -7.0)
@@ -796,6 +901,12 @@ func _draw() -> void:
 	var squash := clampf(flash * 1.4, 0.0, 0.2)   # a quick squash and stretch when hit
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(sc * (1.0 + squash), sc * (1.0 - squash)))
 	draw_circle(Vector2(0, 8), 7.0, Color(0, 0, 0, 0.25))
+	if hero_rival:
+		# a red aura and a crown mark the enemy's main character
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		draw_circle(Vector2(0, -2), 17.0 + 2.0 * pulse, Color(1.0, 0.2, 0.2, 0.16 + 0.08 * pulse))
+		draw_arc(Vector2(0, -2), 17.0, 0.0, TAU, 28, Color(1.0, 0.3, 0.25, 0.7), 1.6)
+		draw_colored_polygon(PackedVector2Array([Vector2(-6, -21), Vector2(-6, -27), Vector2(-3, -24), Vector2(0, -29), Vector2(3, -24), Vector2(6, -27), Vector2(6, -21)]), Color("e8b020"))
 
 	var shirt := Color.from_hsv(float(line) / LINES.size(), 0.5, 0.7)
 	if secret == 0:
@@ -817,12 +928,12 @@ func _draw() -> void:
 		shirt = Color.WHITE
 		skin = Color.WHITE
 
-	var art := Sprites.villager(line, stage, secret)
+	var art := rival_art() if hero_rival else Sprites.villager(line, stage, secret)
 	if mimic:
 		_draw_mimic()
 	elif bug:
 		_draw_bug()
-	elif art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, velocity.x < -6.0, Color(2, 2, 2) if flash > 0.0 else Color.WHITE, Vector2i.ZERO, (Time.get_ticks_msec() * 0.016 + float(get_instance_id() % 7)) if velocity.length() > 12.0 else -1.0):
+	elif art != "" and Sprites.draw(self, art, int(Time.get_ticks_msec() / 500.0) % 2, 22.0, velocity.x < -6.0, Color(2, 2, 2) if flash > 0.0 else (Color(1.0, 0.7, 0.7) if hero_rival else Color.WHITE), Vector2i.ZERO, (Time.get_ticks_msec() * 0.016 + float(get_instance_id() % 7)) if velocity.length() > 12.0 else -1.0):
 		pass
 	else:
 		draw_rect(Rect2(-6, -2, 12, 12), shirt)
@@ -879,8 +990,11 @@ func _draw() -> void:
 		draw_circle(Vector2(-3, -18), 2.2, Color("ff70a0"))
 		draw_circle(Vector2(3, -18), 2.2, Color("ff70a0"))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	var label_color := Color(1, 0.85, 0.4) if secret >= 0 else Color(1, 1, 1, 0.9)
-	draw_string(ThemeDB.fallback_font, Vector2(-30, -22 - 8 * sc), form_name(), HORIZONTAL_ALIGNMENT_CENTER, 60, 8, label_color)
+	# the name tag only for villagers close to 小怪 (hundreds of text labels every frame cost a lot), and for bosses
+	var tag_pl = get_tree().get_first_node_in_group("player")
+	if secret >= 0 or tag_pl == null or tag_pl.global_position.distance_squared_to(global_position) < 300.0 * 300.0:
+		var label_color := Color(1, 0.85, 0.4) if secret >= 0 else Color(1, 1, 1, 0.9)
+		draw_string(ThemeDB.fallback_font, Vector2(-30, -22 - 8 * sc), form_name(), HORIZONTAL_ALIGNMENT_CENTER, 60, 8, label_color)
 	if calm:
 		_draw_sandwich()
 	if say_left > 0.0 and say_text != "":
@@ -889,23 +1003,28 @@ func _draw() -> void:
 
 ## Mimics, the rival hero and the bug pay out a gold chest where they fall.
 func _boss_loot() -> void:
+	if hero_rival:
+		hero_down.emit(self)
+		Popups.text(get_tree(), global_position + Vector2(0, -40.0), "RIVAL DOWN!", Popups.BIG, 20)
+		SkillFx.spawn_levelup(get_parent())
+		if randf() < LOOT_CHANCE * 0.5:
+			var rc = TreasureLoot.new()
+			rc.tier = "silver"
+			rc.position = global_position
+			get_parent().call_deferred("add_child", rc)
+		return
 	if not (mimic or rival or bug or secret >= 0):
 		return
 	var level_node = get_parent()
 	if level_node == null:
 		return
-	var chest = TreasureLoot.new()
-	chest.tier = "gold"
-	chest.position = global_position
-	level_node.call_deferred("add_child", chest)
+	if randf() < LOOT_CHANCE:
+		var chest = TreasureLoot.new()
+		chest.tier = "gold"
+		chest.position = global_position
+		level_node.call_deferred("add_child", chest)
 	if secret >= 0:
-		# a hidden boss leaves two gold chests
-		var second = TreasureLoot.new()
-		second.tier = "gold"
-		second.position = global_position + Vector2(26, 6)
-		chest.position = global_position + Vector2(-26, 6)
-		level_node.call_deferred("add_child", second)
-		Popups.text(get_tree(), global_position + Vector2(0, -40.0), "BOSS DEFEATED!", Popups.BIG, 22)
+		Popups.text(get_tree(), global_position + Vector2(0, -40.0), "GOD HAS FALLEN!" if secret == 2 else "BOSS DEFEATED!", Popups.BIG, 22)
 		SkillFx.spawn_levelup(level_node)
 		return
 	Popups.text(get_tree(), global_position + Vector2(0, -30.0), "DEFEATED!", Popups.BIG, 18)

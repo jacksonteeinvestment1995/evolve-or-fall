@@ -549,8 +549,7 @@ func _init() -> void:
 	main.village_level = 5
 	f5.form_age = f5.DARK_TO_GOD
 	await frames(2)
-	check("Dark Hero becomes GOD at village level 5", f5.secret == 2 and f5.form_name() == "GOD")
-	check("GOD is the strongest villager", f5.max_hp >= 200 and f5.damage >= 12)
+	check("the Dark Hero no longer turns into GOD by itself", f5.secret == 1)
 	var f4 = main._spawn_villager(Vector2(3400, 1500), 3, 3)
 	f4.form_age = 0.0
 	await frames(3)
@@ -688,7 +687,7 @@ func _init() -> void:
 	var farmer = mk(p.global_position + Vector2(90, 0), 1, 0)
 	check("a Farmer throws mud", farmer.use_skill_id("slow", p, 90.0))
 	await frames(45)
-	check("mud slows 小怪", p.slow_left > 0.0)
+	check("mud slows 小怪", p.slow_left > 0.0, "slow %.2f hp %d rev %.2f inv %.2f bolts %d farmer %s" % [p.slow_left, p.hp, p.reviving, p.invuln, bolts().size(), str(is_instance_valid(farmer))])
 	farmer.queue_free()
 	p.slow_left = 0.0
 	var netter = mk(p.global_position + Vector2(120, 0), 1, 2)
@@ -763,7 +762,7 @@ func _init() -> void:
 	check("the village swells with the evolution stage", main.target_population() == base_pop + 110)
 	p.stage = 10
 	main.elapsed = 1200.0
-	check("at the final form the village is massive", main.target_population() == 340, str(main.target_population()))
+	check("at the final form the village is massive (capped)", main.target_population() == mini(main.POP_CAP, 340), str(main.target_population()))
 	main.elapsed = 99999.0
 	p.stage = 10
 	check("but there is a cap of 360", main.target_population() <= main.POP_CAP)
@@ -806,7 +805,20 @@ func _init() -> void:
 	main.village_level = 5
 	for i in 120:
 		main._on_phase_change()
-	check("GOD can appear late with village level 5", enemies().filter(func(e): return e.secret == 2).size() >= 1)
+	check("villagers get tougher with the clock: health x1 at the start, about x3 at 15 minutes", is_equal_approx(main.hp_mult_at(0.0), 1.0) and absf(main.hp_mult_at(900.0) - 3.14) < 0.05 and main.damage_mult_at(900.0) > 1.9)
+	check("GOD never appears by chance at a dawn or dusk", enemies().all(func(e): return e.secret != 2))
+	await clear_enemies()
+	var god = main.spawn_god()
+	check("GOD descends as the last boss, very strong", god != null and god.secret == 2 and god.max_hp >= 3000 and god.damage >= 22 and main.god_spawned)
+	check("GOD is released at once and hunts 小怪", god.guard_until == 0.0 and god.force_chase)
+	check("GOD is immune to every status", not god.apply_status("burn", 3.0) and not god.apply_status("chill", 3.0) and not god.apply_status("poison", 3.0) and not god.has_status("burn"))
+	var god_hp0: int = god.hp
+	god.apply_stun(5.0)
+	god.take_hit(1000000, Vector2.RIGHT, false)
+	check("GOD cannot be stunned, pushed or killed in one blow", god.stun_left == 0.0 and god.knock == Vector2.ZERO and god.hp > 0 and god_hp0 - god.hp <= ceili(god.max_hp * 0.031), "lost %d of %d" % [god_hp0 - god.hp, god.max_hp])
+	main.drown.clear()
+	check("GOD does not drown in water", god.immune())
+	await clear_enemies()
 	await clear_enemies()
 
 	main.clock = 59.0
@@ -1354,7 +1366,7 @@ func _init() -> void:
 	check("Stone Skin rank 1 with the Material trait: 5 damage becomes 2", p.reduce_damage(5) == 2, str(p.reduce_damage(5)))
 	check("Stone Skin: 10% slower", is_equal_approx(p.trait_speed(), 0.9))
 	use_line(20, 9)
-	check("Stone Skin rank 3: hits are cut by 5 but never below 1", p.reduce_damage(6) == 1 and p.reduce_damage(9) == 4)
+	check("Stone Skin rank 3: hits are cut by 5, but armour never takes off more than 60%", p.reduce_damage(6) == 3 and p.reduce_damage(9) == 4 and p.reduce_damage(20) == 15, "%d %d %d" % [p.reduce_damage(6), p.reduce_damage(9), p.reduce_damage(20)])
 	var quake_target = mk(p.global_position + Vector2(100, 0), 0, 3)
 	quake_target.max_hp = 100
 	quake_target.hp = 100
@@ -2318,28 +2330,6 @@ func _init() -> void:
 	main.menu_kind = ""
 	main.perk_every = 100000
 
-	var pets_made := 0
-	for i in 4:
-		if main.hatch_pet():
-			pets_made += 1
-	check("at most three pets hatch", pets_made == 3 and get_nodes_in_group("pets").size() == 3)
-	var pet = get_nodes_in_group("pets")[0]
-	var pet_kp0: int = pet.kills_progress
-	gp.on_kill()
-	check("a kill by 小怪 feeds the pets", pet.kills_progress == pet_kp0 + 1 or pet.level > 1)
-	pet.gain_xp(60)
-	check("a pet evolves at level 3 and stops at level 5", pet.level == 5 and pet.evolved())
-	await clear_enemies()
-	var pet_foe = mk(pet.global_position + Vector2(20, 0), 0, 3)
-	pet_foe.max_hp = 300
-	pet_foe.hp = 300
-	pet_foe.apply_status("root", 10.0)
-	await frames(70)
-	check("pets bite villagers", is_instance_valid(pet_foe) and pet_foe.hp < 300)
-	for pt in get_nodes_in_group("pets"):
-		pt.queue_free()
-	await clear_enemies()
-
 	var boss = main._spawn_villager(gp.global_position + Vector2(260, 0), 4, 0, 0)
 	boss.skill_cd = 9999.0
 	boss.max_hp = 1000
@@ -2424,6 +2414,46 @@ func _init() -> void:
 	await fresh()
 	check("the evolution line menu gives each line a short trait, ability and skills line", main._line_blurb(0).count("|") == 2 and main._line_blurb(0).length() < 90, main._line_blurb(0))
 	check("a skill says where it comes from", main._skill_origin("z_grip").contains("line skill") and main._skill_origin("fangs").contains("general"))
+
+	# the rival hero: the enemy's own main character
+	await fresh()
+	var rv_main = main
+	await clear_enemies()
+	rv_main.rival["line"] = 10
+	var rv = rv_main.spawn_rival()
+	check("the rival hero appears with a line, level, title and red crown", rv != null and rv.hero_rival and rv.rival_line == 10 and rv.title_override.begins_with("RIVAL") and rv.force_chase)
+	var rv_hp0: int = rv.max_hp
+	rv_main.rival_gain(20000)
+	check("our kills feed the rival: it gains levels, learns skills and evolves", int(rv_main.rival["level"]) > 10 and rv_main.rival["skills"].size() >= 3 and rv.stage >= 1 and rv.max_hp > rv_hp0, "level %d skills %s stage %d" % [int(rv_main.rival["level"]), str(rv_main.rival["skills"]), rv.stage])
+	check("the rival knows the skills it learned", rv.available_skills().size() == rv_main.rival["skills"].size())
+	var rv_xp0: int = int(rv_main.rival["xp"])
+	rv.take_hit(99999999, Vector2.RIGHT, false)
+	await frames(3)
+	check("when 小怪 defeats the rival, it respawns in 30 seconds", rv_main.rival["node"] == null and absf(float(rv_main.rival["respawn"]) - 30.0) < 1.0 and int(rv_main.rival["falls"]) == 1, str(rv_main.rival["respawn"]))
+	check("the rival keeps its EXP, level and skills across a respawn", int(rv_main.rival["xp"]) >= rv_xp0 and int(rv_main.rival["level"]) > 10)
+	rv_main.rival["respawn"] = 0.5
+	rv_main.elapsed = 100.0
+	Engine.remove_meta("deterministic_map")
+	rv_main._update_rival(1.0)
+	Engine.set_meta("deterministic_map", true)
+	var rv2 = rv_main.rival["node"]
+	check("after 30 seconds the same rival is back at its level", rv2 != null and is_instance_valid(rv2) and rv2.rival_level == int(rv_main.rival["level"]) and rv2.hp == rv2.max_hp)
+	rv2.hp = 1
+	var rv_d0: float = rv2.global_position.distance_to(main.player.global_position)
+	await frames(30)
+	check("the rival runs away when its health is low", rv2.fleeing and rv2.hp > 1 and rv2.hit_cd > 0.0 and (rv2.velocity == Vector2.ZERO or rv2.velocity.dot(rv2.global_position - main.player.global_position) >= 0.0), "fleeing %s hp %d dist %.0f -> %.0f" % [str(rv2.fleeing), rv2.hp, rv_d0, rv2.global_position.distance_to(main.player.global_position)])
+	rv2.hp = rv2.max_hp
+	await frames(3)
+	check("and comes back to fight once it has recovered", not rv2.fleeing)
+	rv_main.elapsed = 1200.0
+	Engine.remove_meta("deterministic_map")
+	rv_main._update_rival(0.1)
+	Engine.set_meta("deterministic_map", true)
+	check("at 20 minutes the final duel starts", bool(rv_main.rival["duel"]))
+	rv2.take_hit(99999999, Vector2.RIGHT, false)
+	await frames(3)
+	check("defeating the rival in the final duel wins the game", rv_main.game_over and rv_main.banner.text.contains("VICTORY"))
+	await clear_enemies()
 
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)
