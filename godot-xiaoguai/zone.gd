@@ -61,8 +61,6 @@ func _detonate() -> void:
 		var away: Vector2 = (e.global_position - global_position).normalized()
 		if damage > 0:
 			e.take_hit(damage, away)
-			if source != null and is_instance_valid(source):
-				source.add_xp(1)
 		if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
 			e.apply_status(status, status_time)
 		if knock > 0.0 and not e.immune():

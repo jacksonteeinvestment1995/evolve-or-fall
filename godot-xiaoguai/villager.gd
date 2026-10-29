@@ -104,6 +104,7 @@ const SKILL_COOLDOWN := {
 	"fireball": 9.0, "bomb": 10.0, "slam": 8.0, "nova": 10.0, "charge": 8.0, "blink": 9.0,
 	"shield": 12.0, "rage": 14.0, "rally": 14.0, "heal": 10.0, "summon": 22.0,
 	"spore_burst": 14.0, "shadow_barrage": 16.0, "judgment": 20.0,
+	"frost_shards": 6.0, "thorn_ring": 7.0, "spirit_lance": 8.0, "meteor_call": 9.0, "chain_zap": 6.0,
 }
 
 var line := 0
@@ -208,7 +209,7 @@ func _rival_flee(delta: float) -> Vector2:
 
 ## The sprite of the rival's current form: the same art 小怪 would wear in that line.
 func rival_art() -> String:
-	return Sprites.hero(LinesRef.LINES[rival_line]["forms"], stage)
+	return Sprites.hero(LinesRef.LINES[rival_line]["forms"], maxi(stage, 1))  # never 小怪's own base look: it wears its line's first form from the start
 
 
 func form_name() -> String:
@@ -498,6 +499,8 @@ func _shoot(target, cfg: Dictionary) -> void:
 func skill_cooldown() -> float:
 	if secret >= 0:
 		return 0.85 if enraged else 1.2
+	if hero_rival:
+		return maxf(0.9, 1.8 - stage * 0.1)  # it never waits long between skills
 	return maxf(1.5, 3.0 - stage * 0.3)
 
 
@@ -532,8 +535,39 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 	var to: Vector2 = target.global_position - global_position
 	var aim := to.normalized()
 	var dmg := effective_damage()
+	if hero_rival:
+		dmg = ceili(dmg * (1.6 + 0.06 * rival_level))  # its skills grow with its level
 	var fired := false
 	match id:
+		"frost_shards":
+			if dist < 340.0 and los:
+				for a in [-0.26, 0.0, 0.26]:
+					_spawn_bolt(aim.rotated(a), 320.0, maxi(1, roundi(dmg * 0.8)), Color("8fd8ff"), "slow", false, 1.2, "orb")
+				cast_color = Color("8fd8ff")
+				fired = true
+		"thorn_ring":
+			if dist < 240.0:
+				_fan(10, 230.0, maxi(1, roundi(dmg * 0.7)), Color("7ad060"), 0.0, 1.0)
+				cast_color = Color("7ad060")
+				fired = true
+		"spirit_lance":
+			if dist < 520.0 and los:
+				_spawn_bolt(aim, 520.0, maxi(1, roundi(dmg * 2.2)), Color("ffe680"), "", true, 1.1, "spear")
+				cast_color = Color("ffe680")
+				fired = true
+		"meteor_call":
+			if dist < 440.0:
+				_spawn_zone(target.global_position + target.velocity * 0.4, 58.0, 1.0, maxi(1, roundi(dmg * 3.0)), Color(1.0, 0.5, 0.2), "fx_fireball_explosion")
+				cast_color = Color(1.0, 0.5, 0.2)
+				fired = true
+		"chain_zap":
+			if dist < 320.0 and los:
+				for k in 2:
+					get_tree().create_timer(0.18 * k).timeout.connect(func():
+						if is_instance_valid(self) and hp > 0:
+							_spawn_bolt(aim, 640.0, maxi(1, roundi(dmg * 1.2)), Color("bfe8ff"), "", false, 0.6, "orb"))
+				cast_color = Color("bfe8ff")
+				fired = true
 		"spore_burst":
 			if dist < 460.0:
 				_fan(14, 150.0, maxi(1, roundi(dmg * 0.7)), Color("7ae040"), 0.0, 2.4)
@@ -775,8 +809,10 @@ func _physics_process(delta: float) -> void:
 		if not standing:
 			dir = _steer(target.global_position)
 		if dist < reach and hit_cd == 0.0:
-			hit_cd = HIT_COOLDOWN
+			hit_cd = HIT_COOLDOWN * (0.6 if hero_rival else 1.0)
 			target.take_hit(effective_damage(), to.normalized())
+			if hero_rival:
+				hp = mini(max_hp, hp + maxi(1, roundi(max_hp * 0.02)))  # passive: life steal on every bite it lands
 			SkillFx.spawn_fx(get_parent(), target.global_position, "slash", Color(1.0, 0.3, 0.25), to.normalized(), 1.1)
 			Sfx.play(get_tree(), "hit_slash", -2.0)
 		if skill_cd == 0.0 and not has_status("charm"):
@@ -873,6 +909,7 @@ func hurt(dmg: int) -> void:
 		Sfx.play_at(get_tree(), "die_enemy", global_position, -5.0)
 		_boss_loot()
 		_death_burst()
+		ExpStone.spawn(get_parent(), global_position, xp_value)
 		defeated.emit(xp_value, bones_value, false)
 		queue_free()
 
@@ -922,8 +959,7 @@ func take_hit(dmg: int, dir: Vector2, by_tower: bool = false) -> void:
 	if hp <= 0:
 		_boss_loot()
 		_death_burst()
-		if by_tower:
-			ExpStone.spawn(get_parent(), global_position, xp_value)  # towers and pets leave an EXP stone to pick up
+		ExpStone.spawn(get_parent(), global_position, xp_value)  # every defeated villager leaves an EXP stone: that is the only EXP
 		defeated.emit(xp_value, bones_value, by_tower)
 		queue_free()
 

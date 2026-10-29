@@ -507,7 +507,6 @@ func _lunge_strike() -> void:
 			lunge_hit.append(id)
 			e.take_hit(effective_bite() * 2, lunge_dir)
 			register_hit()
-			add_xp(1)
 
 
 func _auto_bite() -> void:
@@ -543,7 +542,6 @@ func _auto_bite() -> void:
 		SkillSounds.play_at(get_tree(), "titan", global_position, -12.0)
 	if specials.has("frenzy"):
 		SkillFx.spawn_fx(get_parent(), global_position, "frenzy", Color.WHITE, bite_dir, 1.0)
-	add_xp(1)
 
 
 # --- family traits and the line's signature ability ---
@@ -688,7 +686,6 @@ func breathe(to: Vector2, spread: float, status: String) -> int:
 			e.take_hit(dmg, v.normalized())
 			if is_instance_valid(e) and not e.is_queued_for_deletion():
 				e.apply_status(status, 4.0)
-			add_xp(1)
 			hit += 1
 	Sfx.play(get_tree(), "roar", -6.0)
 	return hit
@@ -983,7 +980,6 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 				SkillFx.spawn_fx(get_parent(), cur.global_position, "spark", Color("bfe8ff"), Vector2.RIGHT, 1.0)
 				cur.take_hit(ceili(effective_bite() * 2.0 * power), (cur.global_position - from).normalized())
 				SkillSounds.play_at(get_tree(), "chain_zap", cur.global_position, -4.0)
-				add_xp(1)
 				from = cur.global_position
 				var nxt = null
 				var best := 150.0

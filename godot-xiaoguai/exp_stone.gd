@@ -18,6 +18,20 @@ var bob_phase := 0.0
 static func spawn(parent: Node, pos: Vector2, xp: int) -> void:
 	if parent == null or xp <= 0:
 		return
+	# in a huge crowd the stones join up instead of piling into hundreds of nodes
+	var near = null
+	var stones: Array = parent.get_tree().get_nodes_in_group("exp_stones")
+	if stones.size() > 90:
+		var best := 140.0
+		for st in stones:
+			var d: float = st.global_position.distance_to(pos)
+			if d < best:
+				best = d
+				near = st
+	if near != null:
+		near.value += xp
+		near.age = 0.0
+		return
 	var s = load("res://exp_stone.gd").new()
 	s.value = xp
 	s.position = pos

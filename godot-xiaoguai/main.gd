@@ -43,7 +43,8 @@ const GOD_AT := 900.0               # GOD, the last boss, descends at 15 minutes
 const RIVAL_AT := 3.0               # the rival hero (the enemy's own main character) is there from the very start: 3 seconds in
 const RIVAL_RESPAWN := 30.0         # ...and returns this many seconds after 小怪 defeats it
 const DUEL_AT := 1200.0             # at 20 minutes it is the final duel: no more respawns
-const RIVAL_SKILL_POOL := ["pierce", "volley", "smite", "fireball", "bomb", "slam", "nova", "charge", "blink", "shield", "rage", "heal", "axe", "slow"]
+const RIVAL_SKILL_POOL := ["pierce", "volley", "smite", "fireball", "bomb", "slam", "nova", "charge", "blink", "shield", "rage", "heal", "axe", "slow", "frost_shards", "thorn_ring", "spirit_lance", "meteor_call", "chain_zap"]
+const RIVAL_ATTACK_SKILLS := ["frost_shards", "thorn_ring", "spirit_lance", "meteor_call", "chain_zap", "fireball", "volley", "pierce", "slam", "nova"]
 
 ## Day and night. Days make villagers stronger; nights make 小怪 stronger.
 const DAY_SECONDS := 60.0
@@ -68,6 +69,7 @@ const GhostScript := preload("res://ghost.gd")
 const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
 const PerksData := preload("res://perks.gd")
+const ExpStone := preload("res://exp_stone.gd")
 const TreasureScript := preload("res://treasure.gd")
 const Popups := preload("res://popups.gd")
 const Sfx := preload("res://sfx.gd")
@@ -133,6 +135,7 @@ var ghost_dirty := true
 var hud: Control
 var playables: Node
 var god_spawned := false
+var start_pit: Node2D
 ## The rival's state outlives its body: it keeps its line, EXP, level and skills across respawns.
 var rival := {"line": -1, "xp": 0, "level": 1, "skills": [], "node": null, "respawn": -1.0, "falls": 0, "duel": false, "skip_xp": false}
 var perk_every := PerksData.PERK_EVERY   ## a perk card pick every this many levels (the tests turn it off)
@@ -165,6 +168,11 @@ func _ready() -> void:
 	for chest in treasure_spots:
 		add_child(chest)
 	_spawn_player(_tile_center(START_TILE))
+	# the start spot: a patch of living flesh with a small blood pit, and 小怪 begins on top of its mouth
+	start_pit = preload("res://start_pit.gd").new()
+	start_pit.position = _tile_center(START_TILE)  # 小怪 stands right on top of the maw
+	add_child(start_pit)
+	move_child(start_pit, 0)
 	last_phase = int(clock / DAY_SECONDS)
 	tint = CanvasModulate.new()
 	add_child(tint)
@@ -1574,8 +1582,7 @@ func _on_villager_defeated(xp: int, bones_gain: int, by_tower: bool) -> void:
 	if player.family() == "Demon":
 		bones += 1  # Demon trait: every kill drops an extra bone
 	if not by_tower:
-		player.add_xp(roundi(xp * catchup()))
-		player.on_kill()
+		player.on_kill()  # (EXP no longer comes from a kill itself: the villager drops an EXP stone to pick up)
 
 
 func _on_evolved(stage: int) -> void:
@@ -1697,6 +1704,9 @@ func _update_rival(delta: float) -> void:
 			if LinesData.released(i) and i != player.line:
 				lines.append(i)
 		rival["line"] = lines[rng.randi_range(0, lines.size() - 1)]
+		for k in 2:  # it can hit you with skills from the first second
+			var open: Array = RIVAL_ATTACK_SKILLS.filter(func(id): return not rival["skills"].has(id))
+			rival["skills"].append(open[rng.randi_range(0, open.size() - 1)])
 	var node = rival["node"]
 	if node != null and is_instance_valid(node) and not node.is_queued_for_deletion():
 		if elapsed >= DUEL_AT and not bool(rival["duel"]):
@@ -1757,7 +1767,7 @@ func rival_gain(xp: int) -> void:
 	while int(rival["level"]) < PlayerScript.MAX_LEVEL and int(rival["xp"]) >= PlayerScript.xp_for_level(int(rival["level"]) + 1):
 		rival["level"] = int(rival["level"]) + 1
 		grew = true
-		if int(rival["level"]) % 3 == 0 and rival["skills"].size() < 10:
+		if int(rival["level"]) % 2 == 0 and rival["skills"].size() < 12:
 			var open: Array = RIVAL_SKILL_POOL.filter(func(id): return not rival["skills"].has(id))
 			if not open.is_empty():
 				rival["skills"].append(open[rng.randi_range(0, open.size() - 1)])
@@ -1984,7 +1994,7 @@ func _shop_pick(i: int, merchant) -> void:
 			var ids: Array = player.TreasureData.RELICS.keys()
 			player.add_relic(ids[rng.randi_range(0, ids.size() - 1)])
 		3:
-			player.add_xp(10 + 4 * player.level)
+			ExpStone.spawn(self, player.global_position, 10 + 4 * player.level)  # a pile of EXP at your feet
 	Sfx.play(get_tree(), "coin")
 	_say("Bought: %s" % item["name"])
 

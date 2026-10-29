@@ -213,7 +213,7 @@ func _init() -> void:
 	var xp_before: int = p.xp
 	await frames(30)
 	check("auto bite hurts a nearby villager", not is_instance_valid(v) or v.is_queued_for_deletion() or v.hp < v.max_hp)
-	check("hits give EXP", p.xp > xp_before, "xp %d" % p.xp)
+	check("hits give no EXP by themselves (only EXP stones do)", p.xp == xp_before, "xp %d" % p.xp)
 
 	# =========================== levels: 100 levels, a form every 10, skills every 3, specials every 12 ===========================
 	check("Xiao Guai until level 10", PlayerScript.stage_for_level(1) == 0 and PlayerScript.stage_for_level(9) == 0)
@@ -451,6 +451,7 @@ func _init() -> void:
 	check("Bone Collector pays more bones", main.bones - b0 == 5, str(main.bones - b0))
 	p.learn("drain")
 	p.hp = 1
+	main._on_villager_defeated(4, 1, false)
 	main._on_villager_defeated(4, 1, false)
 	check("Soul Drain heals on a kill", p.hp >= 2)
 	check("an auto skill does nothing until learned", not p.cast("nova") and p.rank("nova") == 0)
@@ -1808,7 +1809,7 @@ func _init() -> void:
 	es_xp0 = p.xp
 	es_v2.take_hit(999, Vector2.RIGHT, false)
 	await frames(2)
-	check("your own kills still give EXP straight away", p.xp > es_xp0 and get_nodes_in_group("exp_stones").is_empty())
+	check("your own kills drop an EXP stone too, and give no EXP until it is picked up", p.xp == es_xp0 and get_nodes_in_group("exp_stones").size() >= 1)
 
 	# =========================== enemies arrive in order of strength ===========================
 	await fresh()
@@ -2432,6 +2433,24 @@ func _init() -> void:
 	rv_main.rival_gain(20000)
 	check("our kills feed the rival: it gains levels, learns skills and evolves", int(rv_main.rival["level"]) > 10 and rv_main.rival["skills"].size() >= 3 and rv.stage >= 1 and rv.max_hp > rv_hp0, "level %d skills %s stage %d" % [int(rv_main.rival["level"]), str(rv_main.rival["skills"]), rv.stage])
 	check("the rival knows the skills it learned", rv.available_skills().size() == rv_main.rival["skills"].size())
+	var rv_new_skills: Array = ["frost_shards", "thorn_ring", "spirit_lance", "meteor_call", "chain_zap"]
+	var rv_cast := 0
+	rv_main.player.max_hp = 99999
+	rv_main.player.hp = 99999
+	var rv_caster = mk(rv_main.player.global_position + Vector2(150, 0), 3, 0)
+	rv_caster.setup_rival(10, 12, 2, rv_new_skills, true)
+	rv_caster.force_chase = true
+	for sid in rv_new_skills:
+		rv_caster.skill_timers.clear()
+		var rv_before: int = bolts().size() + zones().size()
+		if rv_caster.use_skill_id(sid, rv_main.player, 150.0):
+			await frames(2)
+			if bolts().size() + zones().size() > rv_before:
+				rv_cast += 1
+	check("the rival can cast all five long-range skills at 小怪", rv_cast == 5, "%d of 5" % rv_cast)
+	rv_caster.queue_free()
+	var fresh_rival: int = rv_main.rival["skills"].size()
+	check("the rival knows at least two skills from the start of a run", fresh_rival >= 2 or int(rv_main.rival["level"]) > 1)
 	var rv_xp0: int = int(rv_main.rival["xp"])
 	rv.take_hit(99999999, Vector2.RIGHT, false)
 	await frames(3)
@@ -2455,7 +2474,7 @@ func _init() -> void:
 	Engine.remove_meta("deterministic_map")
 	rv_main._update_rival(0.1)
 	Engine.set_meta("deterministic_map", true)
-	check("at 20 minutes the final duel starts", bool(rv_main.rival["duel"]))
+	check("at 20 minutes the final duel starts", bool(rv_main.rival["duel"]), "node %s game_over %s elapsed %.0f falls %d" % [str(is_instance_valid(rv_main.rival["node"])), str(rv_main.game_over), rv_main.elapsed, int(rv_main.rival["falls"])])
 	rv2.take_hit(99999999, Vector2.RIGHT, false)
 	await frames(3)
 	check("defeating the rival in the final duel wins the game", rv_main.game_over and rv_main.banner.text.contains("VICTORY"))

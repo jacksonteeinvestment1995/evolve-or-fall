@@ -60,8 +60,6 @@ func _physics_process(delta: float) -> void:
 					SkillSounds.play_at(get_tree(), hit_sound, e.global_position, -2.0)
 				if status != "" and is_instance_valid(e) and not e.is_queued_for_deletion():
 					e.apply_status(status, status_time)
-				if source != null and is_instance_valid(source):
-					source.add_xp(1)
 				if not pierce:
 					queue_free()
 					return
