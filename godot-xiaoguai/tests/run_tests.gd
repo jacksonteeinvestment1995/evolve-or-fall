@@ -2561,5 +2561,30 @@ func _init() -> void:
 	check("rain falls when the weather turns", mp_rain > 0, str(mp_rain))
 	mp.ambient.weather = "clear"
 
+	# ranged skills: half the damage, half the cooldown, and ranks cut the cooldown instead of adding damage
+	await fresh()
+	var rg = main.player
+	await clear_enemies()
+	rg.hp = 99999
+	rg.max_hp = 99999
+	check("every ranged skill has half the cooldown it had", main.SkillsData.SKILLS["thorn_ring"]["cd"] == 4.0 and main.SkillsData.SKILLS["spirit_lance"]["cd"] == 5.0 and main.SkillsData.SKILLS["bolt"]["cd"] == 2.5)
+	rg.learn("thorn_ring")
+	rg.skill_cd["thorn_ring"] = 0.0
+	rg.cast("thorn_ring")
+	check("a rank 1 ranged skill waits its full (halved) cooldown", absf(float(rg.skill_cd["thorn_ring"]) - 4.0) < 0.01, str(rg.skill_cd["thorn_ring"]))
+	await frames(2)
+	var rg_bolt = null
+	for c in rg.get_parent().get_children():
+		if c.get_script() != null and str(c.get_script().resource_path).ends_with("bolt.gd") and c.team == "player":
+			rg_bolt = c
+	check("a ranged skill hits for half", rg_bolt != null and rg_bolt.damage <= ceili(rg.effective_bite() * 1.4 * 0.5) + 1, str(rg_bolt.damage if rg_bolt != null else -1))
+	rg.learn("thorn_ring")
+	rg.learn("thorn_ring")
+	rg.skill_cd["thorn_ring"] = 0.0
+	rg.cast("thorn_ring")
+	check("each rank of a ranged skill cuts its cooldown by 15% (rank 3: 72%)", absf(float(rg.skill_cd["thorn_ring"]) - 4.0 * 0.85 * 0.85) < 0.01, str(rg.skill_cd["thorn_ring"]))
+	check("the level-up text says what ranks do", str(main.SkillsData.SKILLS["thorn_ring"]["desc"]).contains("cooldown"))
+	await clear_enemies()
+
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

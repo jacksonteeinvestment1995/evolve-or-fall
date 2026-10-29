@@ -73,6 +73,11 @@ var reviving := 0.0
 ## Bites come 3.3x as often as the form's table says, and every skill recharges twice as fast.
 const BITE_TIME_SCALE := 0.3
 const SKILL_RECHARGE := 2.0
+## The ranged skills (projectiles and blasts at a distance) hit for half, recharge in half the time, and ranks no
+## longer add damage: each rank cuts the cooldown by 15% instead.
+const RANGED_SKILLS := ["bolt", "frost_shards", "meteor_call", "chain_zap", "thorn_ring", "spirit_lance"]
+const RANGE_DAMAGE := 0.5
+const RANGE_RANK_COOLDOWN := 0.85
 const COMBO_WINDOW := 2.5
 const COMBO_MILESTONES := {5: 3, 10: 6, 20: 12, 40: 25}
 var combo := 0
@@ -915,7 +920,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 		return _cast_form(id)
 	var direction := aim if aim != Vector2.ZERO else facing
 	var r := rank(id)
-	var power := 1.0 + 0.3 * (r - 1)
+	var power := RANGE_DAMAGE if RANGED_SKILLS.has(id) else 1.0 + 0.3 * (r - 1)
 	if SkillsData.form_skills().has(id):
 		return _cast_form(id)
 	match id:
@@ -956,7 +961,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			var spot: Vector2 = tgt.global_position if tgt != null else global_position + direction * 200.0
 			var z = ZoneScript.new()
 			z.position = spot
-			z.radius = 55.0 + 8.0 * r
+			z.radius = 62.0
 			z.delay = 0.9
 			z.damage = ceili(effective_bite() * 4.0 * power)
 			z.team = "player"
@@ -972,7 +977,7 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			var hit_ids: Array = []
 			var from := global_position
 			var cur = _nearest_enemy_to(260.0)
-			var jumps := 3 + r
+			var jumps := 4
 			while cur != null and jumps > 0:
 				jumps -= 1
 				hit_ids.append(cur.get_instance_id())
@@ -1030,7 +1035,8 @@ func cast(id: String, aim: Vector2 = Vector2.ZERO) -> bool:
 			_add_to_level(z)
 		_:
 			return false
-	skill_cd[id] = float(SkillsData.SKILLS[id]["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	var rank_cd: float = pow(RANGE_RANK_COOLDOWN, r - 1) if RANGED_SKILLS.has(id) else 1.0 - 0.1 * (r - 1)
+	skill_cd[id] = float(SkillsData.SKILLS[id]["cd"]) * rank_cd * (0.65 if specials.has("stormcaller") else 1.0)
 	if specials.has("stormcaller"):
 		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
 		SkillSounds.play(get_tree(), "stormcaller", -10.0)
@@ -1287,7 +1293,7 @@ func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
 	if near.is_empty():
 		return false
 	near.sort_custom(func(x, y): return x.global_position.distance_to(global_position) < y.global_position.distance_to(global_position))
-	var count := int(a["shots"]) + r - 1
+	var count := int(a["shots"])
 	for i in count:
 		var target = near[i % near.size()]
 		var fan := 0.0 if near.size() > 1 else (float(i) - float(count - 1) * 0.5) * 0.18
@@ -1296,7 +1302,7 @@ func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
 		b.position = global_position + aim * 10.0
 		b.dir = aim
 		b.speed = 330.0
-		b.damage = ceili(effective_bite() * float(a["mult"]) * (1.0 + 0.2 * (r - 1)))
+		b.damage = ceili(effective_bite() * float(a["mult"]) * RANGE_DAMAGE)
 		b.team = "player"
 		b.color = Color(str(a["color"]))
 		b.style = str(a["style"])
@@ -1308,7 +1314,7 @@ func _cast_volley(id: String, a: Dictionary, r: int) -> bool:
 		b.source = self
 		b.hit_sound = id
 		_add_to_level(b)
-	skill_cd[id] = float(a["cd"]) * (1.0 - 0.1 * (r - 1)) * (0.65 if specials.has("stormcaller") else 1.0)
+	skill_cd[id] = float(a["cd"]) * 0.5 * pow(RANGE_RANK_COOLDOWN, r - 1) * (0.65 if specials.has("stormcaller") else 1.0)
 	if specials.has("stormcaller"):
 		SkillFx.spawn_fx(self, Vector2.ZERO, "spark")
 	Juice.cast_burst(get_parent(), global_position, _skill_color(id))
