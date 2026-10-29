@@ -5,40 +5,40 @@ extends RefCounted
 ## Every 12th level offers a SPECIAL skill instead: 3 of these stronger, one-time picks.
 
 const SPECIALS := {
-	"overdrive": {"name": "Overdrive Bites", "desc": "+40% bite damage"},
-	"frenzy": {"name": "Frenzy", "desc": "Bite 25% faster"},
-	"ironwill": {"name": "Iron Will", "desc": "+50% max HP, and heal half of it now"},
-	"secondwind": {"name": "Second Wind", "desc": "Below 25% HP, heal 30% of your HP (once every 90 s)"},
-	"phoenix": {"name": "Phoenix", "desc": "Once per run: come back from death with 40% HP and a blast"},
-	"cleave": {"name": "Cleave", "desc": "Every bite also hits up to 2 more villagers nearby"},
-	"stormcaller": {"name": "Stormcaller", "desc": "Your automatic skills recharge 35% faster"},
-	"bloodmoon": {"name": "Blood Moon", "desc": "You have night strength (+50% bite, +20% speed) all day long"},
-	"gravity": {"name": "Gravity Maw", "desc": "Villagers near you are slowly pulled in"},
-	"titan": {"name": "Titan Reach", "desc": "+30% bite reach"},
-	"mastery": {"name": "Mastery", "desc": "Every skill you own gains a rank right now"},
-	"bonehoard": {"name": "Bone Hoard", "desc": "Double bones, and towers and walls cost 30% less"},
+	"overdrive": {"name": "Overdrive Bites", "short": "+40% bite damage", "desc": "+40% bite damage"},
+	"frenzy": {"name": "Frenzy", "short": "Bite 25% faster", "desc": "Bite 25% faster"},
+	"ironwill": {"name": "Iron Will", "short": "+50% max HP, heal half now", "desc": "+50% max HP, and heal half of it now"},
+	"secondwind": {"name": "Second Wind", "short": "Big heal when your HP is low", "desc": "Below 25% HP, heal 30% of your HP (once every 90 s)"},
+	"phoenix": {"name": "Phoenix", "short": "Come back once after dying", "desc": "Once per run: come back from death with 40% HP and a blast"},
+	"cleave": {"name": "Cleave", "short": "Each bite hits 2 more villagers", "desc": "Every bite also hits up to 2 more villagers nearby"},
+	"stormcaller": {"name": "Stormcaller", "short": "Auto skills recharge 35% faster", "desc": "Your automatic skills recharge 35% faster"},
+	"bloodmoon": {"name": "Blood Moon", "short": "Night power all day long", "desc": "You have night strength (+50% bite, +20% speed) all day long"},
+	"gravity": {"name": "Gravity Maw", "short": "Pulls nearby villagers in", "desc": "Villagers near you are slowly pulled in"},
+	"titan": {"name": "Titan Reach", "short": "+30% bite reach", "desc": "+30% bite reach"},
+	"mastery": {"name": "Mastery", "short": "+1 rank to every skill", "desc": "Every skill you own gains a rank right now"},
+	"bonehoard": {"name": "Bone Hoard", "short": "Double bones, cheaper buildings", "desc": "Double bones, and towers and walls cost 30% less"},
 }
 
 const SKILLS := {
-	"hide": {"name": "Tough Hide", "kind": "passive", "max": 5, "desc": "+20% max HP per rank"},
-	"fangs": {"name": "Sharp Fangs", "kind": "passive", "max": 5, "desc": "+25% bite damage per rank"},
-	"paws": {"name": "Swift Paws", "kind": "passive", "max": 5, "desc": "+8% move speed per rank"},
-	"jaws": {"name": "Quick Jaws", "kind": "passive", "max": 5, "desc": "-10% time between bites per rank"},
-	"drain": {"name": "Soul Drain", "kind": "passive", "max": 5, "desc": "Heal 1 HP for every 2 villagers you defeat, per rank"},
-	"greed": {"name": "Bone Collector", "kind": "passive", "max": 5, "desc": "+25% bones from kills per rank"},
-	"nova": {"name": "Bone Nova", "kind": "passive", "auto": true, "max": 5, "cd": 8.0, "desc": "Auto: blast around you when villagers close in (3x bite, brief stun)"},
-	"bolt": {"name": "Spirit Bolt", "kind": "passive", "auto": true, "max": 5, "cd": 2.5, "desc": "Auto: piercing bolt at the nearest villager (1.5x bite). Each rank cuts its cooldown by 15%."},
-	"step": {"name": "Shadow Step", "kind": "passive", "auto": true, "max": 5, "cd": 2.0, "desc": "Auto: 10% chance per rank to dodge a hit and blink away"},
-	"magnet": {"name": "EXP Magnet", "kind": "passive", "max": 5, "desc": "Pulls EXP stones to you from further away (+90 px per rank)"},
-	"roar": {"name": "Roar", "kind": "passive", "auto": true, "max": 5, "cd": 15.0, "desc": "Auto: when surrounded or low on HP, knocks back and stuns villagers"},
+	"hide": {"name": "Tough Hide", "short": "+20% max HP", "kind": "passive", "max": 5, "desc": "+20% max HP per rank"},
+	"fangs": {"name": "Sharp Fangs", "short": "+25% bite damage", "kind": "passive", "max": 5, "desc": "+25% bite damage per rank"},
+	"paws": {"name": "Swift Paws", "short": "+8% move speed", "kind": "passive", "max": 5, "desc": "+8% move speed per rank"},
+	"jaws": {"name": "Quick Jaws", "short": "Bite 10% faster", "kind": "passive", "max": 5, "desc": "-10% time between bites per rank"},
+	"drain": {"name": "Soul Drain", "short": "Heal 1 HP every 2 kills", "kind": "passive", "max": 5, "desc": "Heal 1 HP for every 2 villagers you defeat, per rank"},
+	"greed": {"name": "Bone Collector", "short": "+25% bones from kills", "kind": "passive", "max": 5, "desc": "+25% bones from kills per rank"},
+	"nova": {"name": "Bone Nova", "short": "Blasts villagers who get close", "kind": "passive", "auto": true, "max": 5, "cd": 8.0, "desc": "Auto: blast around you when villagers close in (3x bite, brief stun)"},
+	"bolt": {"name": "Spirit Bolt", "short": "Shoots bolts at the nearest villager", "kind": "passive", "auto": true, "max": 5, "cd": 2.5, "desc": "Auto: piercing bolt at the nearest villager (1.5x bite). Each rank cuts its cooldown by 15%."},
+	"step": {"name": "Shadow Step", "short": "Chance to dodge a hit", "kind": "passive", "auto": true, "max": 5, "cd": 2.0, "desc": "Auto: 10% chance per rank to dodge a hit and blink away"},
+	"magnet": {"name": "EXP Magnet", "short": "Pulls EXP stones from further", "kind": "passive", "max": 5, "desc": "Pulls EXP stones to you from further away (+90 px per rank)"},
+	"roar": {"name": "Roar", "short": "Stuns villagers when you're surrounded", "kind": "passive", "auto": true, "max": 5, "cd": 15.0, "desc": "Auto: when surrounded or low on HP, knocks back and stuns villagers"},
 	# long-range skills: they fire on their own at villagers that are still far away
-	"frost_shards": {"name": "Frost Shards", "kind": "passive", "auto": true, "max": 5, "cd": 3.0, "desc": "Auto: a fan of 3 icy shards at a villager up to 340 px away (slows them). Each rank cuts its cooldown by 15%."},
-	"meteor_call": {"name": "Falling Star", "kind": "passive", "auto": true, "max": 5, "cd": 4.5, "desc": "Auto: calls a meteor onto a villager up to 440 px away (burns the area). Each rank cuts its cooldown by 15%."},
-	"chain_zap": {"name": "Chain Lightning", "kind": "passive", "auto": true, "max": 5, "cd": 3.5, "desc": "Auto: lightning leaps from the nearest villager through up to 3 more. Each rank cuts its cooldown by 15%."},
-	"thorn_ring": {"name": "Thorn Burst", "kind": "passive", "auto": true, "max": 5, "cd": 4.0, "desc": "Auto: a ring of 10 thorns flies out 240 px in every direction. Each rank cuts its cooldown by 15%."},
-	"spirit_lance": {"name": "Spirit Lance", "kind": "passive", "auto": true, "max": 5, "cd": 5.0, "desc": "Auto: one huge piercing lance, 600 px long (2.5x bite). Each rank cuts its cooldown by 15%."},
+	"frost_shards": {"name": "Frost Shards", "short": "Icy shards that slow villagers", "kind": "passive", "auto": true, "max": 5, "cd": 3.0, "desc": "Auto: a fan of 3 icy shards at a villager up to 340 px away (slows them). Each rank cuts its cooldown by 15%."},
+	"meteor_call": {"name": "Falling Star", "short": "Drops meteors on far villagers", "kind": "passive", "auto": true, "max": 5, "cd": 4.5, "desc": "Auto: calls a meteor onto a villager up to 440 px away (burns the area). Each rank cuts its cooldown by 15%."},
+	"chain_zap": {"name": "Chain Lightning", "short": "Lightning jumps between villagers", "kind": "passive", "auto": true, "max": 5, "cd": 3.5, "desc": "Auto: lightning leaps from the nearest villager through up to 3 more. Each rank cuts its cooldown by 15%."},
+	"thorn_ring": {"name": "Thorn Burst", "short": "Shoots a ring of thorns", "kind": "passive", "auto": true, "max": 5, "cd": 4.0, "desc": "Auto: a ring of 10 thorns flies out 240 px in every direction. Each rank cuts its cooldown by 15%."},
+	"spirit_lance": {"name": "Spirit Lance", "short": "A huge lance that pierces a line", "kind": "passive", "auto": true, "max": 5, "cd": 5.0, "desc": "Auto: one huge piercing lance, 600 px long (2.5x bite). Each rank cuts its cooldown by 15%."},
 	# Not offered at level-ups: 小怪 gets it by reaching the final form (level 50).
-	"doom": {"name": "Final Calamity", "kind": "passive", "auto": true, "ultimate": true, "max": 1, "cd": 25.0, "desc": "The strongest skill, earned by the final form: a huge blast that devastates and stuns everything around you"},
+	"doom": {"name": "Final Calamity", "short": "A huge blast that stuns everything", "kind": "passive", "auto": true, "ultimate": true, "max": 1, "cd": 25.0, "desc": "The strongest skill, earned by the final form: a huge blast that devastates and stuns everything around you"},
 }
 
 
@@ -160,7 +160,7 @@ static var _form_cache := {}
 static func form_skills() -> Dictionary:
 	if _form_cache.is_empty():
 		for e in FORM_LIST:
-			var d: Dictionary = {"line": e[1], "form": e[2], "name": e[3], "desc": e[4], "max": e[5], "kind": "form"}
+			var d: Dictionary = {"line": e[1], "form": e[2], "name": e[3], "desc": e[4], "short": short_of(e[4]), "max": e[5], "kind": "form"}
 			d.merge(e[6])
 			if d.has("auto"):
 				d["cd"] = d["auto"]["cd"]
@@ -169,6 +169,19 @@ static func form_skills() -> Dictionary:
 					d["desc"] = str(d["desc"]) + " Each rank cuts its cooldown by 15%."
 			_form_cache[e[0]] = d
 	return _form_cache
+
+
+## A form skill's one-line card text: its description without "Auto:" or "per rank" (the card shows those as a tag
+## and pips), with regeneration written short.
+static func short_of(desc: String) -> String:
+	var t := desc.replace("Auto: ", "").replace(" per rank", "").replace(" per second", "/s").replace("Regenerate ", "Regen +").replace("regenerate ", "regen +").replace(" of bite damage", " of bites")
+	return t.substr(0, 1).to_upper() + t.substr(1)
+
+
+## The words for a level-up card: the short line if there is one, else the full description.
+static func short_text(id: String) -> String:
+	var d: Dictionary = SPECIALS[id] if SPECIALS.has(id) else info(id)
+	return str(d.get("short", d.get("desc", "")))
 
 
 ## The skill's info, whether it is a general skill or a form skill; {} if unknown.

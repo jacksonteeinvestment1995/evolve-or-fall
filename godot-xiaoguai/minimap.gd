@@ -223,7 +223,7 @@ func _draw() -> void:
 	# 小怪 in the middle, with what the camera sees
 	draw_circle(c, 3.4, Color.WHITE)
 	draw_line(c, c + main_node.player.facing * 8.0, Color.WHITE, 1.8)
-	var view := Vector2(1280, 720) / 2.0 / tile_px * SCALE
+	var view: Vector2 = get_viewport_rect().size / main_node.cam.zoom / tile_px * SCALE if main_node.cam != null else Vector2(1280, 720) / 2.0 / tile_px * SCALE
 	draw_rect(Rect2(c - view * 0.5, view), Color(1, 1, 1, 0.35), false, 1.0)
 	# the rim
 	draw_arc(c, RADIUS + 2.0, 0.0, TAU, 72, Color(0.5, 0.6, 1.0, 0.85) if night else Color(1.0, 0.88, 0.55, 0.9), 3.0)

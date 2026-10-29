@@ -361,10 +361,12 @@ func _physics_process(delta: float) -> void:
 		roll_dir = dir.normalized() if dir != Vector2.ZERO else facing
 		roll_left = ROLL_TIME
 		roll_cd = ROLL_COOLDOWN
+		lunge_dir = roll_dir   # the roll is also the charge: it bites everything it passes through, once
+		lunge_hit.clear()
 		invuln = maxf(invuln, ROLL_INVULN)
 		perfect_window = ROLL_INVULN
 		Sfx.play(get_tree(), "roll")
-	elif Input.is_action_just_pressed("lunge") and lunge_cd == 0.0 and not busy:
+	elif false and Input.is_action_just_pressed("lunge") and lunge_cd == 0.0 and not busy:
 		if touch:
 			var near = _nearest_enemy_to(260.0)
 			if near != null:
@@ -384,6 +386,7 @@ func _physics_process(delta: float) -> void:
 	if roll_left > 0.0:
 		roll_left -= delta
 		velocity = roll_dir * ROLL_SPEED * speed_mult
+		_lunge_strike()
 	elif lunge_left > 0.0:
 		lunge_left -= delta
 		velocity = lunge_dir * LUNGE_SPEED * speed_mult

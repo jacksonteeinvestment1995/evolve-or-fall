@@ -2287,6 +2287,160 @@ func _init() -> void:
 			if c.get_script() != null and str(c.get_script().resource_path).ends_with("touch_controls.gd"):
 				tc_ok = true
 	check("touch controls exist", tc_ok)
+
+	# the phone layout: HUD and minimap side by side at the top, picture cards in the level-up menus, coach marks
+	var ui_tc = null
+	for n in main.get_children():
+		for c in n.get_children():
+			if c.get_script() != null and str(c.get_script().resource_path).ends_with("touch_controls.gd"):
+				ui_tc = c
+	check("the desktop keeps the plain layout and camera", not main.touch_mode and main.view_zoom == 1.0 and main.hud.scale == Vector2.ONE)
+	main.touch_mode = true
+	for upright in [true, false]:
+		main.ui_portrait = upright
+		main._layout_ui()
+		var plate: Rect2 = main.hud._layout()["plate"]
+		var hud_right: float = main.hud.position.x + plate.end.x * main.hud.scale.x
+		var mm_w: float = main.minimap.size.x * main.minimap.scale.x
+		var screen_w := 453.0 if upright else 981.0   # a 390 x 844 phone in the phone layout
+		check("on a phone (%s) the minimap sits in the top right corner beside the HUD" % ("upright" if upright else "sideways"),
+			main.minimap.anchor_left == 1.0 and main.minimap.anchor_top == 0.0 and main.minimap.offset_top <= 10.0 and main.minimap.offset_right < 0.0
+			and main.minimap.scale.x > 0.44 and main.minimap.scale.x < 0.71 and hud_right + mm_w + 8.0 <= screen_w, "hud right %.0f, minimap %.0f" % [hud_right, mm_w])
+		if upright:
+			check("the phone HUD is bigger and stacked when upright", main.hud.scale.x > 1.0 and main.hud.compact and main.hotbar_parts[0]["inner"].visible and main.hotbar[0].icon == null)
+	main.touch_mode = false
+	main.ui_portrait = false
+	main._layout_ui()
+	check("back on the desktop the build bar shows its icons again", main.hotbar[0].icon != null and not main.hotbar_parts[0]["inner"].visible)
+	# every menu's cards: an icon and a short line each, never overlapping each other, inside the screen, text inside
+	# its card, and the HUD hidden behind them (desktop, then the phone layouts upright and sideways)
+	var card_sizes := [Vector2i(0, 0), Vector2i(390, 844), Vector2i(844, 390), Vector2i(360, 640), Vector2i(915, 412)]
+	var win0: Vector2i = main.get_window().size
+	for wsz in card_sizes:
+		var phone: bool = wsz.x > 0
+		ui_tc.visible = phone
+		if phone:
+			main.touch_mode = true
+			main.get_window().size = wsz
+			main._fit_screen()
+			await frames(2)
+		var vp_rect: Rect2 = main.get_viewport().get_visible_rect()
+		for kind in ["skill", "perk", "special", "line"]:
+			main.menu_queue.clear()
+			main.menu_queue.append({"type": kind})
+			main._next_menu()
+			await frames(2)
+			var grid = main.menu_root.find_child("Cards", true, false) if main.menu_root != null else null
+			var cards_ok: bool = grid != null and grid.get_child_count() >= 3
+			var tidy: bool = cards_ok
+			var why := ""
+			if cards_ok:
+				var rects: Array = []
+				for card in grid.get_children():
+					var ic = card.find_child("Icon", true, false)
+					var sh = card.find_child("Short", true, false)
+					cards_ok = cards_ok and ic != null and ic.texture != null and sh != null and sh.text != "" and card.shortcut != null
+					var cr: Rect2 = card.get_global_rect()
+					if not vp_rect.grow(1.0).encloses(cr):
+						tidy = false
+						why = "card %s outside %s" % [cr, vp_rect]
+					if sh != null and not cr.grow(1.0).encloses(sh.get_global_rect()):
+						tidy = false
+						why = "text %s spills out of card %s" % [sh.get_global_rect(), cr]
+					for other in rects:
+						if other.intersects(cr):
+							tidy = false
+							why = "cards %s and %s overlap" % [other, cr]
+					rects.append(cr)
+			var tag := "phone %dx%d" % [wsz.x, wsz.y] if phone else "desktop"
+			check("the %s menu (%s) shows picture cards with an icon, a short line and a key" % [kind, tag], cards_ok)
+			check("the %s menu cards (%s) never overlap, stay on screen and keep their text inside" % [kind, tag], tidy, why)
+			check("the HUD hides while the %s menu is up (%s)" % [kind, tag], not main.hud_layer.visible)
+			main._close_menu()
+		if phone:
+			var hr: Array = main.hud_rects()
+			hr.append_array(ui_tc.ui_rects() if ui_tc.visible else [])
+			var clash := ""
+			for i in hr.size():
+				for j in range(i + 1, hr.size()):
+					if Rect2(hr[i]).grow(-1.0).intersects(Rect2(hr[j]).grow(-1.0)):
+						clash = "%s / %s" % [hr[i], hr[j]]
+			check("on a %dx%d phone no HUD piece overlaps another" % [wsz.x, wsz.y], clash == "", clash)
+	main.get_window().size = win0
+	ui_tc.visible = false
+	main.touch_mode = false
+	main._fit_screen()
+	check("the HUD is back after the menus", main.hud_layer.visible)
+	main.menu_kind = ""
+	var long_shorts: Array = []
+	for id in main.SkillsData.SKILLS:
+		if main.SkillsData.short_text(id).split(" ").size() > 7:
+			long_shorts.append(id)
+	for id in main.SkillsData.SPECIALS:
+		if main.SkillsData.short_text(id).split(" ").size() > 7:
+			long_shorts.append(id)
+	for id in main.PerksData.PERKS:
+		if str(main.PerksData.PERKS[id]["short"]).split(" ").size() > 7:
+			long_shorts.append(id)
+	for id in main.SkillsData.form_skills():
+		if main.SkillsData.short_text(id).split(" ").size() > 8:
+			long_shorts.append(id)
+	check("every card line is short (7 words, 8 for line skills)", long_shorts.is_empty(), str(long_shorts))
+	# coach marks: shown on demand, a tap closes them
+	var ui_vs: Vector2 = ui_tc.get_viewport_rect().size
+	ui_tc.visible = true
+	main.touch_mode = true
+	ui_tc.show_hint()
+	check("the coach marks show on a touchscreen", ui_tc.hint_showing() and ui_tc.hint_step() == 0)
+	var tap := InputEventScreenTouch.new()
+	tap.index = 5
+	tap.pressed = true
+	tap.position = Vector2(ui_vs.x * 0.55, ui_vs.y * 0.15)
+	ui_tc._input(tap)
+	check("a tap closes the coach marks", not ui_tc.hint_showing())
+	# a menu that opens while a finger holds the stick and SPRINT must not leave them stuck (the lifted finger is lost)
+	var touch_ev := func(idx: int, pos: Vector2, down: bool) -> void:
+		var e := InputEventScreenTouch.new()
+		e.index = idx
+		e.position = pos
+		e.pressed = down
+		ui_tc._input(e)
+	var drag_ev := func(idx: int, pos: Vector2) -> void:
+		var e := InputEventScreenDrag.new()
+		e.index = idx
+		e.position = pos
+		ui_tc._input(e)
+	var stick_at := Vector2(ui_vs.x * 0.2, ui_vs.y * 0.8)
+	touch_ev.call(0, stick_at, true)
+	drag_ev.call(0, stick_at + Vector2(60, 0))
+	touch_ev.call(1, ui_tc._pos(ui_tc._button_def("sprint")), true)
+	check("the stick walks and SPRINT is held", Input.is_action_pressed("move_right") and Input.is_action_pressed("sprint"))
+	main.pause_on_menu = true
+	main.menu_queue.clear()
+	main.menu_queue.append({"type": "perk"})
+	main._next_menu()
+	check("a menu opening lets go of the stick and the held buttons", main.menu_open and not Input.is_action_pressed("move_right") and not Input.is_action_pressed("sprint") and ui_tc._stick_id == -1)
+	main._close_menu()
+	main.pause_on_menu = false
+	await frames(2)
+	touch_ev.call(2, stick_at, true)
+	drag_ev.call(2, stick_at + Vector2(0, 60))
+	var stick_back: bool = Input.is_action_pressed("move_down")
+	touch_ev.call(3, ui_tc._pos(ui_tc._button_def("roll")), true)
+	check("after the menu a fresh touch drives the stick and ROLL again", stick_back and Input.is_action_pressed("dodge"))
+	touch_ev.call(2, stick_at, false)
+	touch_ev.call(3, ui_tc._pos(ui_tc._button_def("roll")), false)
+	ui_tc.reset_touch()
+	ui_tc.visible = false
+	main.touch_mode = false
+	main.menu_kind = ""
+	# TAP TO START: never in a headless run; when it is up the game waits behind one real button
+	check("no TAP TO START in a headless run", not main.needs_start_gate() and main.start_gate == null)
+	main.open_start_gate("TAP TO START")
+	check("TAP TO START pauses the game behind a real button", paused and main.start_gate != null and main.start_gate.button is Button and main.wants_pause())
+	main.start_gate.button.pressed.emit()
+	await frames(2)
+	check("tapping it starts the game", main.start_gate == null and not paused and not main.wants_pause())
 	
 	# combos, perfect dodge, attack speed, perks, pets, boss phases and the long-range skills
 	await fresh()

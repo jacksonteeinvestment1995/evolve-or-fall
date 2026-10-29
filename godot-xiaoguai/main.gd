@@ -161,6 +161,19 @@ var menu_open := false
 var menu_queue: Array = []
 var menu_kind := ""  # what the open menu is: "line", "skill" or "special"
 var pause_on_menu := true  # the game stops while a level-up menu is open (tests turn this off)
+const MenuCards := preload("res://menu_cards.gd")
+## On a touchscreen one layout pixel comes out about this many CSS pixels, so text and buttons are big enough to read
+## and tap on a phone (the plain 720-wide layout gave about 0.54).
+const UI_CSS_PER_UNIT := 0.86
+const TOUCH_HUD_SCALE := 1.1
+var view_zoom := 1.0        ## extra camera zoom that keeps the world the same size on screen when the phone layout grows
+var ui_portrait := false
+var touch_ui: Control      ## the on-screen joystick and buttons (touch_controls.gd)
+var hotbar_bar: HBoxContainer
+var hud_layer: CanvasLayer   ## the HUD's layer, hidden while a level-up menu is up
+var start_gate: Control      ## the "TAP TO START" panel (start_gate.gd) while it is up
+var _away := false           ## the page lost focus mid-run on a phone: ask for a tap (and so the sound) when it is back
+var hotbar_parts: Array = []  ## per build button: the phone look's pieces (name, cost) and the desktop icon and key badge
 
 
 func _ready() -> void:
@@ -203,7 +216,10 @@ func _ready() -> void:
 	var touch := CanvasLayer.new()
 	touch.layer = 3
 	add_child(touch)
-	touch.add_child(preload("res://touch_controls.gd").new())
+	touch_ui = preload("res://touch_controls.gd").new()
+	touch.add_child(touch_ui)
+	if needs_start_gate():
+		open_start_gate("TAP TO START")
 	# YouTube Playables: the first frame is up, then the game is ready to play
 	playables = preload("res://playables.gd").new()
 	add_child(playables)
@@ -212,20 +228,223 @@ func _ready() -> void:
 	playables.game_ready()
 
 
-## Phones held upright get a tall layout (720 wide) and everything else a wide one (1280 wide), so the buttons and
-## text stay a readable size; the HUD stays at the top either way.
+## Phones held upright get a tall layout (720 wide) and everything else a wide one (1280 wide). On a touchscreen the
+## layout is sized from the screen's CSS pixels instead, so a phone shows the HUD, buttons and menus about 1.6x bigger;
+## the camera zooms out by the same amount, so the world keeps its size on screen.
 func _fit_screen() -> void:
 	var win := get_window()
-	var portrait := win.size.y > win.size.x
-	win.content_scale_size = Vector2i(720, 1280) if portrait else Vector2i(1280, 720)
-	# the HUD hugs the very top; on a narrow screen the minimap shrinks into the corner right under it
-	if hud != null:
+	var ws := Vector2(win.size)
+	var portrait := ws.y > ws.x
+	ui_portrait = portrait
+	var base := Vector2(720, 1280) if portrait else Vector2(1280, 720)
+	var fit := base
+	if touch_mode and ws.x > 0.0 and ws.y > 0.0:
+		var css_short := minf(ws.x, ws.y) / maxf(DisplayServer.screen_get_scale(), 1.0)
+		var short_side := clampf(roundf(css_short / UI_CSS_PER_UNIT), 400.0, 720.0)
+		var long_side := roundf(short_side * 16.0 / 9.0)
+		fit = Vector2(short_side, long_side) if portrait else Vector2(long_side, short_side)
+	win.content_scale_size = Vector2i(fit)
+	view_zoom = 1.0
+	if fit != base:
+		view_zoom = minf(ws.x / base.x, ws.y / base.y) / minf(ws.x / fit.x, ws.y / fit.y)
+	_layout_ui()
+
+
+## Places the HUD pieces: the desktop layout as it always was, or the phone one (the minimap compact in the top right
+## corner, labelled build buttons, on an upright screen a stacked HUD with the skill icons under it). On a phone the
+## pieces are sized from the screen so none of them overlaps another or the touch buttons.
+func _layout_ui() -> void:
+	if hud == null:
+		return
+	var portrait := ui_portrait
+	var t := touch_mode
+	var vs := get_viewport().get_visible_rect().size
+	hud.set_mode(t, t and portrait)
+	if t:
+		var hs := TOUCH_HUD_SCALE if (portrait and vs.x >= 440.0) else 1.0
+		hud.scale = Vector2(hs, hs)
+		hud.position = Vector2(14, 10)
+	else:
+		hud.scale = Vector2.ONE
 		hud.position = Vector2(12, 6 if portrait else 12)
+	var plate: Rect2 = hud._layout()["plate"]
+	var hud_bottom: float = hud.position.y + plate.end.y * hud.scale.y
+	var hud_right: float = hud.position.x + plate.end.x * hud.scale.x
+	# the build bar: centred between the stick and the button cluster on a wide phone
+	var stick_right := 140.0
+	var cluster_left := vs.x - 240.0
 	if minimap != null:
+		var ms := 1.0 if not portrait else 0.7
+		if t:
+			# upright: as big as fits beside the HUD; wide: about 27% of the screen height (MOBA style)
+			ms = clampf((vs.x - hud_right - 16.0) / minimap.size.x, 0.45, 0.7) if portrait else clampf(vs.y * 0.27 / minimap.size.y, 0.45, 0.7)
+		var edge := 8.0 if t else 12.0
 		minimap.pivot_offset = Vector2(minimap.size.x, 0.0)
-		minimap.scale = Vector2(0.7, 0.7) if portrait else Vector2.ONE
-		minimap.offset_top = 128.0 if portrait else 10.0
+		minimap.scale = Vector2(ms, ms)
+		minimap.offset_left = -(minimap.size.x + edge)
+		minimap.offset_right = -edge
+		minimap.offset_top = 8.0 if t else (128.0 if portrait else 10.0)
 		minimap.offset_bottom = minimap.offset_top + minimap.size.y
+	var mid_shift := 0.0 if (portrait or not t) else ((stick_right + cluster_left) * 0.5 - vs.x * 0.5)
+	if hotbar_bar != null:
+		hotbar_bar.add_theme_constant_override("separation", (8 if not portrait else 10) if t else 36)
+		hotbar_bar.offset_bottom = -22.0 if t else -12.0
+		hotbar_bar.offset_top = hotbar_bar.offset_bottom - ((64.0 if portrait else 52.0) if t else 44.0)
+		hotbar_bar.offset_left = mid_shift
+		hotbar_bar.offset_right = mid_shift
+		for i in hotbar.size():
+			_style_hotbar_button(i, t)
+			if t and not portrait:
+				hotbar[i].custom_minimum_size = Vector2(104, 52)
+	if skillbar != null:
+		if t and portrait:
+			skillbar.set_layout(44.0, maxi(4, int((vs.x - 12.0 - 56.0) / 50.0)), true)
+			skillbar.anchor_left = 0.0
+			skillbar.anchor_right = 0.0
+			skillbar.anchor_top = 0.0
+			skillbar.anchor_bottom = 0.0
+			skillbar.offset_left = 12.0
+			skillbar.offset_right = 12.0 + skillbar.size.x
+			skillbar.offset_top = hud_bottom + 8.0
+			skillbar.offset_bottom = skillbar.offset_top + skillbar.size.y
+		else:
+			var per: int = skillbar.PER_ROW if not t else maxi(4, int((cluster_left - stick_right - 24.0) / 46.0))
+			skillbar.set_layout(skillbar.SLOT, per, false)
+			var lift := 84.0 if t else 78.0
+			skillbar.anchor_left = 0.5
+			skillbar.anchor_right = 0.5
+			skillbar.anchor_top = 1.0
+			skillbar.anchor_bottom = 1.0
+			skillbar.offset_left = -skillbar.size.x * 0.5 + mid_shift
+			skillbar.offset_right = skillbar.size.x * 0.5 + mid_shift
+			skillbar.offset_top = -(skillbar.size.y + lift)
+			skillbar.offset_bottom = -lift
+	if credit != null:
+		if t:
+			credit.anchor_left = 0.0
+			credit.offset_left = 12
+			credit.offset_right = -12
+			credit.offset_top = -20
+			credit.offset_bottom = -3
+			credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			credit.add_theme_font_size_override("font_size", 11)
+		else:
+			credit.anchor_left = 1.0
+			credit.offset_left = -520
+			credit.offset_right = -14
+			credit.offset_top = -34
+			credit.offset_bottom = -8
+			credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			credit.add_theme_font_size_override("font_size", 14)
+	# the evolution banner and the red notices: wrapped and kept clear of the HUD on a phone (see _place_notices)
+	for row in [[evo_banner, 170.0, 40, 26], [notice, 250.0, 26, 20]]:
+		var l: Label = row[0]
+		if l == null:
+			continue
+		l.anchor_left = 0.0 if t else 0.5
+		l.anchor_right = 0.0 if t else 0.5
+		l.offset_left = 16.0 if t else 0.0
+		l.offset_right = vs.x - 16.0 if t else 0.0
+		l.offset_top = row[1]
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if t else TextServer.AUTOWRAP_OFF
+		l.add_theme_font_size_override("font_size", row[3] if t else row[2])
+	if t:
+		_place_notices()
+
+
+## The screen rectangles the HUD pieces take on a phone (plate, minimap, skill icons, boss bar, build bar).
+func hud_rects() -> Array:
+	var out: Array = []
+	if hud == null:
+		return out
+	var plate: Rect2 = hud._layout()["plate"]
+	out.append(Rect2(hud.position + plate.position * hud.scale, plate.size * hud.scale))
+	if minimap != null:
+		out.append(Rect2(minimap.get_global_rect().position, minimap.size * minimap.scale))
+	if skillbar != null and skillbar.used_height() > 0.0:
+		var sr: Rect2 = skillbar.get_global_rect()
+		out.append(Rect2(sr.position.x, sr.end.y - skillbar.used_height() if not skillbar.from_top else sr.position.y, sr.size.x, skillbar.used_height()))
+	if hotbar_bar != null:
+		out.append(hotbar_bar.get_global_rect())
+	for c in hud.get_parent().get_children():
+		if c.get_script() != null and str(c.get_script().resource_path).ends_with("boss_bar.gd") and c.visible:
+			out.append(Rect2(c.position, c.size))
+	return out
+
+
+## Stacks the visible notices under the HUD on a phone and narrows them around anything they would cover.
+func _place_notices() -> void:
+	var vs := get_viewport().get_visible_rect().size
+	var rects := hud_rects()
+	if touch_ui != null and touch_ui.has_method("ui_rects"):
+		rects.append_array(touch_ui.ui_rects())
+	var y := 0.0
+	for r in hud_rects().slice(0, 1):
+		y = r.end.y + 8.0
+	if ui_portrait:
+		for r in rects:
+			if r.position.y < vs.y * 0.3:
+				y = maxf(y, r.end.y + 8.0)  # below the stacked HUD, skill icons, minimap and "?"
+	for l in [notice, evo_banner]:
+		if l == null or not l.visible:
+			continue
+		var left := 16.0
+		var right := vs.x - 16.0
+		var px: int = l.get_theme_font_size("font_size")
+		var h := 0.0
+		for pass_i in 3:
+			h = l.get_theme_font("font").get_multiline_string_size(l.text, HORIZONTAL_ALIGNMENT_CENTER, right - left, px).y + 4.0
+			var box := Rect2(left, y, right - left, h)
+			for r in rects:
+				if r.intersects(box):
+					if r.get_center().x > vs.x * 0.5:
+						right = minf(right, r.position.x - 8.0)
+					else:
+						left = maxf(left, r.end.x + 8.0)
+		l.offset_left = left
+		l.offset_right = maxf(right, left + 60.0)
+		l.offset_top = y
+		y += h + 6.0
+
+
+## Where the boss bar goes on a phone (Vector2.INF: its usual desktop spot): under the skill icons and the "?" when
+## upright, under the HUD plate when wide.
+func boss_bar_spot(w: float) -> Vector2:
+	if not touch_mode or hud == null:
+		return Vector2.INF
+	var vs := get_viewport().get_visible_rect().size
+	if ui_portrait and skillbar != null:
+		return Vector2((vs.x - w) * 0.5, maxf(skillbar.offset_top + skillbar.used_height(), 224.0) + 4.0)
+	return Vector2(16, hud.position.y + Rect2(hud._layout()["plate"]).end.y * hud.scale.y + 8.0)
+
+## A build button's look: the desktop icon + price + key badge, or on a phone a labelled card
+## (picture, TOWER / WALL / REMOVE, and the price in bones).
+func _style_hotbar_button(i: int, t: bool) -> void:
+	var btn: Button = hotbar[i]
+	var part: Dictionary = hotbar_parts[i]
+	part["inner"].visible = t
+	part["badge"].visible = not t
+	btn.icon = null if t else part["icon"]
+	btn.custom_minimum_size = Vector2(122, 64) if t else Vector2(104, 58)
+	for st in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+		btn.remove_theme_stylebox_override(st)
+	if t:
+		btn.text = ""
+		var gold := Color("ffd84a") if i < 2 else Color("ff7a5a")
+		btn.add_theme_stylebox_override("normal", _panel_box(Color(0.05, 0.06, 0.1, 0.78), Color(1, 1, 1, 0.28), 2))
+		btn.add_theme_stylebox_override("hover", _panel_box(Color(0.05, 0.06, 0.1, 0.78), Color(1, 1, 1, 0.28), 2))
+		btn.add_theme_stylebox_override("pressed", _panel_box(Color(gold.darkened(0.6), 0.85), gold, 3))
+		btn.add_theme_stylebox_override("hover_pressed", _panel_box(Color(gold.darkened(0.6), 0.85), gold, 3))
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+func _panel_box(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
+	var b := StyleBoxFlat.new()
+	b.bg_color = bg
+	b.border_color = border
+	b.set_border_width_all(bw)
+	b.set_corner_radius_all(10)
+	return b
 
 
 ## Where building and removing happen: under the mouse, or a step in front of 小怪 on a touchscreen.
@@ -237,7 +456,51 @@ func aim_point() -> Vector2:
 
 ## True while the game itself wants the tree paused (a level-up menu), so a resume from YouTube does not undo it.
 func wants_pause() -> bool:
-	return menu_open and pause_on_menu
+	return (menu_open and pause_on_menu) or start_gate != null
+
+
+## A phone browser stays silent until a real tap on a real button, so touch devices start behind "TAP TO START"
+## (never in headless runs or when a test sets the "no_start_gate" meta; desktops start right away).
+func needs_start_gate() -> bool:
+	if DisplayServer.get_name() == "headless" or Engine.has_meta("no_start_gate"):
+		return false
+	return preload("res://touch_controls.gd")._has_touchscreen()
+
+
+func open_start_gate(text: String) -> void:
+	if start_gate != null:
+		return
+	_reset_touch()
+	var layer := CanvasLayer.new()
+	layer.layer = 12
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+	start_gate = preload("res://start_gate.gd").new()
+	start_gate.title = text
+	layer.add_child(start_gate)
+	start_gate.started.connect(close_start_gate)
+	get_tree().paused = true
+
+
+func close_start_gate() -> void:
+	if start_gate == null:
+		return
+	start_gate.get_parent().queue_free()
+	start_gate = null
+	_away = false
+	get_tree().paused = wants_pause()
+	_reset_touch()
+	Sfx.play(get_tree(), "select")
+
+
+func _notification(what: int) -> void:
+	# back from another app or tab on a phone: the browser may have muted the page, a tap on the panel unmutes it
+	if not OS.has_feature("web") or not touch_mode or game_over:
+		return
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_away = true
+	elif (what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN) and _away:
+		open_start_gate("TAP TO CONTINUE")
 
 
 # --- music ---
@@ -1162,10 +1425,10 @@ func _setup_input() -> void:
 	_add_action("pick_tower", [KEY_1])
 	_add_action("pick_wall", [KEY_2])
 	_add_action("demolish", [KEY_X])
-	_add_action("lunge", [])
+	_add_action("lunge", [])  # the old separate lunge; the roll does its job now
 	var right := InputEventMouseButton.new()
 	right.button_index = MOUSE_BUTTON_RIGHT
-	InputMap.action_add_event("lunge", right)
+	InputMap.action_add_event("dodge", right)  # right click rolls too
 	_add_action("restart", [KEY_R])
 	_add_action("move_mouse", [])
 	var hold := InputEventMouseButton.new()
@@ -1258,6 +1521,7 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 2  # above the HD-2D finish
 	add_child(layer)
+	hud_layer = layer
 	hud = preload("res://hud_panel.gd").new()
 	hud.position = Vector2(16, 12)
 	layer.add_child(hud)
@@ -1286,6 +1550,7 @@ func _build_hud() -> void:
 	bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	bar.add_theme_constant_override("separation", 36)
 	layer.add_child(bar)
+	hotbar_bar = bar
 	var hotbar_icons := ["icon_build_tower", "icon_build_wall", "icon_build_remove"]
 	var hotbar_tips := ["Tower (key 1): shoots the nearest villager. Build on it again to upgrade.", "Bone wall (key 2): blocks the way.", "Remove (key X): take back a tower or wall under the mouse for half its bones."]
 	for i in 3:
@@ -1321,8 +1586,56 @@ func _build_hud() -> void:
 		badge.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0))
 		badge.add_theme_constant_override("outline_size", 7)
 		btn.add_child(badge)
+		# the phone look: the picture, what it is, and its price in bones (shown instead of the icon and key)
+		var inner := HBoxContainer.new()
+		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inner.offset_left = 8
+		inner.offset_right = -6
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_theme_constant_override("separation", 6)
+		inner.visible = false
+		var pic := TextureRect.new()
+		pic.texture = ic
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.custom_minimum_size = Vector2(44, 44)
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(pic)
+		var words := VBoxContainer.new()
+		words.alignment = BoxContainer.ALIGNMENT_CENTER
+		words.add_theme_constant_override("separation", -2)
+		words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(words)
+		var what := Label.new()
+		what.text = ["TOWER", "WALL", "REMOVE"][i]
+		what.add_theme_font_size_override("font_size", 15)
+		what.add_theme_color_override("font_color", Color("ffe08a"))
+		what.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.0))
+		what.add_theme_constant_override("outline_size", 5)
+		words.add_child(what)
+		var price := HBoxContainer.new()
+		price.add_theme_constant_override("separation", 3)
+		price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		words.add_child(price)
+		var bone := TextureRect.new()
+		bone.texture = Sprites.icon("icon_bone", 2)
+		bone.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bone.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		bone.custom_minimum_size = Vector2(20, 20)
+		bone.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		price.add_child(bone)
+		var cost_l := Label.new()
+		cost_l.text = "+50%" if i == 2 else ""
+		cost_l.add_theme_font_size_override("font_size", 16 if i == 2 else 20)
+		cost_l.add_theme_color_override("font_outline_color", Color.BLACK)
+		cost_l.add_theme_constant_override("outline_size", 4)
+		price.add_child(cost_l)
+		btn.add_child(inner)
 		bar.add_child(btn)
 		hotbar.append(btn)
+		hotbar_parts.append({"inner": inner, "cost": cost_l, "badge": badge, "icon": ic})
 
 	# music credit, bottom right (the final track is CC-BY and needs it)
 	credit = Label.new()
@@ -1460,6 +1773,11 @@ func _update_hotbar() -> void:
 			c = Color("ff7a7a") if selected else Color(1, 0.55, 0.55, 0.8)  # too expensive right now
 		for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 			btn.add_theme_color_override(key, c)
+		if touch_mode and i < hotbar_parts.size():
+			btn.text = ""
+			var cl: Label = hotbar_parts[i]["cost"]
+			cl.text = str(costs[i])
+			cl.add_theme_color_override("font_color", c if bones >= int(costs[i]) else Color("ff7a7a"))
 	hotbar[2].text = ""
 	hotbar[2].set_pressed_no_signal(remove_armed)
 	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
@@ -1504,7 +1822,15 @@ func _next_menu() -> void:
 			entries.append("%d. %s  [%s]\n%s" % [entries.size() + 1, LinesData.title(i), LinesData.LINES[i]["family"], _line_blurb(i)])
 			var art := Sprites.hero(LinesData.LINES[i]["forms"], 1)
 			line_icons.append(Sprites.first_frame_icon(art, 3) if art != "" else null)
-		_open_menu("LEVEL %d: choose your evolution line" % player.level, entries, func(i): pick_line(line_ids[i]), 1, 680, line_icons, 62)
+		var line_cards: Array = []
+		for k in line_ids.size():
+			var li: int = line_ids[k]
+			var fam: String = LinesData.LINES[li]["family"]
+			var fam_col := Color.from_hsv(float(LinesData.FAMILIES[fam]["hue"]), 0.55, 1.0)
+			line_cards.append({"icon": line_icons[k], "name": LinesData.LINES[li]["forms"][0], "short": _line_blurb(li).strip_edges(),
+				"short_narrow": " | ".join(_line_blurb(li).strip_edges().split(" | ").slice(0, 2)),
+				"tag": fam.to_upper(), "tag_col": fam_col, "accent": fam_col})
+		_open_menu("LEVEL %d: pick your evolution line" % player.level, entries, func(i): pick_line(line_ids[i]), 1, 680, line_icons, 62, line_cards)
 	elif item["type"] == "perk":
 		var cards := PerksData.roll(player.perks, rng, 3)
 		if cards.is_empty():
@@ -1515,7 +1841,12 @@ func _next_menu() -> void:
 			var info: Dictionary = PerksData.PERKS[id]
 			var have: int = int(player.perks.get(id, 0))
 			perk_entries.append("%d. %s   %d -> %d\n    %s" % [perk_entries.size() + 1, info["name"], have, have + 1, info["desc"]])
-		_open_menu("LEVEL %d: choose an UPGRADE for this run" % player.level, perk_entries, func(i): pick_perk(cards[i]), 1, 620, cards.map(func(pid): return Sprites.icon("icon_perk_" + pid)))
+		var perk_cards: Array = []
+		for id in cards:
+			var pinfo: Dictionary = PerksData.PERKS[id]
+			perk_cards.append({"icon": Sprites.icon("icon_perk_" + id, 3), "name": pinfo["name"], "short": pinfo.get("short", pinfo["desc"]),
+				"tag": "UPGRADE", "tag_col": pinfo["color"], "accent": pinfo["color"], "rank": int(player.perks.get(id, 0)), "max": int(pinfo["max"])})
+		_open_menu("LEVEL %d: pick an upgrade" % player.level, perk_entries, func(i): pick_perk(cards[i]), 1, 620, cards.map(func(pid): return Sprites.icon("icon_perk_" + pid)), 0, perk_cards)
 	elif item["type"] == "special":
 		var specials := SkillsData.roll_specials(player.specials, rng, 3)
 		if specials.is_empty():
@@ -1525,7 +1856,11 @@ func _next_menu() -> void:
 		for id in specials:
 			var info: Dictionary = SkillsData.SPECIALS[id]
 			special_entries.append("%d. %s\n    %s" % [special_entries.size() + 1, info["name"], info["desc"]])
-		_open_menu("LEVEL %d: choose a SPECIAL skill (instead of a normal skill)" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620, specials.map(func(sid): return Sprites.icon("icon_sp_" + sid)))
+		var special_cards: Array = []
+		for id in specials:
+			special_cards.append({"icon": Sprites.icon("icon_sp_" + id, 3), "name": SkillsData.SPECIALS[id]["name"], "short": SkillsData.short_text(id),
+				"tag": "SPECIAL", "tag_col": Color("ffd84a"), "accent": Color("ffd84a")})
+		_open_menu("LEVEL %d: pick a special skill" % player.level, special_entries, func(i): pick_special(specials[i]), 1, 620, specials.map(func(sid): return Sprites.icon("icon_sp_" + sid)), 0, special_cards)
 	else:
 		var options := SkillsData.roll(player.skills, rng, 3, player.line, player.stage)
 		if options.is_empty():
@@ -1538,21 +1873,38 @@ func _next_menu() -> void:
 			var key_text := "  [auto]" if info.get("auto", false) else ""
 			entries.append("%d. %s   rank %d -> %d%s\n    %s\n    %s" % [entries.size() + 1, info["name"], r, r + 1, key_text, info["desc"], _skill_origin(id)])
 		var icons: Array = []
+		var skill_cards: Array = []
 		for id in options:
-			icons.append(Sprites.icon("icon_fs_" + id if SkillsData.form_skills().has(id) else "icon_" + str(SKILL_ICONS.get(id, id))))
-		_open_menu("LEVEL %d: choose a skill" % player.level, entries, func(i): pick_skill(options[i]), 1, 620, icons)
+			var icon_name: String = "icon_fs_" + id if SkillsData.form_skills().has(id) else "icon_" + str(SKILL_ICONS.get(id, id))
+			icons.append(Sprites.icon(icon_name))
+			var sinfo: Dictionary = SkillsData.info(id)
+			var own_line := SkillsData.form_skills().has(id)
+			var tag_col := Color("ff9a4a") if own_line else Color("7ab8ff")
+			skill_cards.append({"icon": Sprites.icon(icon_name, 3), "name": sinfo["name"], "short": SkillsData.short_text(id),
+				"tag": "LINE" if own_line else "GENERAL", "tag_col": tag_col, "accent": tag_col,
+				"auto": sinfo.has("auto"), "rank": player.rank(id), "max": int(sinfo.get("max", 1))})
+		_open_menu("LEVEL %d: pick a skill" % player.level, entries, func(i): pick_skill(options[i]), 1, 620, icons, 0, skill_cards)
 
 
-func _open_menu(title: String, entries: Array[String], on_pick: Callable, columns: int, width: int, icons: Array = [], fixed_row_h: int = 0) -> void:
+## A menu over the dimmed game. With `cards` (one dictionary per entry, see menu_cards.gd) it shows big picture cards;
+## without, the plain text list (the merchant). `entries` stay the plain-text version of the choices either way.
+func _open_menu(title: String, entries: Array[String], on_pick: Callable, columns: int, width: int, icons: Array = [], fixed_row_h: int = 0, cards: Array = []) -> void:
 	Sfx.play(get_tree(), "menu")
 	menu_open = true
+	_reset_touch()
+	if hud_layer != null:
+		hud_layer.visible = false
 	get_tree().paused = pause_on_menu
 	menu_root = Control.new()
 	menu_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.7)
+	dim.color = Color(0, 0, 0, 0.72)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	menu_root.add_child(dim)
+	if not cards.is_empty():
+		_build_cards(title, cards, on_pick)
+		menu_layer.add_child(menu_root)
+		return
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	menu_root.add_child(center)
@@ -1596,6 +1948,84 @@ func _open_menu(title: String, entries: Array[String], on_pick: Callable, column
 	menu_layer.add_child(menu_root)
 
 
+## Big picture cards in as many columns as the screen needs so they never scroll (the 9 evolution lines take 1 column
+## on an upright phone, 3 on a wide one).
+func _build_cards(title: String, cards: Array, on_pick: Callable) -> void:
+	var vs := get_viewport().get_visible_rect().size
+	var many := cards.size() > 4
+	var m := MenuCards.metrics(many)
+	var gap := 8.0
+	var avail := vs - Vector2(32, 104)
+	var min_h := 60.0 if many else 92.0
+	# the fewest columns that give comfortable cards (80 px tall, 300 px wide); else the fewest that fit at all
+	var cols := 0
+	for c in [1, 2, 3]:
+		if cols == 0 and ceili(cards.size() / float(c)) * (80.0 + gap) <= avail.y and (avail.x - gap * (c - 1)) / c >= 300.0:
+			cols = c
+	if cols == 0:
+		cols = 1
+		while cols < 3 and ceili(cards.size() / float(cols)) * (min_h + gap) > avail.y:
+			cols += 1
+	var w := minf(560.0 if many else 600.0, (avail.x - gap * (cols - 1)) / cols)
+	if not many and w < 480.0:
+		m["h"] = 118  # a narrow phone card: room for the short line to wrap once
+	var fit_h := int(avail.y / ceili(cards.size() / float(cols)) - gap)
+	m["h"] = clampi(fit_h, int(min_h), 100) if many else clampi(fit_h, int(min_h), int(m["h"]))
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu_root.add_child(center)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	center.add_child(box)
+	var parts := title.split(": ", true, 1)
+	var head := Label.new()
+	head.text = parts[0]
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.add_theme_font_size_override("font_size", 34)
+	head.add_theme_color_override("font_color", Color("ffd84a"))
+	head.add_theme_color_override("font_outline_color", Color(0.15, 0.07, 0.0))
+	head.add_theme_constant_override("outline_size", 8)
+	box.add_child(head)
+	if parts.size() > 1:
+		var sub := Label.new()
+		sub.text = parts[1].substr(0, 1).to_upper() + parts[1].substr(1)
+		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sub.add_theme_font_size_override("font_size", 22)
+		sub.add_theme_color_override("font_color", Color(1, 0.96, 0.88))
+		sub.add_theme_color_override("font_outline_color", Color.BLACK)
+		sub.add_theme_constant_override("outline_size", 5)
+		box.add_child(sub)
+	var rows := ceili(cards.size() / float(cols))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(w * cols + gap * (cols - 1), minf(rows * (float(m["h"]) + gap), avail.y))
+	box.add_child(scroll)
+	var grid := GridContainer.new()
+	grid.name = "Cards"
+	grid.columns = cols
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", int(gap))
+	grid.add_theme_constant_override("v_separation", int(gap))
+	scroll.add_child(grid)
+	for i in cards.size():
+		var b := MenuCards.card(cards[i], w, m, i + 1 if (i < 9 and not touch_mode) else 0)
+		b.pressed.connect(func(): on_pick.call(i))
+		if i < 9:
+			var ev := InputEventKey.new()
+			ev.physical_keycode = KEY_1 + i
+			var sc := Shortcut.new()
+			sc.events = [ev]
+			b.shortcut = sc
+		grid.add_child(b)
+
+
+## Let go of every touch the on-screen controls hold (a menu opening or closing must never leave the stick or a held
+## button stuck).
+func _reset_touch() -> void:
+	if touch_ui != null and touch_ui.has_method("reset_touch"):
+		touch_ui.reset_touch()
+
+
 func _close_menu() -> void:
 	Sfx.play(get_tree(), "select")
 	if menu_root != null:
@@ -1603,6 +2033,9 @@ func _close_menu() -> void:
 		menu_root = null
 	menu_open = false
 	get_tree().paused = false
+	if hud_layer != null:
+		hud_layer.visible = true
+	_reset_touch()
 
 
 ## The first-evolution menu (or tests) picks a line.
@@ -1947,7 +2380,7 @@ func _process(delta: float) -> void:
 	if eclipse_t <= 0.0:
 		blood_moon = false
 	if cam != null:
-		cam.zoom = Vector2(2.0, 2.0) * (1.0 + punch_amp)
+		cam.zoom = Vector2(2.0, 2.0) * view_zoom * (1.0 + punch_amp)
 		punch_amp = move_toward(punch_amp, 0.0, delta * 0.18)
 		cam.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * shake_amp if shake_amp > 0.05 else Vector2.ZERO
 		shake_amp = move_toward(shake_amp, 0.0, delta * 14.0)
@@ -1991,6 +2424,8 @@ func _process(delta: float) -> void:
 		notice_timer -= delta
 		if notice_timer <= 0.0:
 			notice.visible = false
+	if touch_mode:
+		_place_notices()
 	if not game_over and not menu_open:
 		if Input.is_action_just_pressed("build_next"):
 			build_item = "wall" if build_item == "tower" else "tower"

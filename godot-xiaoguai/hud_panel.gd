@@ -3,7 +3,7 @@ extends Control
 ##   row 1  level star, EXP bar, heart + HP bar
 ##   row 2  bones, kills, sun/moon + day number + time-left bar (no enemy or village counts: the player is not told
 ##          how many are coming)
-##   row 3  sprint bar, roll and lunge cooldown rings, buff and relic chips
+##   row 3  sprint bar, roll cooldown ring (the roll also hits), buff and relic chips
 ##   row 4  what the build key does right now
 ## Bars ease toward their value, HP leaves a pale damage trail and beats faster when low, numbers pop when they
 ## change, the level star bursts on a level-up, cooldown rings flash when ready, and the sun, moon and chips move.
@@ -22,6 +22,13 @@ var _font: Font = ThemeDB.fallback_font
 var _plate_box := StyleBoxFlat.new()
 var _bar_box := StyleBoxFlat.new()
 var _fill_box := StyleBoxFlat.new()
+## Phone mode: compact stacks the bars for an upright screen; touch uses larger bars and text and drops the key hints.
+var compact := false
+var touch := false
+var _bh := BAR_H
+var _lbl_px := 11
+var _num_px := 16
+var _small_px := 14
 
 # eased display values
 var _xp := 0.0
@@ -53,6 +60,20 @@ func _ready() -> void:
 	_bar_box.set_corner_radius_all(7)
 	_fill_box.set_corner_radius_all(6)
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+
+## Switch between the desktop layout and the phone ones (main.gd calls this when the screen or the input changes).
+func set_mode(is_touch: bool, is_compact: bool) -> void:
+	touch = is_touch
+	compact = is_compact
+	_bh = 16.0 if is_touch else BAR_H
+	_lbl_px = 13 if is_touch else 11
+	_num_px = 18 if is_touch else 16
+	_small_px = 15 if is_touch else 14
+	var r: Rect2 = _layout()["plate"]
+	custom_minimum_size = r.size - Vector2(20, 10)
+	size = custom_minimum_size
+	queue_redraw()
 
 
 func set_info(d: Dictionary) -> void:
@@ -98,7 +119,7 @@ func _notice_changes(d: Dictionary) -> void:
 		_flash["counter"] = 1.0
 	if bool(d["night"]) != bool(_prev["night"]):
 		_flash["clock"] = 1.0
-	for k in ["roll", "lunge"]:
+	for k in ["roll"]:
 		if float(_prev[k + "_cd"]) > 0.0 and float(d[k + "_cd"]) <= 0.0:
 			_flash[k] = 1.0
 	if float(_prev["sprint_cd"]) > 0.0 and float(d["sprint_cd"]) <= 0.0:
@@ -139,40 +160,55 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+## Where everything sits. The wide layout is the desktop one; the compact one stacks XP over HP for a phone held
+## upright (narrow enough to leave the top right corner to the minimap).
+func _layout() -> Dictionary:
+	if compact:
+		return {"plate": Rect2(-12, -8, 254, 154), "xp": Vector2(34, 16), "xp_w": 196.0, "heart": Vector2(14, 44), "hp": Vector2(34, 44), "hp_w": 196.0,
+			"row2": 72.0, "kills_x": 72.0, "sun_x": 140.0, "phase_w": 44.0, "row3": 100.0, "row4": 128.0, "combo": Vector2(176, 128), "counter": Vector2(226, 128)}
+	return {"plate": PLATE, "xp": Vector2(34, 17), "xp_w": BAR_W, "heart": Vector2(214, 16), "hp": Vector2(228, 17), "hp_w": BAR_W,
+		"row2": 44.0, "kills_x": 90.0, "sun_x": 180.0, "phase_w": 90.0, "row3": 74.0, "row4": 102.0, "combo": Vector2(270, 102), "counter": Vector2(390, 102)}
+
+
+## A bar rectangle centred on a row.
+func _bar_rect(left_mid: Vector2, w: float) -> Rect2:
+	return Rect2(left_mid.x, left_mid.y - _bh * 0.5, w, _bh)
+
+
 func _draw() -> void:
 	if info.is_empty():
 		return
-	draw_style_box(_plate_box, PLATE)
+	var lay := _layout()
+	draw_style_box(_plate_box, lay["plate"])
 	var night: bool = info["night"]
 	var low: bool = float(info["hp"]) <= float(info["max_hp"]) * 0.3
-	# row 1
-	var x := 0.0
-	_level_star(Vector2(x + 14, 16), int(info["level"]))
-	x += 34.0
+	# level and EXP
+	_level_star(Vector2(14, 16), int(info["level"]))
 	var xp_max: float = float(info["xp_max"])
-	_bar(Rect2(x, 10, BAR_W, BAR_H), _xp / maxf(xp_max, 1.0) if xp_max > 0.0 else 1.0, -1.0, Color("2f9fe8"), Color("8fe0ff"),
+	_bar(_bar_rect(lay["xp"], lay["xp_w"]), _xp / maxf(xp_max, 1.0) if xp_max > 0.0 else 1.0, -1.0, Color("2f9fe8"), Color("8fe0ff"),
 		"%d/%d" % [info["xp"], info["xp_max"]] if xp_max > 0.0 else "MAX", float(_flash.get("xp", 0.0)))
-	x += BAR_W + 22.0
+	# heart and HP
 	var beat := 1.0 + (0.22 * maxf(sin(_t * 10.0), 0.0) if low else 0.1 * maxf(sin(_t * 3.2), 0.0)) + 0.35 * float(_pop.get("hp", 0.0))
-	_heart(Vector2(x + 8, 16), 9.0 * beat, Color("ff5a4a") if not low else Color("ff2a2a").lerp(Color("ffb0a0"), 0.5 + 0.5 * sin(_t * 10.0)))
-	x += 22.0
+	_heart(lay["heart"], 9.0 * beat, Color("ff5a4a") if not low else Color("ff2a2a").lerp(Color("ffb0a0"), 0.5 + 0.5 * sin(_t * 10.0)))
 	var shake := Vector2(sin(_t * 70.0) * 2.5 * _shake, 0.0)
 	var hp_max := maxf(float(info["max_hp"]), 1.0)
-	_bar(Rect2(Vector2(x, 10) + shake, Vector2(BAR_W, BAR_H)), _hp / hp_max, _hp_trail / hp_max,
+	var hp_r := _bar_rect(lay["hp"], lay["hp_w"])
+	hp_r.position += shake
+	_bar(hp_r, _hp / hp_max, _hp_trail / hp_max,
 		Color("d8322a") if not low else Color("ff3030").lerp(Color("c01818"), 0.5 + 0.5 * sin(_t * 10.0)), Color("ff8a70"),
-		"%d/%d" % [info["hp"], info["max_hp"]], float(_flash.get("hp_heal", 0.0)) - float(_flash.get("hp_hit", 0.0)) * 0.0, low)
+		"%d/%d" % [info["hp"], info["max_hp"]], float(_flash.get("hp_heal", 0.0)), low)
 	if float(_flash.get("hp_hit", 0.0)) > 0.0:
-		draw_rect(Rect2(Vector2(x, 10) + shake, Vector2(BAR_W, BAR_H)), Color(1, 0.2, 0.2, 0.35 * float(_flash["hp_hit"])))
-	# row 2
-	var y := 44.0
-	x = 0.0
+		draw_rect(hp_r, Color(1, 0.2, 0.2, 0.35 * float(_flash["hp_hit"])))
+	# bones, kills, the day
+	var y: float = lay["row2"]
+	var x := 0.0
 	_bone(Vector2(x + 12, y + sin(_t * 2.0) * 0.8), 1.0 + 0.25 * float(_pop.get("bones", 0.0)))
-	_num(Vector2(x + 28, y + 6), str(roundi(_bones)), 16, INK, "bones")
-	x += 90.0
+	_num(Vector2(x + 28, y + 6), str(roundi(_bones)), _num_px, INK, "bones")
+	x = lay["kills_x"]
 	_skull(Vector2(x + 10, y), 9.0 * (1.0 + 0.3 * float(_pop.get("kills", 0.0))))
-	_num(Vector2(x + 26, y + 6), str(roundi(_kills)), 16, INK, "kills")
+	_num(Vector2(x + 26, y + 6), str(roundi(_kills)), _num_px, INK, "kills")
 	# the day or night: sun or moon, day number and time left, beside the kills
-	x += 90.0
+	x = lay["sun_x"]
 	var cf := float(_flash.get("clock", 0.0))
 	if night:
 		_moon(Vector2(x + 9, y), 9.0)
@@ -181,12 +217,12 @@ func _draw() -> void:
 	if cf > 0.0:
 		draw_arc(Vector2(x + 9, y), 10.0 + (1.0 - cf) * 18.0, 0, TAU, 28, Color(1, 1, 1, cf * 0.7), 2.0)
 	x += 24.0
-	_num(Vector2(x, y + 6), str(info["day"]), 16, Color("ffe08a") if not night else Color("b8c4ff"), "clock")
+	_num(Vector2(x, y + 6), str(info["day"]), _num_px, Color("ffe08a") if not night else Color("b8c4ff"), "clock")
 	x += 22.0
 	var phase_col := Color("ffb020") if not night else Color("6a7cff")
-	_bar(Rect2(x, y - 7, 90.0, BAR_H), float(info["phase_left"]) / maxf(float(info["phase_len"]), 1.0), -1.0, phase_col, phase_col.lightened(0.4), "", cf)
-	# row 3
-	y = 74.0
+	_bar(Rect2(x, y - 7, lay["phase_w"], BAR_H), float(info["phase_left"]) / maxf(float(info["phase_len"]), 1.0), -1.0, phase_col, phase_col.lightened(0.4), "", cf)
+	# sprint, roll, buffs and relics
+	y = lay["row3"]
 	x = 0.0
 	var sprint_ready: bool = info["sprint_cd"] <= 0.0
 	var running: bool = sprint_ready and float(info["sprint"]) < float(info["sprint_max"]) - 0.05
@@ -196,9 +232,6 @@ func _draw() -> void:
 	x += 112.0
 	_ring(Vector2(x + 10, y), 10.0, float(info["roll_cd"]), float(info["roll_cd_max"]), Color("7be07b"), float(_flash.get("roll", 0.0)))
 	_roll_mark(Vector2(x + 10, y), float(info["roll_cd"]) <= 0.0)
-	x += 34.0
-	_ring(Vector2(x + 10, y), 10.0, float(info["lunge_cd"]), float(info["lunge_cd_max"]), Color("ff7a5a"), float(_flash.get("lunge", 0.0)))
-	_fang(Vector2(x + 10, y), float(info["lunge_cd"]) <= 0.0)
 	x += 40.0
 	for i in info["buffs"].size():
 		var b: Dictionary = info["buffs"][i]
@@ -208,20 +241,21 @@ func _draw() -> void:
 		_diamond(Vector2(x + 8, y + sin(_t * 2.5 + i) * 1.2), 7.0, Color("c8a0ff"), i)
 		_text(Vector2(x + 18, y + 5), "x%d" % info["relics"][i]["n"], 12, INK)
 		x += 36.0
-	# row 4: what E / X do right now
-	y = 102.0
+	# what E / X (the build and remove buttons) do right now
+	y = lay["row4"]
 	x = 0.0
+	var key_e := "" if touch else "E"
 	var bob := sin(_t * 3.0) * 1.2
 	if info["remove_refund"] >= 0:
 		_cross(Vector2(x + 8, y), 6.0)
 		_bone(Vector2(x + 30, y), 0.8)
-		_text(Vector2(x + 44, y + 5), "+%d" % info["remove_refund"], 14, Color("9cf09c"))
+		_text(Vector2(x + 44, y + 5), "+%d" % info["remove_refund"], _small_px, Color("9cf09c"))
 		x += 96.0
 		if info["upgrade_text"] != "":
-			_text(Vector2(x, y + 5), "E", 14, Color("ffd84a"))
+			_text(Vector2(x, y + 5), key_e, _small_px, Color("ffd84a"))
 			_arrow_up(Vector2(x + 20, y + bob))
 			_bone(Vector2(x + 38, y), 0.8)
-			_text(Vector2(x + 52, y + 5), info["upgrade_text"], 14, Color("ffd84a"))
+			_text(Vector2(x + 52, y + 5), info["upgrade_text"], _small_px, Color("ffd84a"))
 	else:
 		if info["build_item"] == "tower":
 			_tower(Vector2(x + 8, y + bob))
@@ -229,28 +263,28 @@ func _draw() -> void:
 			_wall(Vector2(x + 8, y + bob))
 		_bone(Vector2(x + 34, y), 0.8)
 		var bad: bool = info["build_error"] != ""
-		_text(Vector2(x + 48, y + 5), str(info["build_cost"]), 14, INK if not bad else Color("ff7a6a"))
+		_text(Vector2(x + 48, y + 5), str(info["build_cost"]), _small_px, INK if not bad else Color("ff7a6a"))
 		if bad:
-			_text(Vector2(x + 84, y + 5), info["build_error"], 13, Color("ff7a6a"))
-		else:
+			_text(Vector2(x + 84, y + 5), info["build_error"], _small_px - 1, Color("ff7a6a"))
+		elif key_e != "":
 			var glow := 0.65 + 0.35 * sin(_t * 4.0)
 			draw_circle(Vector2(x + 90, y), 9.0, Color(1, 0.85, 0.3, 0.18 * glow))
-			_text(Vector2(x + 85, y + 5), "E", 14, Color(1, 0.85, 0.3, glow))
+			_text(Vector2(x + 85, y + 5), key_e, 14, Color(1, 0.85, 0.3, glow))
 	# combo chain and the counter that a perfect dodge sets up (right of the build prompt)
 	if int(info["combo"]) >= 2:
-		var cx := 270.0
-		var cy := 102.0
+		var cc: Vector2 = lay["combo"]
 		var heat := clampf(float(info["combo"]) / 20.0, 0.0, 1.0)
 		var flame := Color("ffb030").lerp(Color("ff4a30"), heat)
-		_flame(Vector2(cx, cy), 1.0 + 0.3 * float(_pop.get("combo", 0.0)), flame)
-		_num(Vector2(cx + 14, cy + 6), "x%d" % info["combo"], 16, flame.lightened(0.3), "combo")
-		draw_arc(Vector2(cx, cy), 12.0, -PI / 2.0, -PI / 2.0 + TAU * float(info["combo_frac"]), 20, Color(flame, 0.9), 2.0)
+		_flame(cc, 1.0 + 0.3 * float(_pop.get("combo", 0.0)), flame)
+		_num(cc + Vector2(14, 6), "x%d" % info["combo"], _num_px, flame.lightened(0.3), "combo")
+		draw_arc(cc, 12.0, -PI / 2.0, -PI / 2.0 + TAU * float(info["combo_frac"]), 20, Color(flame, 0.9), 2.0)
 	if bool(info["counter"]):
+		var kc: Vector2 = lay["counter"]
 		var pulse := 0.6 + 0.4 * sin(_t * 12.0)
-		draw_circle(Vector2(390, 102), 13.0, Color(1, 0.85, 0.3, 0.25 * pulse))
-		draw_arc(Vector2(390, 102), 13.0, 0, TAU, 24, Color(1, 0.85, 0.3, pulse), 2.0)
-		_fang(Vector2(390, 102), true)
-		_text(Vector2(406, 107), "!", 16, Color(1, 0.85, 0.3, pulse))
+		draw_circle(kc, 13.0, Color(1, 0.85, 0.3, 0.25 * pulse))
+		draw_arc(kc, 13.0, 0, TAU, 24, Color(1, 0.85, 0.3, pulse), 2.0)
+		_fang(kc, true)
+		_text(kc + Vector2(16, 5), "!", 16, Color(1, 0.85, 0.3, pulse))
 	# sparks on top of everything
 	for s in _sparks:
 		var a: float = float(s["life"]) / float(s["max"])
@@ -303,8 +337,9 @@ func _bar(r: Rect2, frac: float, trail: float, col: Color, hi: Color, label: Str
 	if pulse:
 		draw_style_box(_pulse_box(0.35 + 0.35 * sin(_t * 10.0)), r.grow(2.0))
 	if label != "":
-		_font.draw_string(get_canvas_item(), r.position + Vector2(1, r.size.y - 2.0), label, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, SHADOW)
-		_font.draw_string(get_canvas_item(), r.position + Vector2(0, r.size.y - 3.0), label, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, Color(1, 1, 1, 0.97))
+		var lp := r.position + Vector2(0, r.size.y - 3.0) if not touch else r.position + Vector2(0, r.size.y * 0.5 + _lbl_px * 0.36)
+		_font.draw_string(get_canvas_item(), lp + Vector2(1, 1), label, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, _lbl_px, SHADOW)
+		_font.draw_string(get_canvas_item(), lp, label, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, _lbl_px, Color(1, 1, 1, 0.97))
 
 
 func _pulse_box(a: float) -> StyleBoxFlat:

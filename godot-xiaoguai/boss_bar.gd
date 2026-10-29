@@ -40,6 +40,12 @@ func _process(delta: float) -> void:
 	# top centre on a wide screen, under the HUD on a tall one
 	var vs := get_viewport_rect().size
 	position = Vector2(16, 140) if vs.y > vs.x else Vector2((vs.x - W) * 0.5, 10)
+	# on a phone main.gd knows where the HUD and skill icons end
+	var mn = get_parent().get_parent() if get_parent() != null else null
+	if mn != null and mn.has_method("boss_bar_spot"):
+		var spot: Vector2 = mn.boss_bar_spot(W)
+		if spot != Vector2.INF:
+			position = spot
 	visible = _shown > 0.01
 	if visible:
 		queue_redraw()
