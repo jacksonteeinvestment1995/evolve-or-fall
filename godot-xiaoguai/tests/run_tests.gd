@@ -2422,6 +2422,12 @@ func _init() -> void:
 	rv_main.rival["line"] = 10
 	var rv = rv_main.spawn_rival()
 	check("the rival hero appears with a line, level, title and red crown", rv != null and rv.hero_rival and rv.rival_line == 10 and rv.title_override.begins_with("RIVAL") and rv.force_chase)
+	check("a level 1 rival is simply called RIVAL, and it bites instead of standing off", rv.title_override == "RIVAL" and rv.ranged_config().is_empty(), rv.title_override)
+	check("the rival starts out in the open with a walkable route to 小怪", rv_main.open_lookup.has(rv_main.tile_of(rv.global_position)) and not rv_main.find_path(rv.global_position, rv_main.player.global_position).is_empty())
+	var boss_spawned = rv_main.spawn_boss(0)
+	check("a boss in the castle never starts in a walled-in pocket", boss_spawned == null or rv_main.open_lookup.has(rv_main.tile_of(boss_spawned.global_position)))
+	if boss_spawned != null:
+		boss_spawned.queue_free()
 	var rv_hp0: int = rv.max_hp
 	rv_main.rival_gain(20000)
 	check("our kills feed the rival: it gains levels, learns skills and evolves", int(rv_main.rival["level"]) > 10 and rv_main.rival["skills"].size() >= 3 and rv.stage >= 1 and rv.max_hp > rv_hp0, "level %d skills %s stage %d" % [int(rv_main.rival["level"]), str(rv_main.rival["skills"]), rv.stage])

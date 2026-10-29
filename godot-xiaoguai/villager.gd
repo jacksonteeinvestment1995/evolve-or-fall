@@ -176,7 +176,7 @@ func setup_rival(line_idx: int, level: int, form_stage: int, skills: Array, full
 	xp_value = 30 + level * 8
 	bones_value = 20
 	body_scale = 1.15 + 0.05 * form_stage
-	title_override = "RIVAL %s" % (forms[form_stage - 1] if form_stage > 0 else "Xiao Guai")
+	title_override = "RIVAL %s" % forms[form_stage - 1] if form_stage > 0 else "RIVAL"
 	force_chase = true
 
 
@@ -234,10 +234,7 @@ func _is_shooter() -> bool:
 
 func ranged_config() -> Dictionary:
 	if hero_rival:
-		var fam: String = LinesRef.LINES[rival_line]["family"]
-		if fam == "Dragon" or fam == "Demon" or fam == "Undead" or fam == "Nature":
-			return {"range": 250.0, "speed": 290.0, "mult": 0.9, "color": Color("ff5a40")}
-		return {}
+		return {}  # it comes to bite you; its ranged attacks are skills
 	if not _is_shooter() and not _unlocked("ranged_unlocked"):
 		return {}
 	if secret >= 0:
@@ -406,8 +403,11 @@ func _nav_update(target_pos: Vector2, delta: float) -> void:
 	var dist := global_position.distance_to(target_pos)
 	repath_cd = (0.8 if dist > 600.0 else 0.4) + randf() * 0.2
 	if dist > LOS_RANGE:
-		los = true
-		path = PackedVector2Array()
+		# far away: no straight-line test, but still a real route around walls, the moat and trees, found less often
+		repath_cd = 1.6 + randf() * 1.0
+		los = false
+		path = nav.find_path(global_position, target_pos)
+		path_i = 1
 		return
 	los = nav.has_clear_line(global_position, target_pos)
 	if los:
@@ -416,6 +416,30 @@ func _nav_update(target_pos: Vector2, delta: float) -> void:
 	else:
 		path = nav.find_path(global_position, target_pos)
 		path_i = 1
+
+
+var _stuck_pos := Vector2.INF
+var _stuck_t := 0.0
+var _nudge := Vector2.ZERO
+var _nudge_t := 0.0
+
+
+## If a chaser has hardly moved for over a second, work out a fresh route at once and wiggle sideways for a moment.
+func _check_stuck(delta: float, moving: bool) -> void:
+	if not moving:
+		_stuck_t = 0.0
+		_stuck_pos = global_position
+		return
+	_stuck_t += delta
+	if _stuck_t < 1.2:
+		return
+	if _stuck_pos != Vector2.INF and global_position.distance_to(_stuck_pos) < 5.0:
+		repath_cd = 0.0
+		path = PackedVector2Array()
+		_nudge = Vector2.from_angle(randf() * TAU)
+		_nudge_t = 0.7
+	_stuck_t = 0.0
+	_stuck_pos = global_position
 
 
 func _steer(target_pos: Vector2) -> Vector2:
@@ -647,6 +671,7 @@ const MID_LOD := 450.0
 const FAR_LOD := 1100.0
 var _lod_tick := 0
 var _lod_time := 0.0
+var _lod_steps := 1   ## how many physics ticks this one stands for (the distance it must cover to keep its speed)
 
 
 func _physics_process(delta: float) -> void:
@@ -661,8 +686,10 @@ func _physics_process(delta: float) -> void:
 				return
 			delta = _lod_time
 			_lod_time = 0.0
+			_lod_steps = every
 		else:
 			_lod_time = 0.0
+			_lod_steps = 1
 	hit_cd = maxf(hit_cd - delta, 0.0)
 	shoot_cd = maxf(shoot_cd - delta, 0.0)
 	skill_cd = maxf(skill_cd - delta, 0.0)
@@ -767,8 +794,13 @@ func _physics_process(delta: float) -> void:
 			move_speed *= 1.15
 	if has_status("root"):
 		dir = Vector2.ZERO  # rooted: cannot walk, but can still shoot and use skills
-	velocity = dir * move_speed + knock
+	if _nudge_t > 0.0:
+		_nudge_t -= delta
+		dir = (dir + _nudge * 1.3).normalized()
+	_check_stuck(delta, dir != Vector2.ZERO and not calm and stun_left <= 0.0 and not has_status("root") and not _guarding())
+	velocity = (dir * move_speed + knock) * float(_lod_steps)  # (a throttled villager covers the ground of the ticks it skipped)
 	move_and_slide()
+	velocity /= float(_lod_steps)
 	queue_redraw()
 
 

@@ -77,6 +77,7 @@ var trees := {}  # Vector2i -> true
 var mud := {}    # Vector2i -> true
 var built := {}  # Vector2i -> tower or wall standing there
 var open_tiles: Array[Vector2i] = []  # grass reachable from the start
+var open_lookup := {}                 # the same tiles as a lookup table
 var ref_tiles: Array[Vector2i] = []   # far-away tiles that must always reach 小怪
 var astar := AStarGrid2D.new()
 var bones := START_BONES
@@ -768,6 +769,7 @@ func _find_open_tiles() -> void:
 			seen[n] = true
 			queue.append(n)
 	open_tiles = queue
+	open_lookup = seen   # every tile with a walkable route from the start (castle pockets walled in are not here)
 
 
 ## The walking grid villagers use to go around trees, towers and walls.
@@ -779,6 +781,10 @@ func _build_nav() -> void:
 	astar.update()
 	for t in trees:
 		astar.set_point_solid(t, true)
+	# Water is passable but costly (a swimmer drowns), so routes go around ponds and the moat, over a bridge if there is one.
+	for t in water:
+		if not bridges.has(t):
+			astar.set_point_weight_scale(t, 6.0)
 	# Far-off tiles that must always keep a route to 小怪: the farthest corner, the middle
 	# of the map and the top-right.
 	var far_tile := START_TILE
@@ -1646,7 +1652,7 @@ func spawn_boss(secret: int):
 	var rect: Rect2i = big["rect"]
 	for i in 60:
 		var t := Vector2i(rng.randi_range(rect.position.x + 1, rect.end.x - 2), rng.randi_range(rect.position.y + 1, rect.end.y - 2))
-		if floors.has(t) and not trees.has(t):
+		if floors.has(t) and not trees.has(t) and open_lookup.has(t):  # never in a walled-in pocket with no way out
 			var v = _spawn_villager(_tile_center(t), VillagerScript.MAX_STAGE, -1, secret)
 			v.guard_home = Vector2(rect.get_center()) * TILE
 			v.guard_range = 700.0
@@ -1706,12 +1712,19 @@ func _update_rival(delta: float) -> void:
 
 
 func spawn_rival():
+	# not inside the castle courtyard: somewhere in the open, 500 to 900 px from 小怪, with a walkable route to him
 	var spot := Vector2.INF
-	var big: Dictionary = layout.get("big", {})
-	if not big.is_empty():
-		var rect: Rect2i = big["rect"]
-		spot = _tile_center(Vector2i(rect.get_center()))
-	if spot == Vector2.INF or spot.distance_to(player.global_position) < 500.0:
+	for i in 80:
+		var t: Vector2i = open_tiles[rng.randi_range(0, open_tiles.size() - 1)]
+		var p := _tile_center(t)
+		var d := p.distance_to(player.global_position)
+		if d < 500.0 or d > 900.0 or water.has(t) or floors.has(t):
+			continue
+		if find_path(p, player.global_position).is_empty():
+			continue
+		spot = p
+		break
+	if spot == Vector2.INF:
 		var far = spawn_far(VillagerScript.MAX_STAGE)
 		if far == null:
 			return null
@@ -1722,7 +1735,7 @@ func spawn_rival():
 	_refresh_rival(v, true)
 	rival["node"] = v
 	rival["respawn"] = -1.0
-	_say("The rival hero rises: %s (%s line). It will fight you until the end." % [v.form_name().capitalize(), LinesData.LINES[int(rival["line"])]["forms"][0]] if int(rival["falls"]) == 0 else "The rival hero is back, Lv %d." % int(rival["level"]))
+	_say("The rival hero rises (%s line). It will fight you until the end." % LinesData.LINES[int(rival["line"])]["forms"][0] if int(rival["falls"]) == 0 else "The rival hero is back, Lv %d." % int(rival["level"]))
 	return v
 
 
