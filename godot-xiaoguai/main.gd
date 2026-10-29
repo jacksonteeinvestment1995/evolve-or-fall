@@ -1722,7 +1722,7 @@ func spawn_rival():
 	_refresh_rival(v, true)
 	rival["node"] = v
 	rival["respawn"] = -1.0
-	_say("%s the rival hero (%s line) rises: it will fight you until the end." % [v.form_name().capitalize(), LinesData.LINES[int(rival["line"])]["forms"][0]] if int(rival["falls"]) == 0 else "The rival hero is back, Lv %d." % int(rival["level"]))
+	_say("The rival hero rises: %s (%s line). It will fight you until the end." % [v.form_name().capitalize(), LinesData.LINES[int(rival["line"])]["forms"][0]] if int(rival["falls"]) == 0 else "The rival hero is back, Lv %d." % int(rival["level"]))
 	return v
 
 
