@@ -6,3 +6,6 @@ music-small/
 
 # exported game builds (large, not source)
 build/
+
+# old art review screenshots (300 MB), kept out of the repo
+art-review/shots/
