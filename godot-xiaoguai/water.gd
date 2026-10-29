@@ -1,6 +1,8 @@
 extends Node2D
 ## Ponds. Cells are water tiles; a cell touching grass gets the matching shore edge tile
 ## (bits N=1, E=2, S=4, W=8 mark grass neighbours; art/export/shore_*), so ponds blend into the meadow.
+## The strip of painted grass on those edge tiles is cut away once (the green connected to the tile's border), so
+## the real ground underneath (meadow, snow, sand...) runs right up to the shore line instead of a green frame.
 
 const TILE := 32
 const EDGE := {1: "edge_n", 2: "edge_e", 4: "edge_s", 8: "edge_w", 3: "corner_ne", 6: "corner_se", 12: "corner_sw", 9: "corner_nw"}
@@ -13,6 +15,7 @@ var cam: Camera2D
 var _t := 0.0
 var _cache := {}
 var _cache_size := -1
+var _cut := {}
 
 
 func _process(delta: float) -> void:
@@ -39,8 +42,52 @@ func _tex_for(c: Vector2i, water_tex: Texture2D) -> Texture2D:
 				break
 	else:
 		name = edge_prefix + EDGE[mask] if EDGE.has(mask) else ""
-	var tex: Texture2D = Sprites.tex(name) if name != "" else null
+	var tex: Texture2D = _cut_grass(name) if name != "" else null
 	return tex if tex != null else water_tex
+
+
+## The edge tile with its painted grass made transparent: every green pixel connected to a frame's border.
+func _cut_grass(name: String) -> Texture2D:
+	if _cut.has(name):
+		return _cut[name]
+	var src := Sprites.tex(name)
+	if src == null:
+		_cut[name] = null
+		return null
+	var img := src.get_image()
+	if img == null:
+		_cut[name] = src
+		return src
+	img = img.duplicate()
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	var w := img.get_width()
+	var h := img.get_height()
+	var fh := h
+	var seen := {}
+	var stack: Array[Vector2i] = []
+	for f in maxi(1, w / fh):
+		var x0 := f * fh
+		for k in fh:
+			for p in [Vector2i(x0 + k, 0), Vector2i(x0 + k, h - 1), Vector2i(x0, k), Vector2i(x0 + fh - 1, k)]:
+				stack.append(p)
+		while not stack.is_empty():
+			var q: Vector2i = stack.pop_back()
+			if seen.has(q) or q.x < x0 or q.x >= x0 + fh or q.y < 0 or q.y >= h:
+				continue
+			seen[q] = true
+			var c := img.get_pixelv(q)
+			if not (c.a > 0.0 and c.g > c.r + 0.03 and c.g > c.b + 0.03):
+				continue
+			img.set_pixelv(q, Color(0, 0, 0, 0))
+			stack.append(q + Vector2i(1, 0))
+			stack.append(q + Vector2i(-1, 0))
+			stack.append(q + Vector2i(0, 1))
+			stack.append(q + Vector2i(0, -1))
+	var out := ImageTexture.create_from_image(img)
+	_cut[name] = out
+	return out
 
 
 ## Only the cells near the camera are drawn, and each cell's tile is worked out once.

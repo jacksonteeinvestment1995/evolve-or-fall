@@ -10,7 +10,9 @@ const POOL := Vector2(28.0, 20.0)
 const HEAL_RADIUS := 52.0
 const HEAL_EVERY := 3.0
 
+var heals := true            ## the rival's lair is the same nest, smaller, and mends nobody
 var _t := 0.0
+var _redraw_in := 0.0
 var _heal := 0.0
 var _lumps: Array = []        ## [offset, radius, shade]
 var _veins: Array = []        ## polylines of points, from the pit outward
@@ -56,7 +58,7 @@ func _process(delta: float) -> void:
 	if pl == null:
 		return
 	var d: float = pl.global_position.distance_to(global_position)
-	if d < HEAL_RADIUS and pl.hp > 0 and pl.hp < pl.max_hp:
+	if heals and d < HEAL_RADIUS and pl.hp > 0 and pl.hp < pl.max_hp:
 		_heal += delta
 		if _heal >= HEAL_EVERY:
 			_heal = 0.0
@@ -65,7 +67,9 @@ func _process(delta: float) -> void:
 			Popups.text(get_tree(), pl.global_position + Vector2(0, -24), "+1", Popups.HEAL, 13)
 	else:
 		_heal = 0.0
-	if d < 900.0:
+	_redraw_in -= delta
+	if d < 900.0 and _redraw_in <= 0.0:
+		_redraw_in = 0.045  # about 20 redraws a second is plenty for the slow motion
 		queue_redraw()
 
 

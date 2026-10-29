@@ -73,6 +73,8 @@ const LinesData := preload("res://lines.gd")
 const SkillsData := preload("res://skills.gd")
 const PerksData := preload("res://perks.gd")
 const ExpStone := preload("res://exp_stone.gd")
+const Biomes := preload("res://biomes.gd")
+const PoiScript := preload("res://poi.gd")
 const TreasureScript := preload("res://treasure.gd")
 const Popups := preload("res://popups.gd")
 const Sfx := preload("res://sfx.gd")
@@ -138,6 +140,9 @@ var ghost_dirty := true
 var hud: Control
 var playables: Node
 var god_spawned := false
+var biome := {}               # tile -> biome id (snow, desert, swamp, graveyard, autumn); the meadow is absent
+var rival_home := Vector2.INF  # where the rival's lair is; it returns there after every fall
+var ambient: Node2D
 var _chaser_t := 0.0
 var start_pit: Node2D
 ## The rival's state outlives its body: it keeps its line, EXP, level and skills across respawns.
@@ -409,10 +414,17 @@ func _build_hd2d() -> void:
 	tree_layer.water = water
 	tree_layer.skip = buildings
 	tree_layer.cam = cam
+	tree_layer.biome = biome
 	add_child(tree_layer)
 	move_child(tree_layer, 0)
 	var ground_layer := preload("res://ground_layer.gd").new()
+	var static_layer := preload("res://static_layer.gd").new()
+	static_layer.main = self
+	static_layer.cam = cam
+	add_child(static_layer)
+	move_child(static_layer, 0)
 	ground_layer.cam = cam
+	ground_layer.biome = biome
 	ground_layer.cols = COLS
 	ground_layer.rows = ROWS
 	ground_layer.z_index = -5  # under everything else: the shadows and props main draws, the ponds, the mud
@@ -631,7 +643,7 @@ func _scatter_props() -> void:
 	var names := ["prop_bush", "prop_rocks_1", "prop_rocks_2", "prop_flowers_1", "prop_flowers_2", "prop_flowers_1", "prop_flowers_2", "prop_bush"]
 	for i in 650:
 		var t := Vector2i(pr.randi_range(2, COLS - 3), pr.randi_range(2, ROWS - 3))
-		if trees.has(t) or mud.has(t) or water.has(t) or paths.has(t) or props.has(t) or Vector2(t - START_TILE).length() < 4.0:
+		if trees.has(t) or mud.has(t) or water.has(t) or paths.has(t) or props.has(t) or biome.has(t) or Vector2(t - START_TILE).length() < 4.0:
 			continue
 		props[t] = names[pr.randi_range(0, names.size() - 1)]
 	for k in 7:
@@ -653,20 +665,71 @@ func _scatter_props() -> void:
 
 
 ## A soft shadow under something, falling to the lower right (light from the top left).
-func _shadow(foot: Vector2, rx: float, ry: float, shift: float = 0.0) -> void:
+func _shadow(foot: Vector2, rx: float, ry: float, shift: float = 0.0, ci: CanvasItem = null) -> void:
 	if shadow_tex != null:
-		draw_texture_rect(shadow_tex, Rect2(foot.x + shift - rx, foot.y - ry, rx * 2.0, ry * 2.0), false)
+		(ci if ci != null else self).draw_texture_rect(shadow_tex, Rect2(foot.x + shift - rx, foot.y - ry, rx * 2.0, ry * 2.0), false)
 
 
-func _draw_prop(t: Vector2i, name: String) -> void:
+func _draw_prop(t: Vector2i, name: String, ci: CanvasItem = null) -> void:
+	var o: CanvasItem = ci if ci != null else self
+	if name.begins_with("bp_"):
+		Biomes.draw_prop(o, name, Vector2(t.x * TILE + TILE * 0.5, (t.y + 1) * TILE - 1))
+		return
 	var tex := Sprites.tex(name)
 	if tex == null:
 		return
 	var w := tex.get_width()
 	var h := tex.get_height()
 	var foot := Vector2(t.x * TILE + TILE * 0.5, (t.y + 1) * TILE - 1)
-	_shadow(foot, maxf(5.0, w * (0.25 if name.begins_with("prop_fence") else 0.2)), 2.5, 2.0)
-	draw_texture(tex, Vector2(t.x * TILE + (TILE - w) * 0.5, (t.y + 1) * TILE - h))
+	_shadow(foot, maxf(5.0, w * (0.25 if name.begins_with("prop_fence") else 0.2)), 2.5, 2.0, o)
+	o.draw_texture(tex, Vector2(t.x * TILE + (TILE - w) * 0.5, (t.y + 1) * TILE - h))
+
+
+## Shrines, healing springs, crypts and ruined towers, spread over the map far from the start and from each other.
+func _scatter_pois(rng: RandomNumberGenerator) -> void:
+	var plan := ["shrine", "shrine", "shrine", "spring", "spring", "spring", "crypt", "crypt", "crypt", "tower", "tower"]
+	var placed: Array[Vector2i] = []
+	for kind in plan:
+		var best := Vector2i(-1, -1)
+		for tries in 400:
+			var t: Vector2i = open_tiles[rng.randi_range(0, open_tiles.size() - 1)]
+			if Vector2(t - START_TILE).length() < 26.0:
+				continue
+			if not _poi_spot_free(t):
+				continue
+			var spaced := true
+			for o in placed:
+				if Vector2(t - o).length() < 20.0:
+					spaced = false
+					break
+			if not spaced:
+				continue
+			var b: int = int(biome.get(t, 0))
+			# crypts like the graveyard, springs the swamp and the meadow; for the others anywhere will do
+			if kind == "crypt" and b != Biomes.GRAVEYARD and tries < 300:
+				continue
+			if kind == "spring" and (b == Biomes.DESERT or b == Biomes.SNOW) and tries < 300:
+				continue
+			best = t
+			break
+		if best.x < 0:
+			continue
+		placed.append(best)
+		props[best] = "_poi"
+		var poi = PoiScript.new()
+		poi.kind = kind
+		poi.position = _tile_center(best)
+		add_child(poi)
+
+
+## A free 3 by 3 patch with no trees, water, mud, paths, buildings or props.
+func _poi_spot_free(t: Vector2i) -> bool:
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var c := t + Vector2i(dx, dy)
+			if trees.has(c) or water.has(c) or mud.has(c) or paths.has(c) or props.has(c) or floors.has(c) or buildings.has(c):
+				return false
+	return true
 
 
 ## Chests: mostly wooden near the base, silver and gold further out, a few cursed ones anywhere.
@@ -756,9 +819,14 @@ func _generate() -> void:
 	_make_paths(gen)
 	layout = Towns.generate(self, gen)
 	_find_open_tiles()
+	var biome_rng := RandomNumberGenerator.new()
+	biome_rng.seed = map_seed + 1234
+	biome = Biomes.generate(biome_rng, COLS, ROWS, START_TILE)
 	_build_nav()
 	_scatter_props()
+	Biomes.scatter_props(self, biome_rng)
 	_scatter_treasures()
+	_scatter_pois(biome_rng)
 
 	# Starting villagers: spread out, reachable, never near the start.
 	var placed: Array[Vector2i] = []
@@ -875,6 +943,8 @@ func find_path(a: Vector2, b: Vector2) -> PackedVector2Array:
 
 func speed_mult_at(pos: Vector2) -> float:
 	var t := tile_of(pos)
+	if int(biome.get(t, 0)) == Biomes.SWAMP and not water.has(t):
+		return Biomes.SWAMP_SLOW * (MUD_SLOW if mud.has(t) else 1.0)
 	if water.has(t):
 		return WATER_SLOW
 	if paths.has(t):
@@ -1272,6 +1342,9 @@ func _build_hud() -> void:
 	layer.add_child(credit)
 
 	layer.add_child(preload("res://boss_bar.gd").new())
+	ambient = preload("res://ambient.gd").new()
+	ambient.main = self
+	add_child(ambient)
 	minimap = preload("res://minimap.gd").new()
 	layer.add_child(minimap)
 	minimap.setup(self)
@@ -1766,6 +1839,16 @@ func spawn_rival():
 			return null
 		spot = far.global_position
 		far.queue_free()
+	if rival_home != Vector2.INF:
+		spot = rival_home
+	else:
+		rival_home = spot
+		var lair = preload("res://start_pit.gd").new()
+		lair.heals = false
+		lair.scale = Vector2(0.62, 0.62)
+		lair.position = spot
+		add_child(lair)
+		move_child(lair, 0)
 	var v = _spawn_villager(spot, 3, 0, -1)
 	v.hero_down.connect(_on_rival_down)
 	_refresh_rival(v, true)
@@ -1963,6 +2046,8 @@ func _draw() -> void:
 		draw_circle(r.position + Vector2(9, 11), 4.0, Color("55401f"))
 		draw_circle(r.position + Vector2(22, 20), 5.0, Color("7d5e38"))
 
+	if art:
+		return  # props and tree shadows come from static_layer.gd, near the camera only
 	for t in props:
 		_draw_prop(t, props[t])
 

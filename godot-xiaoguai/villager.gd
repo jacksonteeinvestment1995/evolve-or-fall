@@ -25,6 +25,7 @@ const PARASITE_TO_DARK := 60.0
 const DARK_TO_GOD := 90.0     ## also needs village level 5
 const HIT_COOLDOWN := 1.0
 const LinesRef := preload("res://lines.gd")
+const RIVAL_RANGED := ["frost_shards", "thorn_ring", "spirit_lance", "meteor_call", "chain_zap", "fireball", "volley", "pierce", "bomb", "smite", "axe", "slow"]
 const RIVAL_HP := [5, 7, 9, 11, 14, 17, 21, 26, 32, 40, 50]
 const RIVAL_BITE := [1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 6]
 const LOOT_CHANCE := 0.4        ## a boss, mimic or rival leaves a gold chest this often
@@ -173,7 +174,7 @@ func setup_rival(line_idx: int, level: int, form_stage: int, skills: Array, full
 	var frac := float(hp) / float(maxi(max_hp, 1)) if max_hp > 1 and not full_heal else 1.0
 	max_hp = ceili(RIVAL_HP[form_stage] * 25.0 * float(fam["hp"]))
 	hp = clampi(roundi(max_hp * frac), 1, max_hp)
-	damage = maxi(1, roundi(RIVAL_BITE[form_stage] * 1.4 * float(fam["dmg"])))
+	damage = maxi(1, roundi(RIVAL_BITE[form_stage] * 0.7 * float(fam["dmg"])))
 	speed = (72.0 + 5.0 * form_stage) * float(fam["spd"])
 	xp_value = 30 + level * 8
 	bones_value = 20
@@ -538,7 +539,8 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 	var aim := to.normalized()
 	var dmg := effective_damage()
 	if hero_rival:
-		dmg = ceili(dmg * (1.6 + 0.06 * rival_level))  # its skills grow with its level
+		# its skills grow with its level, gently; the ranged ones (bolts, blasts) hit a further 30% softer
+		dmg = ceili(dmg * (0.8 + 0.03 * rival_level) * (0.7 if RIVAL_RANGED.has(id) else 1.0))
 	var fired := false
 	match id:
 		"frost_shards":
@@ -813,10 +815,10 @@ func _physics_process(delta: float) -> void:
 		if not standing:
 			dir = _steer(target.global_position)
 		if dist < reach and hit_cd == 0.0:
-			hit_cd = HIT_COOLDOWN * (0.6 if hero_rival else 1.0)
+			hit_cd = HIT_COOLDOWN
 			target.take_hit(effective_damage(), to.normalized())
 			if hero_rival:
-				hp = mini(max_hp, hp + maxi(1, roundi(max_hp * 0.02)))  # passive: life steal on every bite it lands
+				hp = mini(max_hp, hp + maxi(1, roundi(max_hp * 0.01)))  # passive: life steal on every bite it lands
 			SkillFx.spawn_fx(get_parent(), target.global_position, "slash", Color(1.0, 0.3, 0.25), to.normalized(), 1.1)
 			Sfx.play(get_tree(), "hit_slash", -2.0)
 		if skill_cd == 0.0 and not has_status("charm"):

@@ -2487,5 +2487,79 @@ func _init() -> void:
 	check("defeating the rival in the final duel wins the game", rv_main.game_over and rv_main.banner.text.contains("VICTORY"))
 	await clear_enemies()
 
+	# biomes, points of interest, ambient life and weather
+	await fresh()
+	var mp = main
+	var mp_kinds := {}
+	for t in mp.biome:
+		mp_kinds[mp.biome[t]] = true
+	check("the map has several biomes", mp_kinds.size() >= 3 and mp.biome.size() > 1500, "%d kinds, %d tiles" % [mp_kinds.size(), mp.biome.size()])
+	var mp_near_start := 0
+	for t in mp.biome:
+		if Vector2(t - mp.START_TILE).length() < 30.0:
+			mp_near_start += 1
+	check("the start meadow stays green", mp_near_start == 0)
+	var mp_pois: Array = get_nodes_in_group("pois")
+	check("shrines, springs, crypts and towers are scattered over the map", mp_pois.size() >= 8, str(mp_pois.size()))
+	var mp_ok := true
+	for poi in mp_pois:
+		var ptile: Vector2i = mp.tile_of(poi.global_position)
+		if not mp.open_lookup.has(ptile) or Vector2(ptile - mp.START_TILE).length() < 26.0:
+			mp_ok = false
+	check("every point of interest can be reached and is far from the start", mp_ok)
+	var mp_swamp = null
+	for t in mp.biome:
+		if mp.biome[t] == mp.Biomes.SWAMP and not mp.water.has(t) and not mp.mud.has(t):
+			mp_swamp = t
+			break
+	check("the swamp slows 小怪 a little", mp_swamp == null or mp.speed_mult_at(mp._tile_center(mp_swamp)) < 1.0)
+	await clear_enemies()
+	var mpp = mp.player
+	mpp.hp = 3
+	mpp.max_hp = 40
+	var mp_spring = null
+	var mp_shrine = null
+	var mp_crypt = null
+	var mp_tower = null
+	for poi in mp_pois:
+		if poi.kind == "spring" and mp_spring == null:
+			mp_spring = poi
+		if poi.kind == "shrine" and mp_shrine == null:
+			mp_shrine = poi
+		if poi.kind == "crypt" and mp_crypt == null:
+			mp_crypt = poi
+		if poi.kind == "tower" and mp_tower == null:
+			mp_tower = poi
+	if mp_spring != null:
+		mpp.global_position = mp_spring.global_position
+		await frames(90)
+		check("a healing spring heals 小怪 while he stands in it", mpp.hp > 3, "hp %d" % mpp.hp)
+	if mp_shrine != null:
+		mpp.buffs.clear()
+		mpp.global_position = mp_shrine.global_position
+		await frames(5)
+		check("a shrine gives a buff and then rests", not mpp.buffs.is_empty() and mp_shrine.rest > 100.0)
+	var mp_bones0: int = mp.bones
+	if mp_tower != null:
+		mpp.global_position = mp_tower.global_position
+		await frames(5)
+		check("a ruined tower pays bones once and clears the fog", mp.bones == mp_bones0 + 25 and mp_tower.used)
+	if mp_crypt != null:
+		var mp_enemies0: int = enemies().size()
+		mpp.global_position = mp_crypt.global_position
+		await frames(5)
+		check("a crypt opens once: an ambush and a chest", mp_crypt.used and enemies().size() >= mp_enemies0 + 5)
+	await clear_enemies()
+	check("the map has ambient life and weather", mp.ambient != null and mp.ambient.weather == "clear")
+	mp.ambient.weather = "rain"
+	mp.ambient.weather_left = 30.0
+	await frames(120)
+	var mp_rain := 0
+	for q in mp.ambient._parts:
+		if q["k"] == "rain" or q["k"] == "flurry":
+			mp_rain += 1
+	check("rain falls when the weather turns", mp_rain > 0, str(mp_rain))
+	mp.ambient.weather = "clear"
+
 	print("\n%s: %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)

@@ -86,6 +86,18 @@ func _reveal() -> void:
 	_fog_tex.update(_fog_img)
 
 
+## Clear the fog in a circle (the ruined towers do this).
+func reveal_area(center: Vector2i, radius: int) -> void:
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			if dx * dx + dy * dy > radius * radius:
+				continue
+			var p := center + Vector2i(dx, dy)
+			if p.x >= 0 and p.y >= 0 and p.x < _cols and p.y < _rows:
+				_fog_img.set_pixel(p.x, p.y, Color(0, 0, 0, 0))
+	_fog_tex.update(_fog_img)
+
+
 func _revealed(tile: Vector2i) -> bool:
 	return not fog_on or _fog_img.get_pixel(clampi(tile.x, 0, _cols - 1), clampi(tile.y, 0, _rows - 1)).a < 0.5
 
@@ -178,6 +190,16 @@ func _draw() -> void:
 		if inside.call(mp):
 			draw_circle(mp, 4.0, Color("ffd040"))
 			draw_circle(mp, 4.0, Color("6a4a10"), false, 1.0)
+	# points of interest, once the fog over them has been cleared
+	for poi in get_tree().get_nodes_in_group("pois"):
+		var pp: Vector2 = to_screen.call(poi.global_position)
+		if inside.call(pp) and _revealed(main_node.tile_of(poi.global_position)):
+			var spent: bool = bool(poi.used) or float(poi.rest) > 0.0
+			var pc: Color = {"shrine": Color("ffd84a"), "spring": Color("5ab8ff"), "crypt": Color("b070ff"), "tower": Color("c8c8d8")}.get(poi.kind, Color.WHITE)
+			if spent:
+				pc = pc.darkened(0.5)
+			draw_rect(Rect2(pp - Vector2(3, 3), Vector2(6, 6)), pc)
+			draw_rect(Rect2(pp - Vector2(3, 3), Vector2(6, 6)), Color(0, 0, 0, 0.7), false, 1.0)
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if not is_instance_valid(e):
 			continue
