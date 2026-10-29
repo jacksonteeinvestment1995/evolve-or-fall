@@ -74,9 +74,8 @@ var status_time := 0.0
 
 func _draw() -> void:
 	if team == "enemy":
-		# every villager projectile gets a red streak and a pulsing danger rim, so it is never mistaken for 小怪's
-		draw_line(-dir * radius * 6.0, -dir * radius * 1.5, Color(1.0, 0.2, 0.15, 0.45), maxf(2.0, radius * 0.9))
-		draw_arc(Vector2.ZERO, radius * 2.1, 0.0, TAU, 14, Color(1.0, 0.25, 0.2, 0.35 + 0.3 * sin(Time.get_ticks_msec() * 0.02)), 1.6)
+		# every villager projectile gets a dark halo, a crimson tail and a pulsing rim, so it is never mistaken for 小怪's
+		SkillFx.draw_enemy_bolt_mark(self, dir, radius, color)
 	if team == "player":
 		# 小怪's own projectiles glow and leave a shimmering tail
 		SkillFx.glow(self, Vector2.ZERO, radius * 3.2, color, 1.0)

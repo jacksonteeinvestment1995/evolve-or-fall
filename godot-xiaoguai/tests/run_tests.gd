@@ -854,10 +854,17 @@ func _init() -> void:
 	check("after 6 minutes they have skills", mage0.skill_name() == "fireball" and militia0.skill_name() == "shield")
 	main.elapsed = 0.0
 	check("at the start only nearby villagers notice 小怪", main.chase_radius() < 600.0)
-	main.elapsed = 30.0
+	main.elapsed = 150.0
 	check("the notice radius grows", main.chase_radius() > 1500.0 and main.chase_radius() < INF)
-	main.elapsed = 60.0
-	check("after a minute villagers find 小怪 from anywhere", main.chase_radius() == INF)
+	main.elapsed = 300.0
+	check("after five minutes villagers find 小怪 from anywhere", main.chase_radius() == INF)
+	main.elapsed = 0.0
+	check("only 6 villagers chase at the start, and the budget grows by one every 10 seconds", main.chase_budget() == 6)
+	main.elapsed = 600.0
+	check("the chase budget grows with the clock and tops out at 130", main.chase_budget() == 66 and (main.elapsed + 99999.0) > 0.0)
+	main.elapsed = 5000.0
+	check("the chase budget is capped", main.chase_budget() == 130)
+	main.elapsed = 0.0
 	for n in [hunter0, mage0, hidden0]:
 		n.queue_free()
 	await clear_enemies()

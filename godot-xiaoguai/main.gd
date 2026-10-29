@@ -27,7 +27,7 @@ const SKILLS_AT := 360.0        # villager skills switch on
 const HIDDEN_FROM := 600.0      # hidden enemies can appear from here (10 minutes in)...
 const GUARD_RELEASE := 1200.0    # ...and they wait in the big castle until 20 minutes, then go hunting
 const CHASE_START := 450.0      # villagers notice 小怪 only this close at first...
-const CHASE_FULL_AT := 60.0     # ...growing until, after a minute, they find 小怪 from anywhere
+const CHASE_FULL_AT := 300.0    # ...growing until, after five minutes, they find 小怪 from anywhere (they now really arrive, so the swarm builds slowly)
 const EARLY_SPEED := 0.75       # villager walking speed at the very start
 const RAMP_SECONDS := 1200.0
 const POP_TIME_END := 120       # how many the clock alone allows once the 20 minutes are up...
@@ -41,6 +41,9 @@ const VILLAGE_TIERS := ["Novice", "Trained", "Veteran", "Elite", "Master"]
 const HIDDEN_SPAWN_CHANCE := 0.6     # at each dawn and dusk
 const GOD_AT := 900.0               # GOD, the last boss, descends at 15 minutes
 const RIVAL_AT := 3.0               # the rival hero (the enemy's own main character) is there from the very start: 3 seconds in
+const RIVAL_START_MIN := 3000.0    # the rival starts this far from 小怪 (about a minute's walk), so he has time to grow first
+const RIVAL_START_MAX := 4600.0
+const RIVAL_ABSORB := 0.4           # the rival absorbs this share of the EXP of everything 小怪 defeats
 const RIVAL_RESPAWN := 30.0         # ...and returns this many seconds after 小怪 defeats it
 const DUEL_AT := 1200.0             # at 20 minutes it is the final duel: no more respawns
 const RIVAL_SKILL_POOL := ["pierce", "volley", "smite", "fireball", "bomb", "slam", "nova", "charge", "blink", "shield", "rage", "heal", "axe", "slow", "frost_shards", "thorn_ring", "spirit_lance", "meteor_call", "chain_zap"]
@@ -135,6 +138,7 @@ var ghost_dirty := true
 var hud: Control
 var playables: Node
 var god_spawned := false
+var _chaser_t := 0.0
 var start_pit: Node2D
 ## The rival's state outlives its body: it keeps its line, EXP, level and skills across respawns.
 var rival := {"line": -1, "xp": 0, "level": 1, "skills": [], "node": null, "respawn": -1.0, "falls": 0, "duel": false, "skip_xp": false}
@@ -307,6 +311,27 @@ static func damage_mult_at(seconds: float) -> float:
 	return 1.0 + seconds / 900.0
 
 
+## How many villagers may chase 小怪 at once: 6 at the start, one more every 10 seconds, up to 130. The nearest ones get
+## the places; the rest wait for them to fall. Without this, every villager on the map arrives together.
+func chase_budget() -> int:
+	return mini(130, 6 + int(elapsed / 10.0))
+
+
+func _update_chasers(delta: float) -> void:
+	_chaser_t -= delta
+	if _chaser_t > 0.0 or player == null or Engine.has_meta("deterministic_map"):
+		return
+	_chaser_t = 0.5
+	var list: Array = []
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e):
+			list.append([e.global_position.distance_squared_to(player.global_position), e])
+	list.sort_custom(func(a, b): return a[0] < b[0])
+	var budget := chase_budget()
+	for i in list.size():
+		list[i][1].chase_ok = i < budget
+
+
 func enemy_hp_mult() -> float:
 	return 1.0 if Engine.has_meta("deterministic_map") else hp_mult_at(elapsed)  # (the tests jump the clock around)
 
@@ -333,7 +358,7 @@ func skills_unlocked() -> bool:
 func chase_radius() -> float:
 	if elapsed >= CHASE_FULL_AT:
 		return INF
-	return lerpf(CHASE_START, 4000.0, elapsed / CHASE_FULL_AT)
+	return lerpf(CHASE_START, 6000.0, elapsed / CHASE_FULL_AT)
 
 
 func enemy_speed_mult() -> float:
@@ -1722,13 +1747,14 @@ func _update_rival(delta: float) -> void:
 
 
 func spawn_rival():
-	# not inside the castle courtyard: somewhere in the open, 500 to 900 px from 小怪, with a walkable route to him
+	# not inside the castle courtyard: somewhere in the open, far from 小怪 (so he has a minute or two to grow before the
+	# rival arrives), with a walkable route to him
 	var spot := Vector2.INF
 	for i in 80:
 		var t: Vector2i = open_tiles[rng.randi_range(0, open_tiles.size() - 1)]
 		var p := _tile_center(t)
 		var d := p.distance_to(player.global_position)
-		if d < 500.0 or d > 900.0 or water.has(t) or floors.has(t):
+		if d < RIVAL_START_MIN or d > RIVAL_START_MAX or water.has(t) or floors.has(t):
 			continue
 		if find_path(p, player.global_position).is_empty():
 			continue
@@ -1757,11 +1783,11 @@ func _refresh_rival(v, full_heal: bool) -> void:
 	v.setup_rival(int(rival["line"]), int(rival["level"]), rival_stage(), rival["skills"], full_heal)
 
 
-## Everything 小怪 defeats feeds the rival: half of its EXP goes to the enemy's main character.
+## Everything 小怪 defeats feeds the rival: it absorbs RIVAL_ABSORB (40%) of that EXP.
 func rival_gain(xp: int) -> void:
 	if int(rival["line"]) < 0:
 		return
-	rival["xp"] = int(rival["xp"]) + maxi(1, roundi(xp * 0.5))
+	rival["xp"] = int(rival["xp"]) + maxi(1, roundi(xp * RIVAL_ABSORB))
 	var before_stage := rival_stage()
 	var grew := false
 	while int(rival["level"]) < PlayerScript.MAX_LEVEL and int(rival["xp"]) >= PlayerScript.xp_for_level(int(rival["level"]) + 1):
@@ -1829,6 +1855,7 @@ func spawn_god():
 
 
 func _process(delta: float) -> void:
+	_update_chasers(delta)
 	_check_god()
 	_update_rival(delta)
 	if eclipse_left > 0.0:

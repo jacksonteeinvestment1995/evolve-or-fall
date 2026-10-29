@@ -22,6 +22,12 @@ var dur := 0.25            ## seconds the burst stays on screen after it goes of
 var detonated := false
 var warned := false
 var hit_sound := ""        ## player zones: the skill whose sound plays when the blast lands on villagers
+var kind := ""             ## enemy zones: which attack it is (fireball, bomb, meteor, slam, nova, smite, judgment, shadow)
+
+
+func _ready() -> void:
+	if team == "enemy":
+		dur = SkillFx.enemy_burst_time(kind)
 
 
 func _physics_process(delta: float) -> void:
@@ -41,6 +47,8 @@ func _physics_process(delta: float) -> void:
 
 func _detonate() -> void:
 	if team == "enemy":
+		if kind == "meteor" or kind == "bomb" or kind == "fireball":
+			Juice.scorch(get_parent(), global_position, radius * 0.6, color)  # a burnt mark stays on the ground
 		var pl = get_tree().get_first_node_in_group("player")
 		if pl != null and pl.hp > 0 and pl.global_position.distance_to(global_position) <= radius + pl.body_radius * 0.5:
 			pl.take_hit(damage, (pl.global_position - global_position).normalized())
@@ -75,7 +83,7 @@ func _draw() -> void:
 	if not detonated:
 		var f := clampf(age / maxf(delay, 0.01), 0.0, 1.0)
 		if team == "enemy":
-			SkillFx.draw_danger_warn(self, radius, f, color)
+			SkillFx.draw_enemy_warn(self, kind, radius, f, color, float(get_instance_id() % 997))
 			return
 		draw_circle(Vector2.ZERO, radius * f, Color(color, 0.2))
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.85), 2.0)
@@ -87,7 +95,7 @@ func _draw() -> void:
 		SkillFx.glow(self, Vector2.ZERO, radius * (0.3 + 0.5 * f), color, 0.7)
 	else:
 		if team == "enemy" and style == "":
-			SkillFx.draw_danger_burst(self, radius, clampf((age - delay) / maxf(dur, 0.01), 0.0, 1.0), color)
+			SkillFx.draw_enemy_burst(self, kind, radius, clampf((age - delay) / maxf(dur, 0.01), 0.0, 1.0), color, float(get_instance_id() % 997))
 			return
 		var a := clampf(1.0 - (age - delay) / 0.25, 0.0, 1.0)
 		if style != "":

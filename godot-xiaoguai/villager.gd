@@ -136,6 +136,7 @@ var statuses := {}            ## status name -> seconds left: burn chill freeze 
 var poison_stacks := 0
 var freeze_immune := 0.0     ## after a freeze they cannot be frozen again for a while
 var dot_t := 0.0
+var chase_ok := true          ## Main lets only a limited number of villagers chase at once (nearest first), so the swarm builds up
 var los := true              ## clear straight line to the target (refreshed a few times a second)
 var path := PackedVector2Array()
 var path_i := 0
@@ -144,7 +145,7 @@ var repath_cd := 0.0
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
-	collision_layer = 4   # villagers only bump into trees: a crowd of them no longer pushes and snags on each other (it cost a lot)
+	collision_layer = 4   # far villagers only bump into trees (a crowd snagging on itself cost a lot); near 小怪 they are solid again, see _physics_process
 	collision_mask = 1
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
@@ -477,9 +478,10 @@ func _spawn_bolt(dir: Vector2, spd: float, dmg: int, color: Color, effect: Strin
 	_add_to_level(b)
 
 
-func _spawn_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color, fx: String = "") -> void:
+func _spawn_zone(pos: Vector2, rad: float, delay: float, dmg: int, color: Color, fx: String = "", kind: String = "") -> void:
 	var z = ZoneScript.new()
 	z.fx = fx
+	z.kind = kind  # picks the attack's own warning and burst look
 	z.position = pos
 	z.radius = rad
 	z.delay = delay
@@ -557,7 +559,7 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 				fired = true
 		"meteor_call":
 			if dist < 440.0:
-				_spawn_zone(target.global_position + target.velocity * 0.4, 58.0, 1.0, maxi(1, roundi(dmg * 3.0)), Color(1.0, 0.5, 0.2), "fx_fireball_explosion")
+				_spawn_zone(target.global_position + target.velocity * 0.4, 58.0, 1.0, maxi(1, roundi(dmg * 3.0)), Color(1.0, 0.5, 0.2), "fx_fireball_explosion", "meteor")
 				cast_color = Color(1.0, 0.5, 0.2)
 				fired = true
 		"chain_zap":
@@ -579,15 +581,15 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 					get_tree().create_timer(0.35 * w).timeout.connect(func():
 						if is_instance_valid(self) and hp > 0:
 							_fan(12, 210.0, maxi(1, roundi(dmg * 0.6)), Color("a050e0"), 0.13 * w, 2.0))
-				_spawn_zone(global_position, 70.0, 0.6, maxi(1, roundi(dmg * 1.2)), Color("a050e0"))
+				_spawn_zone(global_position, 70.0, 0.6, maxi(1, roundi(dmg * 1.2)), Color("a050e0"), "", "shadow")
 				cast_color = Color("a050e0")
 				fired = true
 		"judgment":
 			if dist < 560.0:
 				for k in 6:
 					var spot: Vector2 = target.global_position + Vector2.from_angle(randf() * TAU) * randf_range(10.0, 110.0)
-					_spawn_zone(spot, 40.0, 0.9 + 0.12 * k, maxi(1, roundi(dmg * 1.8)), Color("ffe680"))
-				_spawn_zone(target.global_position, 120.0, 1.5, maxi(1, roundi(dmg * 2.2)), Color("fff2a0"))
+					_spawn_zone(spot, 40.0, 0.9 + 0.12 * k, maxi(1, roundi(dmg * 1.8)), Color("ffe680"), "", "judgment")
+				_spawn_zone(target.global_position, 120.0, 1.5, maxi(1, roundi(dmg * 2.2)), Color("fff2a0"), "", "judgment")
 				cast_color = Color("ffe680")
 				fired = true
 		"slow":
@@ -618,27 +620,27 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 				fired = true
 		"smite":
 			if dist < 320.0:
-				_spawn_zone(target.global_position, 36.0, 0.5, maxi(1, roundi(dmg * 1.6)), Color("fff2a0"))
+				_spawn_zone(target.global_position, 36.0, 0.5, maxi(1, roundi(dmg * 1.6)), Color("fff2a0"), "", "smite")
 				cast_color = Color("fff2a0")
 				fired = true
 		"fireball":
 			if dist < 280.0:
-				_spawn_zone(target.global_position, 50.0, 0.9, maxi(1, roundi(dmg * 2.0)), Color(1.0, 0.45, 0.2), "fx_fireball_explosion")
+				_spawn_zone(target.global_position, 50.0, 0.9, maxi(1, roundi(dmg * 2.0)), Color(1.0, 0.45, 0.2), "fx_fireball_explosion", "fireball")
 				cast_color = Color(1.0, 0.45, 0.2)
 				fired = true
 		"bomb":
 			if dist < 260.0:
-				_spawn_zone(target.global_position, 62.0, 1.2, maxi(1, roundi(dmg * 2.2)), Color("e08a3a"), "fx_fireball_explosion")
+				_spawn_zone(target.global_position, 62.0, 1.2, maxi(1, roundi(dmg * 2.2)), Color("e08a3a"), "fx_fireball_explosion", "bomb")
 				cast_color = Color("e08a3a")
 				fired = true
 		"slam":
 			if dist < 70.0:
-				_spawn_zone(global_position, 55.0, 0.6, maxi(1, roundi(dmg * 1.5)), Color(0.95, 0.8, 0.3))
+				_spawn_zone(global_position, 55.0, 0.6, maxi(1, roundi(dmg * 1.5)), Color(0.95, 0.8, 0.3), "", "slam")
 				cast_color = Color(0.95, 0.8, 0.3)
 				fired = true
 		"nova":
 			if dist < 110.0:
-				_spawn_zone(global_position, 75.0, 0.7, maxi(1, roundi(dmg * 1.4)), Color("ffe680"))
+				_spawn_zone(global_position, 75.0, 0.7, maxi(1, roundi(dmg * 1.4)), Color("ffe680"), "", "nova")
 				cast_color = Color("ffe680")
 				fired = true
 		"charge":
@@ -712,6 +714,8 @@ func _physics_process(delta: float) -> void:
 	if secret < 0 and not Engine.has_meta("deterministic_map"):  # (the tests need every villager on every tick)
 		var near_player = get_tree().get_first_node_in_group("player")
 		var d2: float = near_player.global_position.distance_squared_to(global_position) if near_player != null else 0.0
+		# within 170 px of 小怪 villagers are solid to each other again, so a swarm cannot all stack on top of him and bite at once
+		collision_layer = 1 if d2 < 170.0 * 170.0 else 4
 		if d2 > MID_LOD * MID_LOD:
 			var every := 4 if d2 > FAR_LOD * FAR_LOD else 2
 			_lod_tick += 1
@@ -765,7 +769,7 @@ func _physics_process(delta: float) -> void:
 	var player = get_tree().get_first_node_in_group("player")
 	if player != null and player.hp > 0:
 		var seen: float = player.global_position.distance_to(global_position)
-		if seen <= _chase_radius():
+		if seen <= _chase_radius() and (chase_ok or force_chase or hero_rival or secret >= 0):
 			best = seen
 			target = player
 			reach = 10.0 + player.body_radius

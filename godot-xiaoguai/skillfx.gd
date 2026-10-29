@@ -586,59 +586,488 @@ static func draw_bloodmoon(ci: CanvasItem, tm: float) -> void:
 		ci.draw_circle(Vector2(x, 6.0 - f * 30.0), 2.2 * (1.0 - f), Color(0.9, 0.1, 0.2, 0.5 * (1.0 - f)))
 
 
-# --- enemy attacks: shapes that cannot be mistaken for 小怪's own circles ---
+# --- enemy attacks: marks drawn into the ground, one look per attack ---
+# Shared language: a dark stain on the ground and a thin crimson rim at the exact hit radius
+# (小怪's own skills are soft glows with no dark rim), plus one timing cue per attack that
+# ends exactly when the hit lands.
 
-## The warning before an enemy ground attack: a hatched red danger area with a spiked rim, a pie that fills as the
-## strike gets closer, and a warning triangle in the middle.
-static func draw_danger_warn(ci: CanvasItem, radius: float, f: float, tint: Color) -> void:
-	var tm := Time.get_ticks_msec() * 0.001
-	var red := Color(1.0, 0.22, 0.18)
-	var hot := red.lerp(tint, 0.3)
-	# the pie that fills up: the nearer the strike, the fuller
-	var steps := 28
-	if f > 0.02:
-		for i in steps:
-			var a0 := -PI / 2.0 + TAU * f * float(i) / steps
-			var a1 := -PI / 2.0 + TAU * f * float(i + 1) / steps
-			ci.draw_colored_polygon(PackedVector2Array([Vector2.ZERO, Vector2.from_angle(a0) * radius, Vector2.from_angle(a1) * radius]), Color(hot, 0.22))
-	# diagonal hatching, clipped to the circle
-	ci.draw_set_transform(Vector2.ZERO, PI / 4.0, Vector2.ONE)
-	var y := -radius + 4.0
-	while y < radius:
-		var w := sqrt(maxf(radius * radius - y * y, 0.0))
-		ci.draw_line(Vector2(-w, y), Vector2(w, y), Color(hot, 0.35), 1.6)
-		y += 9.0
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	# a spiked rim that turns slowly
-	var rim := PackedVector2Array()
-	var spikes := 20
-	for i in range(spikes * 2 + 1):
-		var a := float(i) / float(spikes * 2) * TAU + tm * 0.8
-		rim.append(Vector2.from_angle(a) * (radius * (1.0 if i % 2 == 0 else 1.13)))
-	ci.draw_polyline(rim, Color(hot, 0.95), 2.0)
-	# the warning triangle with an exclamation mark, blinking faster as the strike nears
-	var blink := 0.55 + 0.45 * sin(tm * (6.0 + 14.0 * f))
-	var s := clampf(radius * 0.3, 7.0, 18.0)
-	var tri := PackedVector2Array([Vector2(0, -s), Vector2(s * 0.95, s * 0.7), Vector2(-s * 0.95, s * 0.7)])
-	ci.draw_colored_polygon(tri, Color(1.0, 0.85, 0.2, 0.85 * blink))
-	ci.draw_polyline(tri + PackedVector2Array([tri[0]]), Color(0.3, 0.05, 0.05, blink), 2.0)
-	ci.draw_line(Vector2(0, -s * 0.35), Vector2(0, s * 0.2), Color(0.3, 0.05, 0.05, blink), 2.4)
-	ci.draw_circle(Vector2(0, s * 0.45), 1.5, Color(0.3, 0.05, 0.05, blink))
+const EN_RIM := Color(0.88, 0.12, 0.14)
+const EN_DARK := Color(0.12, 0.0, 0.04)
 
 
-## The enemy ground attack going off: jagged shards flung out from the middle (not a plain circle).
-static func draw_danger_burst(ci: CanvasItem, radius: float, st: float, tint: Color) -> void:
-	var a := 1.0 - st
-	var n := 16
+## A stable pseudo-random number in 0..1 for index `i` and seed `s` (so shapes do not jitter).
+static func _hash(i: int, s: float) -> float:
+	return fposmod(sin(float(i) * 12.9898 + s * 78.233) * 43758.5453, 1.0)
+
+
+## A filled triangle, skipped when it is too thin to triangulate.
+static func _tri(ci: CanvasItem, a: Vector2, b: Vector2, c: Vector2, col: Color) -> void:
+	if absf((b - a).cross(c - a)) > 0.5:
+		ci.draw_colored_polygon(PackedVector2Array([a, b, c]), col)
+
+
+## Draw the first `frac` (0..1) of a polyline's length, so a shape can draw itself.
+static func _partial_line(ci: CanvasItem, pts: PackedVector2Array, frac: float, col: Color, w: float) -> void:
+	if frac <= 0.0 or pts.size() < 2:
+		return
+	var total := 0.0
+	for i in pts.size() - 1:
+		total += pts[i].distance_to(pts[i + 1])
+	var left := total * clampf(frac, 0.0, 1.0)
+	var out := PackedVector2Array([pts[0]])
+	for i in pts.size() - 1:
+		var d := pts[i].distance_to(pts[i + 1])
+		if left >= d:
+			out.append(pts[i + 1])
+			left -= d
+		else:
+			if left > 0.5:
+				out.append(pts[i].lerp(pts[i + 1], left / maxf(d, 0.001)))
+			break
+	if out.size() >= 2:
+		ci.draw_polyline(out, col, w)
+
+
+## A jagged line from `a` to `b` (lightning, cracks) with `n` segments.
+static func _zigzag(a: Vector2, b: Vector2, n: int, jit: float, s: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var side := (b - a).normalized().orthogonal()
+	for k in n + 1:
+		var off := 0.0 if k == 0 or k == n else (_hash(k, s) * 2.0 - 1.0) * jit
+		pts.append(a.lerp(b, float(k) / float(n)) + side * off)
+	return pts
+
+
+## How long the burst of each enemy attack stays on screen (the hit itself is instant).
+static func enemy_burst_time(kind: String) -> float:
+	match kind:
+		"meteor", "bomb":
+			return 0.5
+		"judgment", "shadow", "fireball":
+			return 0.42
+		"slam", "nova", "smite":
+			return 0.36
+	return 0.3
+
+
+## The warning before an enemy ground attack. `f` runs 0 to 1 and the hit lands at 1.
+static func draw_enemy_warn(ci: CanvasItem, kind: String, radius: float, f: float, tint: Color, seed: float) -> void:
+	var tm := Time.get_ticks_msec() * 0.001 + seed
+	# the shared base: a dark stain and the crimson rim at the exact reach
+	ci.draw_circle(Vector2.ZERO, radius, Color(EN_DARK, 0.14 + 0.1 * f))
+	ci.draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(EN_DARK, 0.5), 3.2)
+	ci.draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(EN_RIM.lerp(tint, 0.2), 0.45 + 0.45 * f), 1.3)
+	match kind:
+		"fireball":
+			_warn_fire(ci, radius, f, tint, tm, seed)
+		"bomb":
+			_warn_bomb(ci, radius, f, tint, tm)
+		"meteor":
+			_warn_meteor(ci, radius, f, tint, tm, seed)
+		"slam":
+			_warn_slam(ci, radius, f, tint, seed)
+		"nova":
+			_warn_nova(ci, radius, f, tint, tm)
+		"smite":
+			_warn_smite(ci, radius, f, tint, tm, seed)
+		"judgment":
+			_warn_judgment(ci, radius, f, tint, tm)
+		"shadow":
+			_warn_shadow(ci, radius, f, tint, tm, seed)
+		_:
+			_warn_rune(ci, radius, f, tint, tm)
+
+
+## The enemy ground attack going off (st runs 0 to 1 over the burst).
+static func draw_enemy_burst(ci: CanvasItem, kind: String, radius: float, st: float, tint: Color, seed: float) -> void:
+	st = clampf(st, 0.0, 1.0)
+	match kind:
+		"fireball":
+			_burst_fire(ci, radius, st, tint, seed, false)
+		"bomb":
+			_burst_fire(ci, radius, st, tint, seed, true)
+		"meteor":
+			_burst_meteor(ci, radius, st, tint, seed)
+		"slam":
+			_burst_slam(ci, radius, st, tint, seed)
+		"nova":
+			_burst_nova(ci, radius, st, tint)
+		"smite":
+			_burst_smite(ci, radius, st, tint, seed)
+		"judgment":
+			_burst_judgment(ci, radius, st, tint)
+		"shadow":
+			_burst_shadow(ci, radius, st, tint, seed)
+		_:
+			_burst_nova(ci, radius, st, EN_RIM.lerp(tint, 0.5))
+
+
+## Fireball: a fire sigil burns itself into the ground while a fuse spark runs once round the rim.
+static func _warn_fire(ci: CanvasItem, r: float, f: float, tint: Color, tm: float, seed: float) -> void:
+	var hot := tint.lerp(Color(1.0, 0.85, 0.4), 0.35)
+	ci.draw_circle(Vector2.ZERO, r * f, Color(tint, 0.12))
+	# the sigil: a ring and a downward triangle that draw themselves, slowly turning
+	var rot := tm * 0.4
+	var tri := PackedVector2Array()
+	for k in 4:
+		tri.append(Vector2.from_angle(rot + PI / 2.0 + float(k) * TAU / 3.0) * r * 0.62)
+	_partial_line(ci, tri, f * 1.4, Color(hot, 0.75), 1.6)
+	ci.draw_arc(Vector2.ZERO, r * 0.7, rot, rot + TAU * minf(f * 1.6, 1.0), 32, Color(hot, 0.5), 1.2)
+	# the fuse: a burning line runs clockwise from the top and closes the ring as it lands
+	var a1 := -PI / 2.0 + TAU * f
+	if f > 0.01:
+		ci.draw_arc(Vector2.ZERO, r, -PI / 2.0, a1, maxi(4, int(40.0 * f)), Color(1.0, 0.6, 0.2, 0.95), 2.6)
+	var head := Vector2.from_angle(a1) * r
+	ci.draw_circle(head, 6.0, Color(1.0, 0.5, 0.15, 0.35))
+	ci.draw_circle(head, 2.8, Color(1.0, 0.95, 0.7))
+	for k in 3:
+		var sp := head + Vector2.from_angle(tm * 23.0 + float(k) * 2.1) * (3.0 + 4.0 * _hash(k + int(tm * 30.0), seed))
+		ci.draw_circle(sp, 1.0, Color(1.0, 0.85, 0.4, 0.9))
+	# embers rising off the scorched ground
+	for i in 8:
+		var ph := fposmod(tm * 0.9 + _hash(i, seed), 1.0)
+		var p := Vector2((_hash(i + 9, seed) * 2.0 - 1.0) * r * 0.75, (_hash(i + 19, seed) * 2.0 - 1.0) * r * 0.5 - ph * 22.0)
+		ci.draw_circle(p, 1.3, Color(1.0, 0.55 + 0.35 * ph, 0.2, (1.0 - ph) * (0.3 + 0.7 * f)))
+
+
+## Bomb: a lit bomb is lobbed in, its shadow growing, while ten rim segments count down.
+static func _warn_bomb(ci: CanvasItem, r: float, f: float, tint: Color, tm: float) -> void:
+	var n := 10
+	var lit := int(f * float(n))
 	for i in n:
-		var ang := float(i) / float(n) * TAU + 0.2
-		var d := Vector2.from_angle(ang)
+		var a0 := -PI / 2.0 + float(i) / float(n) * TAU + 0.06
+		var a1 := a0 + TAU / float(n) - 0.12
+		var on := i < lit
+		var col := Color(1.0, 0.75, 0.3, 0.95) if on else Color(EN_DARK, 0.55)
+		if i == lit:
+			col = Color(1.0, 0.45, 0.15, 0.5 + 0.5 * sin(tm * 30.0))
+		ci.draw_arc(Vector2.ZERO, r - 3.0, a0, a1, 5, col, 4.0)
+	# a heartbeat ring that ticks faster and faster
+	var ph := fposmod(tm * (1.2 + 6.0 * f), 1.0)
+	ci.draw_arc(Vector2.ZERO, r * (0.25 + 0.65 * ph), 0.0, TAU, 32, Color(tint, 0.45 * (1.0 - ph)), 2.0)
+	# the bomb flying in on a lob from the upper left, and its shadow on the ground
+	var g := Vector2(-r * 1.3, r * 0.15).lerp(Vector2.ZERO, f)
+	var h := sin(f * PI) * r * 1.4 + (1.0 - f) * r * 0.3
+	ci.draw_set_transform(g, 0.0, Vector2(1.0, 0.5))
+	ci.draw_circle(Vector2.ZERO, 4.0 + 6.0 * f, Color(0.0, 0.0, 0.0, 0.25 + 0.25 * f))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var b := g - Vector2(0.0, h)
+	ci.draw_circle(b, 6.0, Color(0.13, 0.11, 0.14))
+	ci.draw_circle(b + Vector2(-2.0, -2.0), 2.0, Color(0.5, 0.48, 0.55))
+	var fuse := b + Vector2(3.5, -6.5)
+	ci.draw_line(b + Vector2(2.0, -4.5), fuse, Color(0.6, 0.45, 0.3), 1.5)
+	ci.draw_circle(fuse, 2.5 + sin(tm * 40.0), Color(1.0, 0.85, 0.3))
+
+
+## Meteor: a burning star falls from the sky; its shadow grows and a heat ring closes in on the rim.
+static func _warn_meteor(ci: CanvasItem, r: float, f: float, tint: Color, tm: float, seed: float) -> void:
+	var close := pow(1.0 - f, 1.5)
+	for k in 2:
+		var rr := r * (1.0 + (0.7 + 0.35 * float(k)) * close)
+		ci.draw_arc(Vector2.ZERO, rr, 0.0, TAU, 40, Color(1.0, 0.45, 0.15, (0.25 + 0.6 * f) * (1.0 - 0.5 * float(k))), 2.2 - 0.8 * float(k))
+	# the shadow of the falling star, darker and wider as it nears
+	ci.draw_circle(Vector2.ZERO, r * (0.15 + 0.55 * f), Color(0.05, 0.0, 0.02, 0.18 + 0.3 * f))
+	ci.draw_circle(Vector2.ZERO, r * 0.3 * f, Color(1.0, 0.5, 0.15, 0.25 * f))
+	# the star itself, plunging down at a slant with a long fiery tail
+	var fall := f * f
+	var p := Vector2(r * 0.8, -210.0).lerp(Vector2.ZERO, fall)
+	var back := Vector2(r * 0.8, -210.0).normalized()
+	var tail := 40.0 + 50.0 * f
+	ci.draw_line(p, p + back * tail, Color(1.0, 0.35, 0.1, 0.35), 9.0)
+	ci.draw_line(p, p + back * tail * 0.7, Color(1.0, 0.7, 0.25, 0.7), 4.5)
+	ci.draw_line(p, p + back * tail * 0.4, Color(1.0, 0.97, 0.8, 0.95), 2.0)
+	for k in 4:
+		var u := fposmod(tm * 2.5 + float(k) * 0.25, 1.0)
+		ci.draw_circle(p + back * tail * (0.3 + u) + back.orthogonal() * (_hash(k, seed) * 2.0 - 1.0) * 6.0, 1.6 * (1.0 - u) + 0.4, Color(1.0, 0.7, 0.3, 1.0 - u))
+	ci.draw_circle(p, 7.0, Color(1.0, 0.45, 0.15, 0.6))
+	ci.draw_circle(p, 4.5, Color(1.0, 0.8, 0.35))
+	ci.draw_circle(p, 2.5, Color(1.0, 1.0, 0.9))
+
+
+## Slam: the ground cracks open from the middle, the cracks reaching the rim as the blow lands.
+static func _warn_slam(ci: CanvasItem, r: float, f: float, tint: Color, seed: float) -> void:
+	ci.draw_circle(Vector2.ZERO, r * f, Color(0.4, 0.26, 0.1, 0.22))
+	var n := 9
+	for i in n:
+		var ang := float(i) / float(n) * TAU + (_hash(i, seed) - 0.5) * 0.5
+		var tip := Vector2.from_angle(ang) * r * (0.6 + 0.4 * _hash(i + 30, seed))
+		var pts := _zigzag(Vector2.ZERO, tip, 5, r * 0.13, seed + float(i))
+		var reach := clampf(f * 1.15 - 0.05 * _hash(i + 50, seed), 0.0, 1.0)
+		var glow := Color(tint.lerp(Color(1.0, 0.55, 0.2), 0.5).lightened(0.2), 0.45 + 0.55 * f)
+		_partial_line(ci, pts, reach, Color(0.1, 0.05, 0.02, 0.85), 4.0)
+		_partial_line(ci, pts, reach, glow, 1.6)
+		# a side fork splits off the middle of the crack, so they read as broken ground, not spokes
+		if reach > 0.45:
+			var sgn := 1.0 if _hash(i + 70, seed) > 0.5 else -1.0
+			var fork := _zigzag(pts[2], pts[2] + Vector2.from_angle(ang + sgn * 0.7) * r * 0.35, 3, r * 0.05, seed + 40.0 + float(i))
+			var fr := (reach - 0.45) / 0.55
+			_partial_line(ci, fork, fr, Color(0.1, 0.05, 0.02, 0.8), 3.0)
+			_partial_line(ci, fork, fr, glow, 1.1)
+		# a puff of dust where each crack is tearing
+		var tp := Vector2.ZERO.lerp(tip, reach)
+		ci.draw_circle(tp, 2.0 + 2.0 * f, Color(0.75, 0.62, 0.45, 0.35 * (1.0 - f * 0.5)))
+
+
+## Nova: light is sucked in from the rim in ever faster ripples and gathers into a burning core.
+static func _warn_nova(ci: CanvasItem, r: float, f: float, tint: Color, tm: float) -> void:
+	var ring_col := tint.lerp(EN_RIM, 0.35)
+	ci.draw_circle(Vector2.ZERO, r * f, Color(tint, 0.1))
+	for k in 3:
+		var ph := fposmod(tm * (0.8 + 2.2 * f) + float(k) / 3.0, 1.0)
+		ci.draw_arc(Vector2.ZERO, r * (1.0 - ph), 0.0, TAU, 36, Color(ring_col.lightened(0.2), 0.8 * ph), 2.2)
+	for i in 12:
+		var ph := fposmod(tm * 1.1 + float(i) * 0.37, 1.0)
+		var p := Vector2.from_angle(float(i) * 0.524 + ph * 1.4) * r * (1.0 - ph)
+		ci.draw_circle(p, 2.0, Color(tint.lightened(0.3), 0.95 * ph))
+	# inward thorns along the rim, sharpening as the burst nears
+	for i in 16:
+		var d := Vector2.from_angle(float(i) / 16.0 * TAU + 0.1)
+		_tri(ci, d * r + d.orthogonal() * 4.0, d * r - d.orthogonal() * 4.0, d * (r - 6.0 - 8.0 * f), Color(ring_col, 0.85))
+	ci.draw_circle(Vector2.ZERO, 4.0 + 9.0 * f, Color(EN_RIM, 0.35))
+	ci.draw_circle(Vector2.ZERO, 3.0 + 6.0 * f, Color(tint.lightened(0.4), 0.9))
+
+
+## Smite: a lightning lock closes on the spot, static crawls on the rim and leaders flicker down.
+static func _warn_smite(ci: CanvasItem, r: float, f: float, tint: Color, tm: float, seed: float) -> void:
+	var col := Color(0.75, 0.85, 1.0).lerp(tint, 0.5)
+	var rr := r * (1.0 + 0.9 * pow(1.0 - f, 1.4))
+	for k in 3:
+		var a0 := tm * 2.0 + float(k) * TAU / 3.0
+		ci.draw_arc(Vector2.ZERO, rr, a0, a0 + 1.1, 10, Color(EN_RIM, 0.7), 3.0)
+		ci.draw_arc(Vector2.ZERO, rr, a0, a0 + 1.1, 10, Color(col, 0.9), 1.2)
+	var tick := int(tm * 18.0)
+	# static sparks crawling along the rim
+	for k in 4:
+		var a := _hash(tick * 7 + k, seed) * TAU
+		var p0 := Vector2.from_angle(a) * r
+		ci.draw_polyline(_zigzag(p0, p0 + Vector2.from_angle(a + 2.0) * 7.0, 3, 2.5, float(tick + k)), Color(col, 0.8), 1.0)
+	# a faint leader flickers down from the sky, more often near the strike
+	if _hash(tick, seed + 3.0) < 0.25 + 0.6 * f:
+		var top := Vector2((_hash(tick, seed) - 0.5) * 40.0, -240.0)
+		ci.draw_polyline(_zigzag(top, Vector2.ZERO, 8, 10.0, float(tick) + seed), Color(col, 0.18 + 0.3 * f), 1.2)
+	ci.draw_circle(Vector2.ZERO, r * 0.25 * f + 2.0, Color(col, 0.5 + 0.4 * f))
+
+
+## Judgment: a holy seal draws itself on the ground under a column of light that narrows onto it.
+static func _warn_judgment(ci: CanvasItem, r: float, f: float, tint: Color, tm: float) -> void:
+	var gold := tint.lerp(Color(1.0, 0.85, 0.4), 0.3)
+	# the light column from the heavens, narrowing and brightening
+	var w := r * (1.1 - 0.5 * f)
+	var top := -260.0
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(-w * 0.35, top), Vector2(w * 0.35, top), Vector2(w, 0.0), Vector2(-w, 0.0)]), Color(gold, 0.03 + 0.07 * f))
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(-w * 0.12, top), Vector2(w * 0.12, top), Vector2(w * 0.35, 0.0), Vector2(-w * 0.35, 0.0)]), Color(1.0, 1.0, 0.9, 0.03 + 0.1 * f))
+	# the seal: two rings and an eight-pointed star, slowly turning
+	var rot := tm * 0.25
+	var sweep := minf(f * 1.5, 1.0) * TAU
+	ci.draw_arc(Vector2.ZERO, r * 0.88, rot, rot + sweep, 40, Color(gold, 0.8), 1.4)
+	ci.draw_arc(Vector2.ZERO, r * 0.66, -rot, -rot - sweep, 32, Color(gold, 0.6), 1.0)
+	for sq in 2:
+		var pts := PackedVector2Array()
+		for k in 5:
+			pts.append(Vector2.from_angle(rot + float(sq) * PI / 4.0 + float(k) * PI / 2.0) * r * 0.64)
+		_partial_line(ci, pts, f * 1.3 - 0.15 * float(sq), Color(gold, 0.7), 1.2)
+	# rune marks between the rings, lighting one after another
+	var n := 12
+	for i in mini(int(f * float(n) + 0.5), n):
+		var d := Vector2.from_angle(rot + (float(i) + 0.5) / float(n) * TAU)
+		ci.draw_line(d * r * 0.7, d * r * 0.84, Color(1.0, 0.97, 0.8, 0.9), 1.6)
+	# motes of light drifting down the column
+	for k in 4:
+		var u := fposmod(tm * 0.7 + float(k) * 0.25, 1.0)
+		ci.draw_circle(Vector2((float(k) - 1.5) * w * 0.35, top * (1.0 - u)), 1.5, Color(1.0, 1.0, 0.85, 0.7 * u))
+
+
+## Shadow: a pool of darkness seeps outward while tendrils reach in from the rim.
+static func _warn_shadow(ci: CanvasItem, r: float, f: float, tint: Color, tm: float, seed: float) -> void:
+	var pr := r * (0.2 + 0.8 * f)
+	var n := 18
+	var prev := Vector2.ZERO
+	for i in n + 1:
+		var a := float(i % n) / float(n) * TAU
+		var p := Vector2.from_angle(a) * pr * (0.88 + 0.12 * sin(tm * 3.0 + float(i % n) * 1.7))
+		if i > 0:
+			_tri(ci, Vector2.ZERO, prev, p, Color(0.07, 0.01, 0.12, 0.62))
+		prev = p
+	ci.draw_arc(Vector2.ZERO, pr * 0.93, 0.0, TAU, 32, Color(tint.lightened(0.15), 0.75), 1.8)
+	# tendrils crawling in from the rim
+	for k in 6:
+		var a := float(k) / 6.0 * TAU + _hash(k, seed) * 0.6
+		var pts := PackedVector2Array()
+		for j in 6:
+			var u := float(j) / 5.0
+			var rr := r * (1.0 - 0.55 * f * u)
+			pts.append(Vector2.from_angle(a + sin(tm * 4.0 + float(j) * 0.9 + float(k)) * 0.12 * u) * rr)
+		ci.draw_polyline(pts, Color(0.08, 0.01, 0.12, 0.9), 4.0)
+		ci.draw_polyline(pts, Color(tint.lightened(0.35), 0.9), 1.4)
+	# violet motes sinking into the pool
+	for i in 8:
+		var ph := fposmod(tm * 0.8 + _hash(i, seed), 1.0)
+		var p := Vector2.from_angle(_hash(i + 11, seed) * TAU) * r * (0.9 - 0.7 * ph)
+		ci.draw_circle(p, 1.4, Color(tint.lightened(0.35), 0.8 * (1.0 - ph)))
+
+
+## Fallback warning: a crimson rune ring that fills.
+static func _warn_rune(ci: CanvasItem, r: float, f: float, tint: Color, tm: float) -> void:
+	ci.draw_circle(Vector2.ZERO, r * f, Color(EN_RIM, 0.14))
+	for k in 8:
+		var a := tm * 0.8 + float(k) / 8.0 * TAU
+		ci.draw_arc(Vector2.ZERO, r * 0.82, a, a + 0.45, 6, Color(tint.lerp(EN_RIM, 0.5), 0.8), 2.0)
+
+
+## Fire bursts: flame tongues, a hot core and rolling smoke; the bomb adds flying debris.
+static func _burst_fire(ci: CanvasItem, r: float, st: float, tint: Color, seed: float, debris: bool) -> void:
+	var e := _ease_out(st)
+	var a := 1.0 - st
+	# rolling smoke: the bomb's is a thick dark cloud, the fireball's a thin haze
+	var puff := 0.6 if debris else 0.4
+	for i in 8:
+		var d := Vector2.from_angle(float(i) * 0.785 + _hash(i, seed))
+		var pr := r * (0.35 + 0.55 * e)
+		ci.draw_circle(d * pr, r * (0.2 + 0.2 * e) * (1.35 if debris else 1.0), Color(0.22, 0.18, 0.18, puff * a))
+	if debris:
+		ci.draw_arc(Vector2.ZERO, r * (0.3 + 0.75 * e), 0.0, TAU, 40, Color(1.0, 0.95, 0.85, 0.9 * a), 3.0)
+	var n := 7 if debris else 12
+	for i in n:
+		var d := Vector2.from_angle(float(i) / float(n) * TAU + _hash(i + 5, seed) * 0.4)
 		var side := d.orthogonal()
-		var len := radius * (0.55 + 0.55 * minf(st * 3.0, 1.0)) * (0.8 + 0.4 * float(i % 3) / 2.0)
-		var w := radius * 0.09
-		ci.draw_colored_polygon(PackedVector2Array([d * len, d * len * 0.35 + side * w, d * len * 0.35 - side * w]), Color(1.0, 0.3 + 0.4 * float(i % 2), 0.2, a * 0.9))
-	ci.draw_circle(Vector2.ZERO, radius * 0.35 * a, Color(1, 0.95, 0.7, a * 0.8))
-	ci.draw_arc(Vector2.ZERO, radius * (0.4 + 0.6 * minf(st * 2.5, 1.0)), 0, TAU, 32, Color(1, 0.4, 0.25, a * 0.8), 3.0)
+		var ln := r * (0.5 + 0.5 * e) * (0.75 + 0.4 * _hash(i + 9, seed))
+		var w := r * 0.13 * (1.0 - 0.5 * st)
+		var col := Color(1.0, 0.35 + 0.45 * float(i % 2), 0.12, a)
+		_tri(ci, d * ln + side * w * 0.4, d * ln * 0.3 + side * w, d * ln * 0.3 - side * w, col)
+		ci.draw_circle(d * ln * 0.35, w, col)
+	ci.draw_circle(Vector2.ZERO, r * 0.55 * (1.0 - 0.5 * st), Color(1.0, 0.55, 0.15, 0.75 * a))
+	ci.draw_circle(Vector2.ZERO, r * 0.35 * (1.0 - st), Color(1.0, 0.95, 0.75, a))
+	ci.draw_arc(Vector2.ZERO, r * e, 0.0, TAU, 40, Color(EN_RIM, 0.8 * a), 2.5)
+	if debris:
+		for i in 9:
+			var d := Vector2.from_angle(_hash(i + 40, seed) * TAU)
+			var p := d * r * (0.2 + 1.0 * e) - Vector2(0.0, sin(st * PI) * 18.0 * _hash(i + 3, seed))
+			var s := 2.5 + 2.0 * _hash(i + 60, seed)
+			_tri(ci, p + Vector2(-s, s * 0.6), p + Vector2(s, s * 0.4), p + Vector2(0.0, -s), Color(0.2, 0.15, 0.13, a))
+
+
+## Meteor impact: a white flash, a fire ring, a crater with glowing cracks and thrown rocks.
+static func _burst_meteor(ci: CanvasItem, r: float, st: float, tint: Color, seed: float) -> void:
+	var e := _ease_out(st)
+	var a := 1.0 - st
+	ci.draw_circle(Vector2.ZERO, r * 0.6, Color(0.08, 0.03, 0.02, 0.55 * a))
+	ci.draw_arc(Vector2.ZERO, r * 0.6, 0.0, TAU, 32, Color(0.5, 0.25, 0.1, 0.8 * a), 2.5)
+	for i in 7:
+		var d := Vector2.from_angle(float(i) / 7.0 * TAU + _hash(i, seed))
+		ci.draw_polyline(_zigzag(d * r * 0.3, d * r * (0.75 + 0.25 * _hash(i + 3, seed)), 3, 4.0, seed + float(i)), Color(1.0, 0.55, 0.15, a), 1.6)
+	ci.draw_circle(Vector2.ZERO, r * e, Color(1.0, 0.45, 0.15, 0.2 * a))
+	ci.draw_arc(Vector2.ZERO, r * e, 0.0, TAU, 44, Color(1.0, 0.7, 0.3, a), 3.5)
+	ci.draw_arc(Vector2.ZERO, r * e * 0.85, 0.0, TAU, 40, Color(EN_RIM, 0.7 * a), 2.0)
+	for i in 10:
+		var d := Vector2.from_angle(_hash(i + 20, seed) * TAU)
+		var p := d * r * (0.3 + 0.9 * e) - Vector2(0.0, sin(st * PI) * 24.0 * _hash(i + 7, seed))
+		var s := 2.0 + 2.5 * _hash(i + 33, seed)
+		_tri(ci, p + Vector2(-s, s), p + Vector2(s, s * 0.6), p + Vector2(0.0, -s), Color(0.35, 0.2, 0.12, a))
+	var fl := clampf(1.0 - st * 3.0, 0.0, 1.0)
+	ci.draw_circle(Vector2.ZERO, r * 0.7 * fl, Color(1.0, 0.95, 0.8, 0.85 * fl))
+
+
+## Slam: a ring of dust rolls out, the cracks flare and stones hop out of the ground.
+static func _burst_slam(ci: CanvasItem, r: float, st: float, tint: Color, seed: float) -> void:
+	var e := _ease_out(st)
+	var a := 1.0 - st
+	for i in 9:
+		var ang := float(i) / 9.0 * TAU + (_hash(i, seed) - 0.5) * 0.5
+		var tip := Vector2.from_angle(ang) * r * (0.6 + 0.4 * _hash(i + 30, seed))
+		var pts := _zigzag(Vector2.ZERO, tip, 5, r * 0.13, seed + float(i))
+		ci.draw_polyline(pts, Color(0.12, 0.06, 0.03, 0.8 * a), 2.8)
+		ci.draw_polyline(pts, Color(1.0, 0.85, 0.5, a), 1.2)
+	for i in 14:
+		var d := Vector2.from_angle(float(i) / 14.0 * TAU + _hash(i + 3, seed) * 0.3)
+		ci.draw_circle(d * r * (0.4 + 0.65 * e), 4.0 + 6.0 * e, Color(0.72, 0.6, 0.42, 0.5 * a))
+	ci.draw_arc(Vector2.ZERO, r * (0.4 + 0.65 * e), 0.0, TAU, 40, Color(tint, 0.8 * a), 2.5)
+	for i in 7:
+		var d := Vector2.from_angle(_hash(i + 70, seed) * TAU)
+		var p := d * r * (0.2 + 0.7 * e) - Vector2(0.0, sin(st * PI) * 14.0)
+		var s := 2.0 + 2.0 * _hash(i + 80, seed)
+		_tri(ci, p + Vector2(-s, s), p + Vector2(s, s), p + Vector2(0.0, -s), Color(0.45, 0.38, 0.3, a))
+
+
+## Nova: a crown of light blades bursts out from the core inside a crimson-gold shock ring.
+static func _burst_nova(ci: CanvasItem, r: float, st: float, tint: Color) -> void:
+	var e := 0.45 + 0.55 * (1.0 - pow(1.0 - st, 3.0))   # starts half way out: the hit is instant
+	var a := 1.0 - st
+	ci.draw_circle(Vector2.ZERO, r * e, Color(tint, 0.18 * a))
+	for i in 16:
+		var d := Vector2.from_angle(float(i) / 16.0 * TAU)
+		var side := d.orthogonal()
+		var r1 := r * e * (0.95 if i % 2 == 0 else 0.75)
+		var r0 := r1 * 0.55
+		_tri(ci, d * r1, d * r0 + side * 3.5, d * r0 - side * 3.5, Color(tint.lightened(0.3), a))
+	ci.draw_arc(Vector2.ZERO, r * e, 0.0, TAU, 48, Color(EN_RIM, 0.85 * a), 3.0)
+	ci.draw_arc(Vector2.ZERO, r * e - 3.0, 0.0, TAU, 48, Color(tint.lightened(0.4), a), 1.5)
+	ci.draw_circle(Vector2.ZERO, r * 0.3 * a, Color(1.0, 1.0, 0.9, a))
+
+
+## Smite: a forked lightning bolt cracks down, flashes the ground and throws sparks.
+static func _burst_smite(ci: CanvasItem, r: float, st: float, tint: Color, seed: float) -> void:
+	var a := 1.0 - st
+	var col := Color(0.75, 0.85, 1.0).lerp(tint, 0.5)
+	var fl := a * (0.7 + 0.3 * sin(st * 60.0))
+	var bolt := _zigzag(Vector2(_hash(1, seed) * 30.0 - 15.0, -260.0), Vector2.ZERO, 9, 14.0, seed)
+	ci.draw_polyline(bolt, Color(col, 0.35 * fl), 8.0)
+	ci.draw_polyline(bolt, Color(col.lightened(0.3), 0.8 * fl), 3.5)
+	ci.draw_polyline(bolt, Color(1, 1, 1, fl), 1.5)
+	for k in 2:
+		var from := bolt[3 + k * 3]
+		ci.draw_polyline(_zigzag(from, from + Vector2(-30.0 + 60.0 * float(k), 30.0), 3, 5.0, seed + 9.0 + float(k)), Color(col.lightened(0.3), 0.7 * fl), 1.2)
+	ci.draw_circle(Vector2.ZERO, r * (0.6 + 0.4 * st), Color(col, 0.3 * a))
+	ci.draw_circle(Vector2.ZERO, r * 0.45 * a, Color(1, 1, 1, a))
+	ci.draw_arc(Vector2.ZERO, r * (0.5 + 0.6 * _ease_out(st)), 0.0, TAU, 28, Color(EN_RIM, 0.8 * a), 2.0)
+	for i in 8:
+		var d := Vector2.from_angle(float(i) / 8.0 * TAU + _hash(i, seed))
+		var p := d * r * (0.3 + 0.9 * _ease_out(st))
+		ci.draw_line(p, p - d * 5.0, Color(1.0, 1.0, 0.85, a), 1.4)
+
+
+## Judgment: a pillar of light slams onto the seal, which flashes out in a ring of rays.
+static func _burst_judgment(ci: CanvasItem, r: float, st: float, tint: Color) -> void:
+	var e := _ease_out(st)
+	var a := 1.0 - st
+	var gold := tint.lerp(Color(1.0, 0.85, 0.4), 0.3)
+	var w := r * 0.55 * (1.0 - 0.7 * st)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(-w * 0.5, -280.0), Vector2(w * 0.5, -280.0), Vector2(w, 0.0), Vector2(-w, 0.0)]), Color(1.0, 0.97, 0.8, 0.55 * a))
+	ci.draw_circle(Vector2.ZERO, r * (0.5 + 0.5 * e), Color(gold, 0.25 * a))
+	ci.draw_arc(Vector2.ZERO, r * e, 0.0, TAU, 48, Color(EN_RIM, 0.8 * a), 3.0)
+	ci.draw_arc(Vector2.ZERO, r * e * 0.9, 0.0, TAU, 48, Color(gold, a), 2.0)
+	for i in 12:
+		var d := Vector2.from_angle(float(i) / 12.0 * TAU + 0.26)
+		ci.draw_line(d * r * 0.3 * (1.0 + e), d * r * (0.6 + 0.5 * e), Color(1.0, 0.97, 0.8, a), 2.0)
+	ci.draw_circle(Vector2.ZERO, r * 0.35 * a, Color(1, 1, 1, a))
+
+
+## Shadow: black thorns tear up out of the pool, with a violet edge, then sink back.
+static func _burst_shadow(ci: CanvasItem, r: float, st: float, tint: Color, seed: float) -> void:
+	var e := _ease_out(minf(st * 1.6, 1.0))
+	var a := 1.0 - st
+	ci.draw_circle(Vector2.ZERO, r * (0.9 + 0.1 * e), Color(0.08, 0.02, 0.12, 0.45 * a))
+	var n := 14
+	for i in n:
+		var d := Vector2.from_angle(float(i) / float(n) * TAU + _hash(i, seed) * 0.3)
+		var side := d.orthogonal()
+		var base := d * r * (0.15 + 0.35 * _hash(i + 4, seed))
+		var tip := base + (d * 0.8 + side * (_hash(i + 8, seed) - 0.5) * 0.6).normalized() * r * (0.35 + 0.5 * e) * (0.7 + 0.3 * _hash(i + 2, seed))
+		var w := r * 0.07
+		_tri(ci, tip, base + side * w, base - side * w, Color(0.06, 0.01, 0.1, a))
+		ci.draw_polyline(PackedVector2Array([base + side * w, tip, base - side * w]), Color(tint.lightened(0.25), a), 1.2)
+	ci.draw_arc(Vector2.ZERO, r * e, 0.0, TAU, 40, Color(tint, 0.8 * a), 2.0)
+	ci.draw_arc(Vector2.ZERO, r * e + 2.5, 0.0, TAU, 40, Color(EN_RIM, 0.6 * a), 1.5)
+
+
+## The mark every enemy projectile carries: a dark shadow halo, a tapering crimson tail and a
+## pulsing crimson ring, so it never looks like 小怪's own glowing bolts.
+static func draw_enemy_bolt_mark(ci: CanvasItem, dir: Vector2, radius: float, tint: Color) -> void:
+	var side := dir.orthogonal()
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.015)
+	ci.draw_circle(Vector2.ZERO, radius * 2.4, Color(EN_DARK, 0.28))
+	_tri(ci, side * radius * 0.9, -side * radius * 0.9, -dir * radius * 7.0, Color(EN_RIM, 0.4))
+	_tri(ci, side * radius * 0.45, -side * radius * 0.45, -dir * radius * 4.5, Color(EN_RIM.lerp(tint, 0.45).lightened(0.25), 0.55))
+	ci.draw_arc(Vector2.ZERO, radius * (1.9 + 0.3 * pulse), 0.0, TAU, 16, Color(EN_RIM, 0.4 + 0.35 * pulse), 1.4)
 
 
 # --- polish shared by every skill of 小怪: soft glows, sparkle trails, shockwaves and rays ---
