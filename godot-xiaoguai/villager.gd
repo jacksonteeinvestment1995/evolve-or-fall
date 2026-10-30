@@ -201,7 +201,7 @@ func _rival_flee(delta: float) -> Vector2:
 		say("Now I am back!", 1.6)
 	if not fleeing:
 		return Vector2.ZERO
-	_flee_heal += max_hp * 0.05 * delta
+	_flee_heal += max_hp * 0.025 * delta   # 2.5% of its health a second while it runs (it used to be 5%)
 	if _flee_heal >= 1.0:
 		var whole := int(_flee_heal)
 		_flee_heal -= whole
