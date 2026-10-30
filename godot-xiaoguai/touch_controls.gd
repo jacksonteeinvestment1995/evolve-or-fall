@@ -38,10 +38,10 @@ const BUTTONS := [
 ## Where each button sits: [screen anchor (0..1), offset in layout pixels]. The combat buttons arc around LUNGE in the
 ## bottom right corner; on a wide screen SWAP and REMOVE move up beside the minimap, where there is room.
 const PLACE_TALL := {
-	"roll": [Vector2(1, 1), Vector2(-92, -176)], "sprint": [Vector2(1, 1), Vector2(-224, -170)],
-	"build": [Vector2(1, 1), Vector2(-190, -272)], "switch": [Vector2(1, 1), Vector2(-44, -312)],
-	"remove": [Vector2(1, 1), Vector2(-114, -312)],
-	"restart": [Vector2(0.5, 0.62), Vector2.ZERO], "help": [Vector2(1, 0), Vector2(-26, 200)], "stick": [Vector2(0, 1), Vector2(84, -230)],
+	"roll": [Vector2(1, 1), Vector2(-92, -108)], "sprint": [Vector2(1, 1), Vector2(-224, -100)],
+	"build": [Vector2(1, 1), Vector2(-190, -204)], "switch": [Vector2(1, 1), Vector2(-44, -244)],
+	"remove": [Vector2(1, 1), Vector2(-114, -244)],
+	"restart": [Vector2(0.5, 0.62), Vector2.ZERO], "help": [Vector2(1, 0), Vector2(-26, 200)], "stick": [Vector2(0, 1), Vector2(84, -150)],
 }
 const PLACE_WIDE := {
 	"roll": [Vector2(1, 1), Vector2(-60, -62)], "sprint": [Vector2(1, 1), Vector2(-150, -62)],

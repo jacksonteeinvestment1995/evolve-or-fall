@@ -20,6 +20,12 @@ const TRACKS := {
 	"dk_nene6": {"loop": "res://audio/music/dk_nene6.ogg", "title": "Boss Battle #6 Metal", "by": "nene (CC0)"},
 	"dk_metal_chromatic": {"loop": "res://audio/music/dk_metal_chromatic.ogg", "title": "Metal (Chromatic, Electronic)", "by": "Pro Sensory (CC0)"},
 	"dk_davieplier": {"loop": "res://audio/music/dk_davieplier.ogg", "title": "Heavy battle music", "by": "Davieplier (CC0)"},
+	# more everyday fighting music (all CC0 from opengameart.org), so every run can open with a different tune
+	"ng_battle_a": {"loop": "res://audio/music/ng_battle_a.ogg", "title": "Battle Theme A", "by": "cynicmusic (CC0)"},
+	"ng_pursuit": {"loop": "res://audio/music/ng_pursuit.ogg", "title": "Determined Pursuit", "by": "Emma_MA (CC0)"},
+	"ng_serpents": {"loop": "res://audio/music/ng_serpents.ogg", "title": "Ancient Power of Serpents", "by": "Kevin MacLeod (CC0)"},
+	"ng_legend": {"loop": "res://audio/music/ng_legend.ogg", "title": "A Legend Will Rise", "by": "CodeManu (CC0)"},
+	"ng_unexplored": {"loop": "res://audio/music/ng_unexplored.ogg", "title": "Unexplored", "by": "Bo Jingles and TAD (CC0)"},
 	# situational tracks, made in code (synth_music.gd) and rendered to small ogg files in audio/synth/, so they need no licence
 	"peace": {"loop": "res://audio/synth/peace.ogg", "title": "Quiet Meadow", "by": "generated in-game"},
 	"danger": {"loop": "res://audio/synth/danger.ogg", "title": "Heartbeat", "by": "generated in-game"},
@@ -36,9 +42,9 @@ const FADE_SECONDS := 1.5
 ## Each track plays for about a minute (looping as often as it needs to) before the next one in the pool.
 const TRACK_SECONDS := 60.0
 const POOLS := {
-	"early": ["battle1", "dk_davieplier", "dk_metal_chromatic", "dk_nene7"],
-	"mid": ["battle2", "dk_heavy_battle_1", "dk_nene6"],
-	"late": ["battle3", "dk_heavy_battle_2", "dk_heavy_boss_1", "dk_nene8"],
+	"early": ["battle1", "dk_davieplier", "dk_metal_chromatic", "dk_nene7", "ng_legend", "ng_unexplored"],
+	"mid": ["battle2", "dk_heavy_battle_1", "dk_nene6", "ng_battle_a", "ng_pursuit"],
+	"late": ["battle3", "dk_heavy_battle_2", "dk_heavy_boss_1", "dk_nene8", "ng_serpents"],
 	"night": ["night", "dk_heavy_boss_2", "dk_nene9"],
 }
 
@@ -47,6 +53,7 @@ var volume_db := -11.0
 var current := ""
 var pool_name := ""      ## the pool being played ("" for a single situational track)
 var pool_index := 0
+var random_start := false   ## a real run starts each pool on a random track, so every launch sounds different
 var track_time := 0.0    ## seconds the current pool track has been playing
 var _last_pos := 0.0
 var _front: AudioStreamPlayer
@@ -59,6 +66,7 @@ func _ready() -> void:
 	_back = AudioStreamPlayer.new()
 	add_child(_front)
 	add_child(_back)
+	random_start = DisplayServer.get_name() != "headless" and not Engine.has_meta("deterministic_map")
 	_fetch_music_pack()
 
 
@@ -80,6 +88,8 @@ func _fetch_music_pack() -> void:
 				f.store_buffer(body)
 				f.close()
 				pack_loaded = ProjectSettings.load_resource_pack("user://" + MUSIC_PACK)
+				if pack_loaded:
+					_retry_pool()
 		if not pack_loaded:
 			push_warning("Music pack could not be loaded (%d/%d)" % [result, code])
 		http.queue_free())
@@ -87,6 +97,14 @@ func _fetch_music_pack() -> void:
 	var href := str(JavaScriptBridge.get_interface("location").href).split("?")[0].split("#")[0]
 	var base := href.trim_suffix("/") if href.ends_with("/") else href.get_base_dir()
 	http.request(base + "/" + MUSIC_PACK)
+
+
+## The pack just arrived: if the small stand-in track is playing for a pool, switch to the track the pool really wanted.
+func _retry_pool() -> void:
+	if pool_name != "" and current == FIRST_TRACK and POOLS[pool_name][pool_index] != FIRST_TRACK:
+		var want: String = POOLS[pool_name][pool_index]
+		current = ""
+		play_track(want)
 
 
 ## "Title, by Composer (license)" for the track playing now, or "".
@@ -176,10 +194,10 @@ func play_pool(name: String) -> void:
 	if pool_name == name and POOLS[name].has(current):
 		return
 	pool_name = name
-	pool_index = 0
+	pool_index = randi() % POOLS[name].size() if random_start else 0
 	track_time = 0.0
 	_last_pos = 0.0
-	play_track(POOLS[name][0])
+	play_track(POOLS[name][pool_index])
 
 
 ## A single track outside the pools (events, danger, the final form...).

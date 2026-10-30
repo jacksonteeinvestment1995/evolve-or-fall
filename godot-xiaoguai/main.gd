@@ -371,7 +371,7 @@ func hud_rects() -> Array:
 	if skillbar != null and skillbar.used_height() > 0.0:
 		var sr: Rect2 = skillbar.get_global_rect()
 		out.append(Rect2(sr.position.x, sr.end.y - skillbar.used_height() if not skillbar.from_top else sr.position.y, sr.size.x, skillbar.used_height()))
-	if hotbar_bar != null:
+	if hotbar_bar != null and hotbar_bar.visible:
 		out.append(hotbar_bar.get_global_rect())
 	for c in hud.get_parent().get_children():
 		if c.get_script() != null and str(c.get_script().resource_path).ends_with("boss_bar.gd") and c.visible:
