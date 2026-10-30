@@ -539,8 +539,8 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 	var aim := to.normalized()
 	var dmg := effective_damage()
 	if hero_rival:
-		# its skills grow with its level, gently; the ranged ones (bolts, blasts) hit a further 30% softer
-		dmg = ceili(dmg * (0.8 + 0.03 * rival_level) * (0.7 if RIVAL_RANGED.has(id) else 1.0))
+		# its skills grow with its level, gently; the ranged ones (bolts, blasts) hit a further 45% softer
+		dmg = ceili(dmg * (0.8 + 0.03 * rival_level) * (0.55 if RIVAL_RANGED.has(id) else 1.0))
 	var fired := false
 	match id:
 		"frost_shards":
@@ -556,12 +556,12 @@ func use_skill_id(id: String, target, dist: float) -> bool:
 				fired = true
 		"spirit_lance":
 			if dist < 520.0 and los:
-				_spawn_bolt(aim, 520.0, maxi(1, roundi(dmg * 2.2)), Color("ffe680"), "", true, 1.1, "spear")
+				_spawn_bolt(aim, 520.0, maxi(1, roundi(dmg * 1.4)), Color("ffe680"), "", true, 1.1, "spear")
 				cast_color = Color("ffe680")
 				fired = true
 		"meteor_call":
 			if dist < 440.0:
-				_spawn_zone(target.global_position + target.velocity * 0.4, 58.0, 1.0, maxi(1, roundi(dmg * 3.0)), Color(1.0, 0.5, 0.2), "fx_fireball_explosion", "meteor")
+				_spawn_zone(target.global_position + target.velocity * 0.4, 58.0, 1.0, maxi(1, roundi(dmg * 2.0)), Color(1.0, 0.5, 0.2), "fx_fireball_explosion", "meteor")
 				cast_color = Color(1.0, 0.5, 0.2)
 				fired = true
 		"chain_zap":
