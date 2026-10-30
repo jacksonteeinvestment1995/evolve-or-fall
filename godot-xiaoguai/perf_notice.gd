@@ -30,9 +30,20 @@ func _ready() -> void:
 func enabled() -> bool:
 	if Engine.has_meta("perf_notice"):
 		return true
-	if DisplayServer.get_name() == "headless" or not OS.has_feature("web"):
+	if DisplayServer.get_name() == "headless" or not OS.has_feature("web") or is_phone():
 		return false
 	return not FileAccess.file_exists(SEEN_FILE)
+
+
+## Phone and tablet browsers do not have this problem (and have no such setting), so they never get the notice.
+static func is_phone() -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var ua := str(JavaScriptBridge.get_interface("navigator").userAgent)
+	for k in ["Mobi", "Android", "iPhone", "iPad"]:
+		if ua.contains(k):
+			return true
+	return false
 
 
 static func software_renderer(adapter: String) -> bool:
@@ -79,8 +90,8 @@ func show_notice() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
-	box.add_child(_label("Game slow?", 22, Color("ffd84a")))
-	var body := _label("Turn on graphics acceleration.\nTap COPY, open a new tab, paste the link, switch it on, restart the browser.", 16, Color(1, 1, 1, 0.92))
+	box.add_child(_label("Slow game?", 22, Color("ffd84a")))
+	var body := _label("Turn on graphics acceleration:\ncopy the link, paste it in a new tab.", 16, Color(1, 1, 1, 0.92))
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.custom_minimum_size = Vector2(minf(380.0, get_viewport_rect().size.x - 60.0), 0)
 	box.add_child(body)
@@ -109,7 +120,7 @@ func settings_link() -> String:
 func copy_link() -> void:
 	DisplayServer.clipboard_set(settings_link())
 	if copy_button != null:
-		copy_button.text = "COPIED - paste in new tab"
+		copy_button.text = "COPIED"
 
 
 func _button(text: String) -> Button:
