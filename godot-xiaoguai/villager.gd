@@ -163,7 +163,8 @@ func _ready() -> void:
 
 
 ## Make this villager the rival hero at a level: its line, form, stats and skills come from the rival's state.
-func setup_rival(line_idx: int, level: int, form_stage: int, skills: Array, full_heal: bool = true) -> void:
+## specials: how many special picks (every 12th level) it has taken: each adds 30% max HP and 25% bite damage.
+func setup_rival(line_idx: int, level: int, form_stage: int, skills: Array, full_heal: bool = true, specials: int = 0) -> void:
 	hero_rival = true
 	rival_line = line_idx
 	rival_level = level
@@ -172,9 +173,9 @@ func setup_rival(line_idx: int, level: int, form_stage: int, skills: Array, full
 	var fam: Dictionary = LinesRef.FAMILIES[LinesRef.LINES[line_idx]["family"]]
 	var forms: Array = LinesRef.LINES[line_idx]["forms"]
 	var frac := float(hp) / float(maxi(max_hp, 1)) if max_hp > 1 and not full_heal else 1.0
-	max_hp = ceili(RIVAL_HP[form_stage] * 25.0 * float(fam["hp"]))
+	max_hp = ceili(RIVAL_HP[form_stage] * 25.0 * float(fam["hp"]) * (1.0 + 0.3 * specials))
 	hp = clampi(roundi(max_hp * frac), 1, max_hp)
-	damage = maxi(1, roundi(RIVAL_BITE[form_stage] * 0.7 * float(fam["dmg"])))
+	damage = maxi(1, roundi(RIVAL_BITE[form_stage] * 0.7 * float(fam["dmg"]) * (1.0 + 0.25 * specials)))
 	speed = (72.0 + 5.0 * form_stage) * float(fam["spd"])
 	xp_value = 30 + level * 8
 	bones_value = 20

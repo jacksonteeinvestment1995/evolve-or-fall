@@ -146,7 +146,7 @@ var ambient: Node2D
 var _chaser_t := 0.0
 var start_pit: Node2D
 ## The rival's state outlives its body: it keeps its line, EXP, level and skills across respawns.
-var rival := {"line": -1, "xp": 0, "level": 1, "skills": [], "node": null, "respawn": -1.0, "falls": 0, "duel": false, "skip_xp": false}
+var rival := {"line": -1, "xp": 0, "level": 1, "skills": [], "specials": 0, "node": null, "respawn": -1.0, "falls": 0, "duel": false, "skip_xp": false}
 var perk_every := PerksData.PERK_EVERY   ## a perk card pick every this many levels (the tests turn it off)
 var touch_mode := false   ## the on-screen controls are showing: walk with the stick, build in front of 小怪
 var banner: Label
@@ -2305,7 +2305,7 @@ func rival_stage() -> int:
 
 
 func _refresh_rival(v, full_heal: bool) -> void:
-	v.setup_rival(int(rival["line"]), int(rival["level"]), rival_stage(), rival["skills"], full_heal)
+	v.setup_rival(int(rival["line"]), int(rival["level"]), rival_stage(), rival["skills"], full_heal, int(rival["specials"]))
 
 
 ## Everything 小怪 defeats feeds the rival: it absorbs RIVAL_ABSORB (40%) of that EXP.
@@ -2318,7 +2318,11 @@ func rival_gain(xp: int) -> void:
 	while int(rival["level"]) < PlayerScript.MAX_LEVEL and int(rival["xp"]) >= PlayerScript.xp_for_level(int(rival["level"]) + 1):
 		rival["level"] = int(rival["level"]) + 1
 		grew = true
-		if int(rival["level"]) % 2 == 0 and rival["skills"].size() < 12:
+		# like 小怪: a normal skill every 3rd level, and every 12th level a special pick INSTEAD of the skill
+		var lv := int(rival["level"])
+		if lv % PlayerScript.SPECIAL_EVERY == 0:
+			rival["specials"] = int(rival["specials"]) + 1
+		elif lv % PlayerScript.SKILL_EVERY == 0 and rival["skills"].size() < 12:
 			var open: Array = RIVAL_SKILL_POOL.filter(func(id): return not rival["skills"].has(id))
 			if not open.is_empty():
 				rival["skills"].append(open[rng.randi_range(0, open.size() - 1)])

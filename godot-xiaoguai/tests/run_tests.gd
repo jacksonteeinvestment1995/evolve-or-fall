@@ -2623,6 +2623,14 @@ func _init() -> void:
 	check("the rival can cast all five long-range skills at 小怪", rv_cast == 5, "%d of 5" % rv_cast)
 	rv_caster.queue_free()
 	var fresh_rival: int = rv_main.rival["skills"].size()
+	# the rival levels like 小怪: a skill every 3rd level, a special (not a skill) every 12th
+	var pace := {"line": 0, "xp": 0, "level": 1, "skills": [], "specials": 0, "node": null}
+	var saved_rival: Dictionary = rv_main.rival.duplicate()
+	rv_main.rival = pace
+	var need12: int = rv_main.PlayerScript.xp_for_level(12)
+	rv_main.rival_gain(ceili(need12 / rv_main.RIVAL_ABSORB) + 5)
+	check("rival: level 12 = 3 skills (levels 3, 6, 9) and one special", int(pace["level"]) == 12 and pace["skills"].size() == 3 and int(pace["specials"]) == 1, "level %d skills %d specials %d" % [int(pace["level"]), pace["skills"].size(), int(pace["specials"])])
+	rv_main.rival = saved_rival
 	check("the rival knows at least two skills from the start of a run", fresh_rival >= 2 or int(rv_main.rival["level"]) > 1)
 	var rv_xp0: int = int(rv_main.rival["xp"])
 	rv.take_hit(99999999, Vector2.RIGHT, false)
