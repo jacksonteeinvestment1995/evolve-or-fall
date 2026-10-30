@@ -155,6 +155,7 @@ var notice: Label
 var evo_timer := 0.0
 var notice_timer := 0.0
 var game_over := false
+var over_at_ms := 0          ## when the run ended
 var menu_layer: CanvasLayer
 var menu_root: Control
 var menu_open := false
@@ -2151,6 +2152,7 @@ func _on_evolved(stage: int) -> void:
 
 func _on_player_died() -> void:
 	game_over = true
+	over_at_ms = Time.get_ticks_msec()
 	banner.text = "Defeated...\nPress R to try again"
 	banner.visible = true
 
@@ -2336,6 +2338,7 @@ func _on_rival_down(v) -> void:
 	rival["falls"] = int(rival["falls"]) + 1
 	if bool(rival["duel"]):
 		game_over = true
+		over_at_ms = Time.get_ticks_msec()
 		banner.text = "VICTORY!\nYou defeated the rival hero"
 		banner.visible = true
 		Sfx.play(get_tree(), "win")
@@ -2449,7 +2452,8 @@ func _process(delta: float) -> void:
 			try_demolish()
 		if remove_armed and Input.is_action_just_pressed("move_mouse") and get_viewport().gui_get_hovered_control() == null:
 			try_demolish()
-	if Input.is_action_just_pressed("restart"):
+	# a restart is only possible once dead, and not within the first second (so keys mashed in the fight do not skip the screen)
+	if game_over and Time.get_ticks_msec() - over_at_ms > 1000 and Input.is_action_just_pressed("restart"):
 		get_tree().paused = false
 		get_tree().reload_current_scene()
 
