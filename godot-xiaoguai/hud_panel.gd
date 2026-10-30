@@ -3,8 +3,10 @@ extends Control
 ##   row 1  level star, EXP bar, heart + HP bar
 ##   row 2  bones, kills, sun/moon + day number + time-left bar (no enemy or village counts: the player is not told
 ##          how many are coming)
-##   row 3  sprint bar, roll cooldown ring (the roll also hits), buff and relic chips
-##   row 4  what the build key does right now
+##   row 3  sprint bar, roll cooldown ring (the roll also hits), what the build key does right now (and the buff and
+##          relic chips, on a wide screen)
+##   row 4  only when there is something for it: a build error, the upgrade price, the combo, the counter (and the
+##          chips on a narrow screen), on a second small plate under the first
 ## Bars ease toward their value, HP leaves a pale damage trail and beats faster when low, numbers pop when they
 ## change, the level star bursts on a level-up, cooldown rings flash when ready, and the sun, moon and chips move.
 ## main.gd calls set_info() with fresh values; everything else happens here.
@@ -13,7 +15,7 @@ const INK := Color(1, 1, 1, 0.95)
 const SHADOW := Color(0, 0, 0, 0.6)
 const BAR_W := 150.0
 const BAR_H := 14.0
-const PLATE := Rect2(-12, -8, 440, 130)
+const PLATE := Rect2(-12, -8, 440, 102)
 
 var info := {}
 var _prev := {}
@@ -48,11 +50,11 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = Vector2(420, 120)
 	size = custom_minimum_size
-	_plate_box.bg_color = Color(0.04, 0.05, 0.1, 0.5)
-	_plate_box.border_color = Color(1, 1, 1, 0.14)
+	_plate_box.bg_color = Color(0.04, 0.05, 0.1, 0.28)
+	_plate_box.border_color = Color(1, 1, 1, 0.08)
 	_plate_box.set_border_width_all(1)
 	_plate_box.set_corner_radius_all(12)
-	_plate_box.shadow_color = Color(0, 0, 0, 0.35)
+	_plate_box.shadow_color = Color(0, 0, 0, 0.18)
 	_plate_box.shadow_size = 6
 	_bar_box.bg_color = Color(0, 0, 0, 0.55)
 	_bar_box.border_color = Color(1, 1, 1, 0.45)
@@ -164,10 +166,27 @@ func _process(delta: float) -> void:
 ## upright (narrow enough to leave the top right corner to the minimap).
 func _layout() -> Dictionary:
 	if compact:
-		return {"plate": Rect2(-12, -8, 254, 154), "xp": Vector2(34, 16), "xp_w": 196.0, "heart": Vector2(14, 44), "hp": Vector2(34, 44), "hp_w": 196.0,
-			"row2": 72.0, "kills_x": 72.0, "sun_x": 140.0, "phase_w": 44.0, "row3": 100.0, "row4": 128.0, "combo": Vector2(176, 128), "counter": Vector2(226, 128)}
+		return {"plate": Rect2(-12, -8, 254, 126), "xp": Vector2(34, 16), "xp_w": 196.0, "heart": Vector2(14, 44), "hp": Vector2(34, 44), "hp_w": 196.0,
+			"row2": 72.0, "kills_x": 72.0, "sun_x": 140.0, "phase_w": 44.0, "row3": 100.0, "row4": 128.0, "prompt_x": 150.0, "chips_row4": true}
 	return {"plate": PLATE, "xp": Vector2(34, 17), "xp_w": BAR_W, "heart": Vector2(214, 16), "hp": Vector2(228, 17), "hp_w": BAR_W,
-		"row2": 44.0, "kills_x": 90.0, "sun_x": 180.0, "phase_w": 90.0, "row3": 74.0, "row4": 102.0, "combo": Vector2(270, 102), "counter": Vector2(390, 102)}
+		"row2": 44.0, "kills_x": 90.0, "sun_x": 180.0, "phase_w": 90.0, "row3": 74.0, "row4": 102.0, "prompt_x": 152.0, "chips_row4": false}
+
+
+## What the second small plate would show right now, in order ("chips" only on a narrow screen).
+func _row4_items(lay: Dictionary) -> Array:
+	var out: Array = []
+	var removing: bool = info["remove_refund"] >= 0
+	if not removing and info["build_error"] != "":
+		out.append("error")
+	if removing and info["upgrade_text"] != "":
+		out.append("upgrade")
+	if int(info["combo"]) >= 2:
+		out.append("combo")
+	if bool(info["counter"]):
+		out.append("counter")
+	if lay["chips_row4"] and (info["buffs"].size() > 0 or info["relics"].size() > 0):
+		out.append("chips")
+	return out
 
 
 ## A bar rectangle centred on a row.
@@ -221,7 +240,7 @@ func _draw() -> void:
 	x += 22.0
 	var phase_col := Color("ffb020") if not night else Color("6a7cff")
 	_bar(Rect2(x, y - 7, lay["phase_w"], BAR_H), float(info["phase_left"]) / maxf(float(info["phase_len"]), 1.0), -1.0, phase_col, phase_col.lightened(0.4), "", cf)
-	# sprint, roll, buffs and relics
+	# sprint, roll and what the build key does right now (a small bone price, in line with the sprint bar)
 	y = lay["row3"]
 	x = 0.0
 	var sprint_ready: bool = info["sprint_cd"] <= 0.0
@@ -232,59 +251,90 @@ func _draw() -> void:
 	x += 112.0
 	_ring(Vector2(x + 10, y), 10.0, float(info["roll_cd"]), float(info["roll_cd_max"]), Color("7be07b"), float(_flash.get("roll", 0.0)))
 	_roll_mark(Vector2(x + 10, y), float(info["roll_cd"]) <= 0.0)
-	x += 40.0
-	for i in info["buffs"].size():
-		var b: Dictionary = info["buffs"][i]
-		_chip(Vector2(x + 10, y), b["color"], "%d" % b["secs"], i, int(b["secs"]) <= 3)
-		x += 32.0
-	for i in info["relics"].size():
-		_diamond(Vector2(x + 8, y + sin(_t * 2.5 + i) * 1.2), 7.0, Color("c8a0ff"), i)
-		_text(Vector2(x + 18, y + 5), "x%d" % info["relics"][i]["n"], 12, INK)
-		x += 36.0
-	# what E / X (the build and remove buttons) do right now
-	y = lay["row4"]
-	x = 0.0
+	x = float(lay["prompt_x"])
 	var key_e := "" if touch else "E"
 	var bob := sin(_t * 3.0) * 1.2
+	var bad: bool = info["build_error"] != ""
 	if info["remove_refund"] >= 0:
 		_cross(Vector2(x + 8, y), 6.0)
 		_bone(Vector2(x + 30, y), 0.8)
 		_text(Vector2(x + 44, y + 5), "+%d" % info["remove_refund"], _small_px, Color("9cf09c"))
-		x += 96.0
-		if info["upgrade_text"] != "":
-			_text(Vector2(x, y + 5), key_e, _small_px, Color("ffd84a"))
-			_arrow_up(Vector2(x + 20, y + bob))
-			_bone(Vector2(x + 38, y), 0.8)
-			_text(Vector2(x + 52, y + 5), info["upgrade_text"], _small_px, Color("ffd84a"))
+		x += 84.0
 	else:
 		if info["build_item"] == "tower":
 			_tower(Vector2(x + 8, y + bob))
 		else:
 			_wall(Vector2(x + 8, y + bob))
 		_bone(Vector2(x + 34, y), 0.8)
-		var bad: bool = info["build_error"] != ""
 		_text(Vector2(x + 48, y + 5), str(info["build_cost"]), _small_px, INK if not bad else Color("ff7a6a"))
-		if bad:
-			_text(Vector2(x + 84, y + 5), info["build_error"], _small_px - 1, Color("ff7a6a"))
-		elif key_e != "":
+		x += 80.0
+		if key_e != "" and not bad:
 			var glow := 0.65 + 0.35 * sin(_t * 4.0)
-			draw_circle(Vector2(x + 90, y), 9.0, Color(1, 0.85, 0.3, 0.18 * glow))
-			_text(Vector2(x + 85, y + 5), key_e, 14, Color(1, 0.85, 0.3, glow))
-	# combo chain and the counter that a perfect dodge sets up (right of the build prompt)
-	if int(info["combo"]) >= 2:
-		var cc: Vector2 = lay["combo"]
-		var heat := clampf(float(info["combo"]) / 20.0, 0.0, 1.0)
-		var flame := Color("ffb030").lerp(Color("ff4a30"), heat)
-		_flame(cc, 1.0 + 0.3 * float(_pop.get("combo", 0.0)), flame)
-		_num(cc + Vector2(14, 6), "x%d" % info["combo"], _num_px, flame.lightened(0.3), "combo")
-		draw_arc(cc, 12.0, -PI / 2.0, -PI / 2.0 + TAU * float(info["combo_frac"]), 20, Color(flame, 0.9), 2.0)
-	if bool(info["counter"]):
-		var kc: Vector2 = lay["counter"]
-		var pulse := 0.6 + 0.4 * sin(_t * 12.0)
-		draw_circle(kc, 13.0, Color(1, 0.85, 0.3, 0.25 * pulse))
-		draw_arc(kc, 13.0, 0, TAU, 24, Color(1, 0.85, 0.3, pulse), 2.0)
-		_fang(kc, true)
-		_text(kc + Vector2(16, 5), "!", 16, Color(1, 0.85, 0.3, pulse))
+			draw_circle(Vector2(x + 10, y), 9.0, Color(1, 0.85, 0.3, 0.18 * glow))
+			_text(Vector2(x + 5, y + 5), key_e, 14, Color(1, 0.85, 0.3, glow))
+			x += 28.0
+	# buffs and relics: after the prompt on a wide screen, on the extra row on a narrow one
+	var cx := x + 4.0
+	var cy := y
+	var row4_y: float = lay["row4"]
+	if lay["chips_row4"]:
+		cx = 0.0
+		cy = row4_y
+	var row4_x := 0.0 if not lay["chips_row4"] else 0.0
+	if lay["chips_row4"]:
+		row4_x = 0.0
+	# the extra row (only when it has something): build error, upgrade price, combo chain, the counter
+	var r4 := _row4_items(lay)
+	if not r4.is_empty():
+		draw_style_box(_plate_box, Rect2(lay["plate"].position.x, lay["plate"].end.y - 14.0, lay["plate"].size.x, 36.0))
+		var x4 := 0.0
+		for item in r4:
+			match item:
+				"error":
+					_text(Vector2(x4, row4_y + 5), info["build_error"], _small_px - 1, Color("ff7a6a"))
+					x4 += _font.get_string_size(str(info["build_error"]), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_px - 1).x + 14.0
+				"upgrade":
+					_text(Vector2(x4, row4_y + 5), key_e, _small_px, Color("ffd84a"))
+					_arrow_up(Vector2(x4 + 20, row4_y + bob))
+					_bone(Vector2(x4 + 38, row4_y), 0.8)
+					_text(Vector2(x4 + 52, row4_y + 5), info["upgrade_text"], _small_px, Color("ffd84a"))
+					x4 += 62.0 + _font.get_string_size(str(info["upgrade_text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_px).x
+				"combo":
+					var cc := Vector2(x4 + 14.0, row4_y)
+					var heat := clampf(float(info["combo"]) / 20.0, 0.0, 1.0)
+					var flame := Color("ffb030").lerp(Color("ff4a30"), heat)
+					_flame(cc, 1.0 + 0.3 * float(_pop.get("combo", 0.0)), flame)
+					_num(cc + Vector2(14, 6), "x%d" % info["combo"], _num_px, flame.lightened(0.3), "combo")
+					draw_arc(cc, 12.0, -PI / 2.0, -PI / 2.0 + TAU * float(info["combo_frac"]), 20, Color(flame, 0.9), 2.0)
+					x4 += 76.0
+				"counter":
+					var kc := Vector2(x4 + 14.0, row4_y)
+					var pulse := 0.6 + 0.4 * sin(_t * 12.0)
+					draw_circle(kc, 13.0, Color(1, 0.85, 0.3, 0.25 * pulse))
+					draw_arc(kc, 13.0, 0, TAU, 24, Color(1, 0.85, 0.3, pulse), 2.0)
+					_fang(kc, true)
+					_text(kc + Vector2(16, 5), "!", 16, Color(1, 0.85, 0.3, pulse))
+					x4 += 46.0
+				"chips":
+					cx = x4
+					for i in info["buffs"].size():
+						var bf: Dictionary = info["buffs"][i]
+						_chip(Vector2(cx + 10, cy), bf["color"], "%d" % bf["secs"], i, int(bf["secs"]) <= 3)
+						cx += 32.0
+					for i in info["relics"].size():
+						_diamond(Vector2(cx + 8, cy + sin(_t * 2.5 + i) * 1.2), 7.0, Color("c8a0ff"), i)
+						_text(Vector2(cx + 18, cy + 5), "x%d" % info["relics"][i]["n"], 12, INK)
+						cx += 36.0
+					x4 = cx
+	if not lay["chips_row4"]:
+		for i in info["buffs"].size():
+			var b2: Dictionary = info["buffs"][i]
+			_chip(Vector2(cx + 10, cy), b2["color"], "%d" % b2["secs"], i, int(b2["secs"]) <= 3)
+			cx += 32.0
+		for i in info["relics"].size():
+			_diamond(Vector2(cx + 8, cy + sin(_t * 2.5 + i) * 1.2), 7.0, Color("c8a0ff"), i)
+			_text(Vector2(cx + 18, cy + 5), "x%d" % info["relics"][i]["n"], 12, INK)
+			cx += 36.0
 	# sparks on top of everything
 	for s in _sparks:
 		var a: float = float(s["life"]) / float(s["max"])

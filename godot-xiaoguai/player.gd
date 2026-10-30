@@ -26,6 +26,8 @@ signal xp_changed
 signal leveled(level: int)    ## a new level (a skill pick comes every 3rd, a special every 12th)
 signal line_needed            ## level 10 reached: pick the evolution line
 signal evolved(stage: int)
+signal combo_hit(count: int, at: Vector2, rolled: bool)   ## a hit joined the chain (combo_fx.gd shows it)
+signal combo_broke(count: int)                           ## the chain ran out of time
 
 const MAX_LEVEL := 100
 const EVOLVE_EVERY := 10      ## a new form every 10 levels; the first one (level 10) picks the line
@@ -325,6 +327,7 @@ func _physics_process(delta: float) -> void:
 	if combo > 0:
 		combo_t -= delta
 		if combo_t <= 0.0:
+			combo_broke.emit(combo)
 			combo = 0
 	roll_cd = maxf(roll_cd - delta, 0.0)
 	lunge_cd = maxf(lunge_cd - delta, 0.0)
@@ -437,9 +440,10 @@ func combo_mult() -> float:
 
 
 ## A bite or lunge landed: the chain grows, and the milestones pay out.
-func register_hit() -> void:
+func register_hit(at: Vector2 = Vector2.INF, rolled: bool = false) -> void:
 	combo += 1
 	combo_t = combo_window()
+	combo_hit.emit(combo, global_position if at == Vector2.INF else at, rolled)
 	if COMBO_MILESTONES.has(combo):
 		var reward: int = COMBO_MILESTONES[combo]
 		var level_node = get_parent()
@@ -513,8 +517,9 @@ func _lunge_strike() -> void:
 			continue
 		if e.global_position.distance_to(global_position) <= 14.0 + body_radius:
 			lunge_hit.append(id)
+			var at: Vector2 = e.global_position
 			e.take_hit(effective_bite() * 2, lunge_dir)
-			register_hit()
+			register_hit(at, roll_left > 0.0)
 
 
 func _auto_bite() -> void:
@@ -539,7 +544,7 @@ func _auto_bite() -> void:
 		Popups.text(get_tree(), target.global_position + Vector2(0, -24.0), "COUNTER!", Popups.BIG, 18)
 		SkillFx.spawn_fx(get_parent(), target.global_position, "impact", Color("ffe680"), bite_dir, 1.6)
 	target.take_hit(bite, bite_dir)
-	register_hit()
+	register_hit(target.global_position)
 	on_bite_landed(target, bite)
 	SkillFx.spawn_tooth(get_parent(), target.global_position, bite_dir, maxf(0.8, float(s["scale"]) * 0.8))
 	if specials.has("overdrive"):

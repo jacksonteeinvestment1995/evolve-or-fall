@@ -19,6 +19,7 @@ const MIN_HIT := 30.0         ## every button catches taps at least this far fro
 ## On a wide screen the buttons follow MOBA proportions so the playfield stays clear: LUNGE about 15% of the screen
 ## height across, SPRINT / BUILD about 12%, SWAP / REMOVE about 10%, all tight in the bottom right corner.
 const R_WIDE := {"roll": 35.0, "sprint": 27.0, "build": 27.0, "switch": 22.0, "remove": 22.0, "restart": 50.0}
+const SPRINT_HOLD := 0.3      ## holding the ROLL button this long (after the roll) turns it into a sprint
 const ROLL_AIM := 260.0       ## with the stick at rest a touch roll heads for the nearest enemy this close
 const DEADZONE := 0.18
 const MOVE_ACTIONS := ["move_left", "move_right", "move_up", "move_down"]
@@ -28,7 +29,6 @@ const HELP_R := 20.0
 
 const BUTTONS := [
 	{"id": "roll", "action": "dodge", "r": 60.0, "hold": false, "col": Color("ff9a5a"), "label": "ROLL"},
-	{"id": "sprint", "action": "sprint", "r": 38.0, "hold": true, "col": Color("ffd84a"), "label": "SPRINT"},
 	{"id": "build", "action": "build", "r": 38.0, "hold": false, "col": Color("8fb8ff"), "label": "BUILD"},
 	{"id": "switch", "action": "build_next", "r": 30.0, "hold": false, "col": Color("c8c8d8"), "label": "SWAP"},
 	{"id": "remove", "action": "demolish", "r": 30.0, "hold": false, "col": Color("ff6a5a"), "label": "REMOVE"},
@@ -55,7 +55,8 @@ const STEP_SECONDS := 2.4
 const HINT_STEPS := [
 	{"ids": ["stick"], "text": "Drag on the left side\nto MOVE"},
 	{"ids": ["roll"], "text": "ROLL: dodge, and hit enemies\nyou pass through"},
-	{"ids": ["sprint"], "text": "SPRINT: hold to run fast"},
+	{"ids": ["roll"], "text": "HOLD the ROLL button
+to SPRINT (run fast)"},
 	{"ids": ["build"], "text": "BUILD a tower or wall\n(costs bones)"},
 	{"ids": ["switch", "remove"], "text": "SWAP tower / wall\nREMOVE: get 50% back"},
 ]
@@ -63,6 +64,7 @@ const HINT_STEPS := [
 var main: Node
 var _pads: Array = []            ## the Control behind each button (and the stick area last), so a press there never also walks
 var _down := {}                  ## touch index -> button dict
+var _hold_t := {}                ## touch index -> how long the ROLL button has been held
 var _release_next: Array = []    ## tap actions to let go of on the next frame
 var _stick_id := -1
 var _stick_base := Vector2.ZERO
@@ -246,6 +248,8 @@ func reset_touch() -> void:
 	for idx in _down:
 		Input.action_release(_down[idx]["action"])
 	_down.clear()
+	_hold_t.clear()
+	Input.action_release("sprint")
 	for a in _release_next:
 		Input.action_release(a)
 	_release_next.clear()
@@ -302,6 +306,9 @@ func _input(event: InputEvent) -> void:
 			elif _down.has(t.index):
 				var b: Dictionary = _down[t.index]
 				_down.erase(t.index)
+				_hold_t.erase(t.index)
+				if b["id"] == "roll":
+					Input.action_release("sprint")
 				if bool(b["hold"]):
 					Input.action_release(b["action"])
 				get_viewport().set_input_as_handled()
@@ -311,6 +318,21 @@ func _input(event: InputEvent) -> void:
 			_stick_pos = d.position
 			_update_stick()
 			get_viewport().set_input_as_handled()
+
+
+## Tap ROLL to roll; keep the finger down and, after a moment, the same button sprints.
+func _update_sprint_hold(delta: float) -> void:
+	var holding := false
+	for idx in _down:
+		if _down[idx]["id"] == "roll":
+			_hold_t[idx] = float(_hold_t.get(idx, 0.0)) + delta
+			if float(_hold_t[idx]) >= SPRINT_HOLD:
+				holding = true
+	if holding:
+		Input.action_press("sprint")
+	for idx in _hold_t.keys():
+		if not _down.has(idx):
+			_hold_t.erase(idx)
 
 
 ## With the stick at rest, turn 小怪 toward the nearest enemy close by, so the roll goes through it.
@@ -359,6 +381,7 @@ func _stop_stick() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_update_sprint_hold(delta)
 	for a in _release_next:
 		Input.action_release(a)
 	_release_next.clear()
@@ -516,6 +539,7 @@ func _icon(id: String, c: Vector2, s: float, col: Color) -> void:
 		"roll":
 			# a rolling arrow with two fangs inside: a dodge that bites what it passes
 			draw_arc(c, s * 1.0, 0.5, TAU - 0.8, 28, col, 5.0)
+			_sprint_meter(c, s)
 			draw_colored_polygon(PackedVector2Array([c + Vector2(s * 1.0, -s * 0.85), c + Vector2(s * 1.6, -s * 0.05), c + Vector2(s * 0.4, 0.05)]), col)
 			for sx in [-1.0, 1.0]:
 				draw_colored_polygon(PackedVector2Array([c + Vector2(sx * s * 0.55, -s * 0.45), c + Vector2(sx * s * 0.1, -s * 0.45), c + Vector2(sx * s * 0.32, s * 0.5)]), col)

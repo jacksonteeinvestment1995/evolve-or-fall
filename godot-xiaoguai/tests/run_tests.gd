@@ -2413,8 +2413,9 @@ func _init() -> void:
 	var stick_at := Vector2(ui_vs.x * 0.2, ui_vs.y * 0.8)
 	touch_ev.call(0, stick_at, true)
 	drag_ev.call(0, stick_at + Vector2(60, 0))
-	touch_ev.call(1, ui_tc._pos(ui_tc._button_def("sprint")), true)
-	check("the stick walks and SPRINT is held", Input.is_action_pressed("move_right") and Input.is_action_pressed("sprint"))
+	touch_ev.call(1, ui_tc._pos(ui_tc._button_def("roll")), true)
+	ui_tc._update_sprint_hold(0.4)
+	check("the stick walks and holding ROLL sprints", Input.is_action_pressed("move_right") and Input.is_action_pressed("sprint"))
 	main.pause_on_menu = true
 	main.menu_queue.clear()
 	main.menu_queue.append({"type": "perk"})
@@ -2470,6 +2471,26 @@ func _init() -> void:
 	gp.combo_t = 0.02
 	await frames(4)
 	check("the combo breaks when it runs out of time", gp.combo == 0)
+	# the combo show (combo_fx.gd): tiers, roll-hit pops that are capped and free themselves, the shatter on a break
+	var CF = preload("res://combo_fx.gd")
+	var cfx = main.combo_fx
+	check("combo tiers: plain, gold x5, orange x10, red x20, rainbow x40", CF.tier_of(3) == 0 and CF.tier_of(5) == 1 and CF.tier_of(12) == 2 and CF.tier_of(25) == 3 and CF.tier_of(45) == 4)
+	check("tier words land on the milestones only", CF.tier_word(5) == "NICE" and CF.tier_word(10) == "GREAT" and CF.tier_word(20) == "BRUTAL" and CF.tier_word(40) == "UNSTOPPABLE" and CF.tier_word(7) == "")
+	check("the combo counter never takes the mouse", cfx != null and cfx.mouse_filter == Control.MOUSE_FILTER_IGNORE)
+	gp.combo = 0
+	for i in 25:
+		gp.register_hit(gp.global_position + Vector2(10 * i, 0), true)
+	var cf_pops: int = cfx.active_pops()
+	check("roll hits pop numbers in the world, capped", cf_pops > 0 and cf_pops <= CF.MAX_POPS and cfx.shown == 25 and cfx.word == "BRUTAL", "%d pops, shows %d" % [cf_pops, cfx.shown])
+	gp.combo_t = 0.02
+	await frames(4)
+	check("a broken chain shatters the counter", gp.combo == 0 and cfx.shown == 0 and cfx.brk_age >= 0.0)
+	await create_timer(0.9).timeout
+	var cf_left := 0
+	for c in main.get_children():
+		if c.get("burst") != null and c.get("hits") != null:
+			cf_left += 1
+	check("the roll-hit pops free themselves", cfx.active_pops() == 0 and cf_left == 0, "%d left" % cf_left)
 	check("bites come about 3x as fast", gp.BITE_TIME_SCALE <= 0.34)
 	gp.learn("bolt")
 	gp.skill_cd["bolt"] = 10.0

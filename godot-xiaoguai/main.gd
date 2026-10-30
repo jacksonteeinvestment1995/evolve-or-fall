@@ -172,6 +172,7 @@ var ui_portrait := false
 var touch_ui: Control      ## the on-screen joystick and buttons (touch_controls.gd)
 var hotbar_bar: HBoxContainer
 var hud_layer: CanvasLayer   ## the HUD's layer, hidden while a level-up menu is up
+var combo_fx: Control        ## the big combo counter and the roll-hit pops (combo_fx.gd)
 var perf_notice: Control     ## the "turn on graphics acceleration" notice (perf_notice.gd), web only
 var start_gate: Control      ## the "TAP TO START" panel (start_gate.gd) while it is up
 var _away := false           ## the page lost focus mid-run on a phone: ask for a tap (and so the sound) when it is back
@@ -1533,6 +1534,9 @@ func _build_hud() -> void:
 	hud = preload("res://hud_panel.gd").new()
 	hud.position = Vector2(16, 12)
 	layer.add_child(hud)
+	combo_fx = preload("res://combo_fx.gd").new()   # the big combo counter and the roll-hit pops
+	combo_fx.main = self
+	layer.add_child(combo_fx)
 
 	banner = Label.new()
 	banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
