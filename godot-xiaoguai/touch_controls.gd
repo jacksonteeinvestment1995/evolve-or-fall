@@ -420,6 +420,14 @@ func _draw() -> void:
 		_draw_hints()
 
 
+## The buttons are see-through so the ground shows; a pressed button is a little stronger.
+const BUTTON_ALPHA := 0.5
+
+
+func _fade(c: Color) -> Color:
+	return Color(c.r, c.g, c.b, c.a * BUTTON_ALPHA)
+
+
 func _label(c: Vector2, text: String, px: int, col: Color, w: float = 160.0) -> void:
 	_font.draw_string_outline(get_canvas_item(), c + Vector2(-w * 0.5, px * 0.35), text, HORIZONTAL_ALIGNMENT_CENTER, w, px, 5, Color(0, 0, 0, 0.85 * col.a))
 	_font.draw_string(get_canvas_item(), c + Vector2(-w * 0.5, px * 0.35), text, HORIZONTAL_ALIGNMENT_CENTER, w, px, col)
@@ -437,12 +445,12 @@ func _button(b: Dictionary, on: bool) -> void:
 	var cooling := cdv.x > 0.0
 	var dim := 0.55 if cooling else 1.0
 	# body: a dark disc with a coloured rim; the main button gets a warm filled face and a slow pulse
-	draw_circle(c + Vector2(0, 3), r, Color(0, 0, 0, 0.3))
-	draw_circle(c, r, Color(0.04, 0.05, 0.1, 0.85 if on else 0.62))
-	draw_circle(c, r - 4.0, Color(col, (0.42 if on else 0.18) * dim + (0.08 * sin(_t * 3.0) if big and not cooling else 0.0)))
-	draw_arc(c, r - 1.5, 0, TAU, 48, Color(col, (1.0 if on else 0.85) * dim), 5.0 if big else 3.5)
+	draw_circle(c + Vector2(0, 3), r, _fade(Color(0, 0, 0, 0.3)))
+	draw_circle(c, r, _fade(Color(0.04, 0.05, 0.1, 0.85 if on else 0.62)))
+	draw_circle(c, r - 4.0, _fade(Color(col, (0.42 if on else 0.18) * dim + (0.08 * sin(_t * 3.0) if big and not cooling else 0.0))))
+	draw_arc(c, r - 1.5, 0, TAU, 48, _fade(Color(col, (1.0 if on else 0.85) * dim)), 5.0 if big else 3.5)
 	if big:
-		draw_arc(c, r - 9.0, 0, TAU, 48, Color(col, 0.35 * dim), 2.0)
+		draw_arc(c, r - 9.0, 0, TAU, 48, _fade(Color(col, 0.35 * dim)), 2.0)
 	# the cooldown: a dark sweep that shrinks clockwise, with the seconds left
 	if cooling:
 		var f := clampf(cdv.x / maxf(cdv.y, 0.001), 0.0, 1.0)
@@ -451,16 +459,16 @@ func _button(b: Dictionary, on: bool) -> void:
 		for i in 33:
 			pts.append(c + Vector2.from_angle(lerpf(a0, -PI / 2.0 + TAU, i / 32.0)) * (r - 3.0))
 		if pts.size() >= 3:
-			draw_colored_polygon(pts, Color(0, 0, 0, 0.5))
-	_icon(id, c, r * (0.4 if big else 0.46), Color(1, 1, 1, (1.0 if on else 0.92) * (0.6 if cooling else 1.0)))
+			draw_colored_polygon(pts, _fade(Color(0, 0, 0, 0.5)))
+	_icon(id, c, r * (0.4 if big else 0.46), _fade(Color(1, 1, 1, (1.0 if on else 0.92) * (0.6 if cooling else 1.0))))
 	if cooling and cdv.x >= 0.95:
-		_label(c, "%d" % ceili(cdv.x), (16 if big else 14) if wide else (24 if big else 20), Color(1, 1, 1, 0.95))
+		_label(c, "%d" % ceili(cdv.x), (16 if big else 14) if wide else (24 if big else 20), _fade(Color(1, 1, 1, 0.95)))
 	# a ring that bursts out when it is ready again
 	var fl := float(_ready_flash.get(id, 0.0))
 	if fl > 0.0:
 		draw_arc(c, r + (1.0 - fl) * 16.0, 0, TAU, 40, Color(col, fl), 3.0)
 	# what it does, under it
-	_label(c + Vector2(0, r0 + _label_gap()), _label_text(b), _label_px(b), Color(col.lightened(0.45), 0.98))
+	_label(c + Vector2(0, r0 + _label_gap()), _label_text(b), _label_px(b), _fade(Color(col.lightened(0.45), 0.98)))
 
 
 ## A button's caption (BUILD shows what the next building costs).

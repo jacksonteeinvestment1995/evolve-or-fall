@@ -293,6 +293,7 @@ func _layout_ui() -> void:
 		minimap.offset_bottom = minimap.offset_top + minimap.size.y
 	var mid_shift := 0.0 if (portrait or not t) else ((stick_right + cluster_left) * 0.5 - vs.x * 0.5)
 	if hotbar_bar != null:
+		hotbar_bar.visible = not t   # on a phone the round BUILD / SWAP / REMOVE buttons do the same job
 		hotbar_bar.add_theme_constant_override("separation", (8 if not portrait else 10) if t else 36)
 		hotbar_bar.offset_bottom = -14.0 if t else -12.0
 		hotbar_bar.offset_top = hotbar_bar.offset_bottom - (44.0 if t else 44.0)
