@@ -173,6 +173,7 @@ var touch_ui: Control      ## the on-screen joystick and buttons (touch_controls
 var hotbar_bar: HBoxContainer
 var hud_layer: CanvasLayer   ## the HUD's layer, hidden while a level-up menu is up
 var combo_fx: Control        ## the big combo counter and the roll-hit pops (combo_fx.gd)
+var desktop_hint: Control    ## the keyboard and mouse "how to play" card (desktop_hint.gd), first run on a computer
 var perf_notice: Control     ## the "turn on graphics acceleration" notice (perf_notice.gd), web only
 var start_gate: Control      ## the "TAP TO START" panel (start_gate.gd) while it is up
 var _away := false           ## the page lost focus mid-run on a phone: ask for a tap (and so the sound) when it is back
@@ -228,6 +229,8 @@ func _ready() -> void:
 	add_child(notice_layer)
 	perf_notice = preload("res://perf_notice.gd").new()
 	notice_layer.add_child(perf_notice)
+	desktop_hint = preload("res://desktop_hint.gd").new()
+	notice_layer.add_child(desktop_hint)
 	# YouTube Playables: the first frame is up, then the game is ready to play
 	playables = preload("res://playables.gd").new()
 	add_child(playables)

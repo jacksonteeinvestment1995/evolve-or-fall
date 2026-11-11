@@ -2442,6 +2442,14 @@ func _init() -> void:
 	main.start_gate.button.pressed.emit()
 	await frames(2)
 	check("tapping it starts the game", main.start_gate == null and not paused and not main.wants_pause())
+	# the computer tutorial: not in a headless run, shows when asked, closes with its button
+	check("no keyboard tutorial in a headless run", not main.desktop_hint.first_run() and not main.desktop_hint.showing())
+	main.desktop_hint.show_hint()
+	await frames(2)
+	check("the keyboard tutorial shows, lists the keys and has a close button", main.desktop_hint.showing() and main.desktop_hint.close_button is Button)
+	main.desktop_hint.close_button.pressed.emit()
+	await frames(2)
+	check("the keyboard tutorial closes", not main.desktop_hint.showing())
 	# the graphics-acceleration notice: software adapters are recognised, and it shows once and can be closed
 	var PN = preload("res://perf_notice.gd")
 	check("software renderers are recognised", PN.software_renderer("ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))") and PN.software_renderer("llvmpipe (LLVM 15)") and not PN.software_renderer("NVIDIA GeForce RTX 3060"))
